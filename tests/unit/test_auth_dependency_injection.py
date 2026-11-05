@@ -1,3 +1,10 @@
+"""認証系エンドポイント(パスキー・メールコード)で、request が FastAPI の依存として注入され、
+クエリパラメータ扱いにならないことを検証する単体テスト。
+
+Unit tests that the auth endpoints (passkey, email code)
+get `request` injected by FastAPI as a dependency rather than exposing it as a query parameter.
+"""
+
 import asyncio
 import unittest
 from types import SimpleNamespace
@@ -19,6 +26,10 @@ from tests.helpers.app_helpers import build_session_test_app
 
 
 class AuthDependencyInjectionTestCase(unittest.TestCase):
+    # 日本語: エンドポイントを一時アプリに登録し、OpenAPI 上で request がクエリパラメータとして公開されていないことを確かめる。
+    #         型注釈の不備で request がクエリ扱いになると、リクエストの実体が届かなくなる。
+    # English: Register the endpoint on a throwaway app and check that OpenAPI does not expose `request` as a query parameter.
+    #          A faulty annotation would turn it into a query parameter and the real request would never arrive.
     def assert_request_is_not_a_query_parameter(self, endpoint):
         app = FastAPI()
         app.post("/test")(endpoint)

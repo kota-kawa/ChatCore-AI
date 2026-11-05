@@ -1,3 +1,10 @@
+"""Google ログインの開始とコールバック(PKCE・state・専用トランザクション Cookie、依存欠落/設定欠落の 503、トークン交換や DB の失敗、
+新規作成・既存連携・未検証メールの扱い)を擬似 Flow で検証する単体テスト。
+
+Unit tests, using a fake Flow, for starting and completing Google login (PKCE, state, the dedicated transaction cookie, 503 on missing
+dependency or settings, token-exchange and DB failures, new users, linking existing users, and unverified emails).
+"""
+
 import asyncio
 import json
 import unittest

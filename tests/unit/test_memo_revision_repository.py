@@ -1,3 +1,9 @@
+"""メモ更新（memo_repository.update_memo）の楽観的ロックを検証するテスト。古いリビジョンの拒否、共有中メモの確認、読み取りと書き込みの間の競合検出を見る。
+
+Tests the optimistic locking of memo_repository.update_memo: stale revisions, active shares needing acknowledgement,
+and conflicts between read and write.
+"""
+
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -7,6 +13,8 @@ from services.api_errors import ApiServiceError
 from services.repositories.memo_repository import update_memo
 
 
+# 更新前のメモ行の辞書を作る。overrides で項目を上書きする。
+# Builds the pre-update memo row as a dict; overrides replace fields.
 def existing_memo(**overrides):
     memo = {
         "title": "Before",
@@ -20,6 +28,8 @@ def existing_memo(**overrides):
     return memo
 
 
+# DB 実行結果の代役。mappings().first() と scalar_one_or_none() の値を指定できる。
+# Stand-in for a database result with configurable mappings().first() and scalar_one_or_none() values.
 def _result(*, mapping=None, revision=None):
     result = MagicMock()
     result.mappings.return_value.first.return_value = mapping
@@ -27,6 +37,8 @@ def _result(*, mapping=None, revision=None):
     return result
 
 
+# セッションの execute を順番に差し替え、書き込み前に弾く場合と書き込み後に競合を検出する場合を確かめる。
+# Replaces session.execute with ordered results and checks conflicts are rejected before the write or detected after it.
 class MemoRevisionRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_update_uses_revision_and_active_share_guards(self):
         session = MagicMock()

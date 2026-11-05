@@ -1,3 +1,9 @@
+"""プロジェクトのリポジトリ（project_repository）の、所有者チェック、行ロック、名前と指示の正規化、ルーム割り当て、プロジェクト文脈の取得を検証するテスト。
+
+Tests project_repository: ownership checks, row locking, normalisation of names and instructions, room assignment
+and project context lookup.
+"""
+
 import unittest
 from datetime import datetime
 from unittest.mock import AsyncMock, Mock
@@ -13,10 +19,14 @@ from services.repositories.project_repository import (
 )
 
 
+# SQLAlchemy の文を PostgreSQL 用にコンパイルして文字列にする。
+# Compiles a SQLAlchemy statement for PostgreSQL into a string.
 def _compile(statement) -> str:
     return str(statement.compile(dialect=postgresql_dialect()))
 
 
+# Project モデルを作る。overrides で項目を上書きする。
+# Builds a Project model; overrides replace fields.
 def _project(**overrides) -> Project:
     values = {
         "id": 5,
@@ -30,12 +40,16 @@ def _project(**overrides) -> Project:
     return Project(**values)
 
 
+# scalar_one_or_none() が指定値を返す DB 実行結果の代役を作る。
+# Builds a database result stand-in whose scalar_one_or_none() returns the given value.
 def _result(scalar_one_or_none=None) -> Mock:
     result = Mock()
     result.scalar_one_or_none.return_value = scalar_one_or_none
     return result
 
 
+# 存在しない・他人のプロジェクトの扱い（NotFound・Forbidden）と、更新時の行ロックを確かめる。
+# Checks the handling of missing or foreign projects (NotFound, Forbidden) and the row lock on update.
 class ProjectRepositoryOwnershipTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_missing_project_raises_not_found(self):
         session = Mock()
@@ -61,6 +75,8 @@ class ProjectRepositoryOwnershipTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIn("FOR UPDATE", _compile(session.execute.await_args.args[0]))
 
 
+# 作成時の入力の正規化と、取得結果のシリアライズを確かめる。
+# Checks input normalisation on create and serialisation of fetched results.
 class ProjectRepositoryPersistenceTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_create_project_normalizes_name_and_instructions(self):
         session = Mock()
@@ -119,6 +135,8 @@ class ProjectRepositoryPersistenceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(projects[0]["chatCount"], 3)
 
 
+# ルームへの割り当てがルームとプロジェクト両方の所有を確かめることと、プロジェクト文脈の組み立てを確かめる。
+# Checks assigning a room verifies ownership of both the room and the project, and how the project context is built.
 class ProjectRoomAssignmentTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_assignment_checks_room_and_project_ownership(self):
         session = Mock()

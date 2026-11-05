@@ -1,3 +1,8 @@
+"""利用者マニュアル検索（manual_rag）が、ロケールごとに別のコーパスとキャッシュを使い、指定ロケールの索引で検索することを検証するテスト。
+
+Tests that manual_rag uses a separate corpus and cache per locale and searches the index of the requested locale.
+"""
+
 import os
 import tempfile
 import unittest
@@ -7,6 +12,8 @@ from unittest.mock import patch
 from services import manual_rag
 
 
+# 日本語・英語の索引が混ざらないことを確かめる。各テスト後にモジュール内の索引キャッシュを空にする。
+# Checks the Japanese and English indexes never mix. The module's index cache is cleared after each test.
 class ManualRagLocalesTestCase(unittest.TestCase):
     def tearDown(self):
         manual_rag._indexes.clear()

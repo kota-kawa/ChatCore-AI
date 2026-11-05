@@ -1,3 +1,10 @@
+"""リクエスト本文の大きさ制限ミドルウェア（RequestBodySizeLimitMiddleware）を検証するテスト。
+宣言サイズ超過の早期拒否、チャンク転送中の超過、アバターを含む上限の余裕、app.py でのアップロード系パスへの登録を確かめる。
+
+Tests for RequestBodySizeLimitMiddleware: early rejection of oversized declared uploads, overflow during chunked streaming,
+headroom for a max-size avatar, and registration of the upload paths in app.py.
+"""
+
 from __future__ import annotations
 
 import ast
@@ -14,7 +21,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _registered_body_size_limits() -> dict[str, str]:
-    """Read app.py and map each guarded path to the max_bytes symbol it is registered with."""
+    """app.py を読み、本文サイズ制限を掛けた各パスと、登録に使われた max_bytes のシンボルを対応付ける。
+
+    Read app.py and map each guarded path to the max_bytes symbol it is registered with.
+    """
     module = ast.parse((REPO_ROOT / "app.py").read_text(encoding="utf-8"))
     registrations: dict[str, str] = {}
     for node in ast.walk(module):
@@ -34,6 +44,8 @@ def _registered_body_size_limits() -> dict[str, str]:
     return registrations
 
 
+# ミドルウェアが上限超過を本文の解析前に拒否し、上限内のストリームは通すことを ASGI レベルで検証するテストクラス。
+# Test class verifying at the ASGI level that the middleware rejects oversize bodies before parsing and passes in-limit streams.
 class RequestBodySizeLimitMiddlewareTestCase(unittest.TestCase):
     def test_rejects_declared_oversize_upload_before_calling_app(self):
         called = False
@@ -216,6 +228,8 @@ class RequestBodySizeLimitMiddlewareTestCase(unittest.TestCase):
         self.assertGreater(AVATAR_MAX_REQUEST_BYTES, AVATAR_MAX_BYTES)
 
 
+# アップロード系エンドポイントが app.py で本文サイズ制限の対象に登録されていることを検証するテストクラス。
+# Test class verifying that upload endpoints are registered with the body-size limit in app.py.
 class RequestBodySizeLimitRegistrationTestCase(unittest.TestCase):
     def test_upload_endpoints_are_guarded_by_the_body_size_middleware(self):
         self.assertEqual(

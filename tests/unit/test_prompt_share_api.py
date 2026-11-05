@@ -1,3 +1,8 @@
+"""公開プロンプト API の基本ルート（詳細・おすすめ・投稿者プロフィール）とシリアライズを検証するテスト。
+
+Tests for the basic public-prompt API routes (detail, recommendations, author profile) and their serialization.
+"""
+
 import asyncio
 import json
 import unittest
@@ -13,6 +18,8 @@ from blueprints.prompt_share.prompt_share_api import (
 from tests.helpers.request_helpers import build_request
 
 
+# 各ルートが非同期サービスのヘルパーを await し、存在しない場合は 404 を返すことを検証するテストクラス。
+# Test class verifying that routes await the async service helpers and return 404 for a missing prompt.
 class PromptShareApiTestCase(unittest.TestCase):
     def test_serializer_preserves_resource_and_legacy_script_fields(self):
         serialized = _serialize_prompt_row(

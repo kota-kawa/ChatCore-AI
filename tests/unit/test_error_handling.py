@@ -1,3 +1,6 @@
+# APIエラーが共通の応答形式と利用者向けメッセージへ変換されることを検証する。
+# Tests conversion of API errors into shared response formats and user-facing messages.
+
 import asyncio
 import json
 import unittest

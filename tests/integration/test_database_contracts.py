@@ -1,4 +1,7 @@
-"""PostgreSQL integration coverage for guest ownership and version snapshots."""
+"""ゲスト投稿の所有権の引き継ぎ、版スナップショットの NULL 保持、埋め込みステータスの遷移を実 PostgreSQL で検証する。
+
+PostgreSQL integration coverage for guest ownership and version snapshots.
+"""
 
 from __future__ import annotations
 
@@ -23,10 +26,17 @@ from services.request_models import SharedPromptCreateRequest
     os.environ.get("DATABASE_URL"),
     "requires DATABASE_URL pointing at a PostgreSQL test database",
 )
+# 日本語: 実 DB のテーブル契約を確かめる。pydantic のリクエストモデルを import しているため、docstring ではなくコメントで書く。
+# English: Verifies table-level contracts against a real database. Written as a comment, not a docstring,
+#          because this file imports pydantic request models.
 class DatabaseContractIntegrationTest(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await dispose_engine()
 
+    # 日本語: タスク・プロンプトの UPDATE ごとに版が追加され、NULL にした列がスナップショットでも NULL のまま全列残ること、
+    #         ゲスト投稿を claim するとユーザーに引き継がれ、以降の版にそのユーザー ID が入ることを確かめる。
+    # English: Each UPDATE on a task or prompt appends a version whose snapshot keeps every column, including ones set to NULL;
+    #          claiming a guest prompt hands it to the user, and later versions carry that user id.
     async def test_guest_prompt_and_task_history_preserve_nulls_and_full_rows(self) -> None:
         suffix = uuid4().hex
         guest_token = f"integration-guest-{suffix}"
@@ -191,6 +201,9 @@ class DatabaseContractIntegrationTest(unittest.IsolatedAsyncioTestCase):
                     {"user_id": user_id},
                 )
 
+    # 日本語: メモとコンテキスト事実で、作成・更新直後は embedding_status が pending、埋め込みを保存すると ready になることを確かめる。
+    # English: For memos and context facts, embedding_status is pending right after create/update
+#          and becomes ready once the embedding is stored.
     async def test_embedding_status_follows_content_changes_and_successful_backfill(self) -> None:
         suffix = uuid4().hex
         email = f"embedding-contract-{suffix}@example.test"

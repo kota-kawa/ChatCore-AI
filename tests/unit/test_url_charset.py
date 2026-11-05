@@ -1,3 +1,10 @@
+"""受信したレスポンス本文の文字コード判定とデコード（services.url_charset）を検証するテスト。
+BOM・Content-Type・meta 宣言・推定の優先順位と、不正なバイト列を含む本文の扱いを確かめる。
+
+Tests for charset resolution and decoding of fetched response bodies (services.url_charset):
+the precedence of BOM, Content-Type, meta declaration and detection, and handling of malformed byte sequences.
+"""
+
 import codecs
 import unittest
 

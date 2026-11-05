@@ -1,4 +1,7 @@
-"""Exercise the real selector at both chat orchestration boundaries without provider calls."""
+"""Skill 選択を、新規投稿と再生成の 2 つのチャット処理経路で本物のセレクタを使って検証するテスト。LLM プロバイダーは呼ばない。
+
+Exercise the real selector at both chat orchestration boundaries without provider calls.
+"""
 
 import asyncio
 import dataclasses
@@ -24,6 +27,9 @@ from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT, MEMO_TOOLS_SK
 from tests.unit import test_chat_use_case_lookup_flags as post_helpers
 
 
+# 投稿（ChatPostUseCase）と再生成（run_chat_regeneration）の両方で、選択結果が指示文・ツール・UI 設定に正しく反映されることを検証する。
+# Verifies that on both the post use case and run_chat_regeneration, the selection result is reflected correctly in instructions, tools
+# and UI settings.
 class ChatSkillSelectionIntegrationTests(unittest.TestCase):
     def _decision(self, ids, ui_mode="NONE"):
         return json.dumps({"selected_skill_ids": ids, "uncertain": False, "ui_mode": ui_mode})
@@ -75,6 +81,8 @@ class ChatSkillSelectionIntegrationTests(unittest.TestCase):
         self.assertNotIn("EXTERNAL-SELECT-MEMO", str(decision.call_args))
         self.assertIn("EXTERNAL-SELECT-MEMO", str(deps.start_generation_job.call_args.kwargs["conversation_messages"]))
 
+    # 再生成パイプラインの入力を、依存をすべてモックにして組み立てる。
+    # Builds a regeneration pipeline input with every dependency mocked.
     def _regeneration_input(self, *, streaming=True, user=None, room_mode="normal", theme_preference=None):
         deps = ChatRegenerationDependencies(
             logger=Mock(), ephemeral_store=SimpleNamespace(append_message=Mock()),

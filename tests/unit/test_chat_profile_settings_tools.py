@@ -1,4 +1,7 @@
-"""Contracts for private profile settings tools and approval-time compare-and-set writes."""
+"""非公開のプロフィール設定ツール（読み取り・更新の提案・承認後の実行）と、承認時の compare-and-set 書き込みの契約を検証するテスト。
+
+Contracts for private profile settings tools and approval-time compare-and-set writes.
+"""
 
 from __future__ import annotations
 
@@ -34,6 +37,8 @@ from services.chat_workspace_tools.runner import WorkspaceToolRunner
 from services.repositories.user_repository import UserRepository, profile_settings_fingerprint
 
 
+# プロフィール設定の既定値を持つテスト用の辞書を作る。overrides で項目を上書きできる。
+# Builds a profile settings dict with defaults for tests; overrides replace individual fields.
 def _profile(**overrides):
     profile = {
         "id": 7,
@@ -46,6 +51,8 @@ def _profile(**overrides):
     return profile
 
 
+# LLM が返すツール呼び出し（function call）の形をしたテスト用の辞書を作る。
+# Builds a dict shaped like an LLM function tool call for tests.
 def _tool_call(name: str, **arguments):
     return {
         "id": f"call-{name}",
@@ -54,6 +61,8 @@ def _tool_call(name: str, **arguments):
     }
 
 
+# ツール実行に必要な最小限の生成ターン状態を、モックで組み立てる。
+# Builds the minimal generation turn state needed to run tools, using mocks.
 def _generation_state():
     evidence_store = MagicMock()
     evidence_store.add_reference_payload.return_value = ()
@@ -73,6 +82,8 @@ def _generation_state():
     )
 
 
+# 更新ツールの引数モデル（ProfileSettingsUpdateArguments）の入力検証。
+# Input validation of the update tool's argument model, ProfileSettingsUpdateArguments.
 class ProfileSettingsArgumentTests(unittest.TestCase):
     def test_update_accepts_empty_strings_to_clear_bio_and_context(self):
         parsed = ProfileSettingsUpdateArguments.model_validate({"bio": "", "llm_profile_context": ""})
@@ -93,6 +104,9 @@ class ProfileSettingsArgumentTests(unittest.TestCase):
             ProfileSettingsUpdateArguments.model_validate({"llm_profile_context": "x" * 20_001})
 
 
+# 読み取りツールが返す範囲（メール・アバターは除外、bio や文脈は要求時だけ、長文は連続した断片で返す）と、読んだ内容の記録。
+# What the read tool returns: no email or avatar, bio and context only on request, long text in contiguous chunks, and tracking of what
+# was read.
 class ProfileSettingsReadTests(unittest.TestCase):
     def test_read_excludes_email_and_avatar_and_omits_unrequested_theme(self):
         profile = _profile(
@@ -242,6 +256,8 @@ class ProfileSettingsReadTests(unittest.TestCase):
         self.assertIn("supplied by this browser", result["theme_note"])
 
 
+# プロフィールツールを、どのターン（ログイン済み・通常ルーム・ストリーミング）にだけ提供するか。
+# Which turns get the profile tools: only signed-in, normal-room, streaming turns.
 class ProfileToolAvailabilityTests(unittest.TestCase):
     def test_authenticated_normal_streaming_chat_gets_profile_tools_when_both_skills_are_off(self):
         use_case = object.__new__(ChatPostUseCase)
@@ -297,6 +313,9 @@ class ProfileToolAvailabilityTests(unittest.TestCase):
         self.assertIsNone(use_case._build_workspace_toolbox(turn))
 
 
+# 更新の提案（承認カード）と承認後の実行。提案時の状態の指紋で、承認までの変更を検出する。
+# Proposing an update (approval card) and executing it after approval; a fingerprint of the proposal-time state detects changes made
+# before approval.
 class ProfileSettingsProposalAndExecutionTests(unittest.TestCase):
     def test_proposal_contains_only_requested_values_and_hashes_the_base_state(self):
         current = _profile(llm_profile_context="stored private text")
@@ -436,6 +455,8 @@ class ProfileSettingsProposalAndExecutionTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "target_changed")
 
 
+# UserRepository のプロフィール読み取りと、指紋が一致したときだけ更新する compare-and-set 更新。
+# UserRepository profile read and the compare-and-set update that writes only when the fingerprint still matches.
 class UserRepositoryProfileCasTests(unittest.TestCase):
     def test_profile_read_selects_only_fields_exposed_to_the_tool(self):
         row = {
@@ -540,6 +561,8 @@ class UserRepositoryProfileCasTests(unittest.TestCase):
         self.assertIsNotNone(session.scalar.await_args.args[0]._for_update_arg)
 
 
+# session_scope の代役。永続化済みの言語を読むだけの、何も行わない非同期コンテキスト。
+# Stand-in for session_scope: an inert async context used only to read the persisted locale.
 class _LocaleReadSession:
     async def __aenter__(self):
         return object()
@@ -548,6 +571,8 @@ class _LocaleReadSession:
         return False
 
 
+# 言語変更の承認後に、HTTP セッションとリクエストの言語を DB の値へ同期する処理（_sync_approved_profile_locale）。
+# Syncing the HTTP session and request locale with the DB after a locale change is approved (_sync_approved_profile_locale).
 class ProfileLocaleSessionSyncTests(unittest.IsolatedAsyncioTestCase):
     def _request(self, session: dict) -> Request:
         return Request(

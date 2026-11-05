@@ -1,3 +1,9 @@
+"""タスク追加とプロンプト作成の API が、不正なペイロード（空白だけのタイトルなど）を保存の手前で拒否し、正しい
+入力は受け付けることを検証するテスト。
+
+Tests that the add-task and create-prompt APIs reject invalid payloads such as whitespace-only titles before saving, and accept valid ones.
+"""
+
 import asyncio
 import json
 import unittest

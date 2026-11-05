@@ -1,3 +1,8 @@
+"""プロンプト共有のページルートを検証するテスト。管理ページが設定画面のプロンプト節へリダイレクトされることを確かめる。
+
+Tests for the prompt-share page routes: the manage page redirects to the prompts section of settings.
+"""
+
 import asyncio
 import unittest
 from unittest.mock import patch

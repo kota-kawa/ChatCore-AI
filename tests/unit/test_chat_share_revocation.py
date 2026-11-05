@@ -1,4 +1,7 @@
-"""Repository-level rules for revoked and expired chat share links."""
+"""失効・期限切れのチャット共有リンクに関する、リポジトリ層のルールを検証するテスト。
+
+Repository-level rules for revoked and expired chat share links.
+"""
 
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -12,12 +15,17 @@ from services.models import ChatRoom
 from services.repositories.chat_repository import ChatRepository
 
 
+# SQLAlchemy の文を PostgreSQL 方言の SQL 文字列にして、生成された句を検証できるようにする。
+# Compiles a SQLAlchemy statement to PostgreSQL SQL text so the generated clauses can be asserted.
 def _compile(statement) -> str:
     return str(statement.compile(dialect=postgresql_dialect()))
 
 
 class _NestedTransaction:
-    """Stand-in for ``AsyncSession.begin_nested()`` used by the token upsert."""
+    """トークンの upsert が使う ``AsyncSession.begin_nested()`` の代役。
+
+    Stand-in for ``AsyncSession.begin_nested()`` used by the token upsert.
+    """
 
     async def __aenter__(self):
         return self
@@ -26,18 +34,24 @@ class _NestedTransaction:
         return False
 
 
+# 所有者確認用のクエリ結果を返す代役。user_id でルームの持ち主を切り替えられる。
+# Fake owner-check query result; user_id selects who owns the room.
 def _owner_result(user_id: int = 7):
     result = Mock()
     result.scalar_one_or_none.return_value = ChatRoom(id="room-1", user_id=user_id)
     return result
 
 
+# 共有行を mappings().first() で返すクエリ結果の代役。
+# Fake query result returning the share row via mappings().first().
 def _mapping_result(row):
     result = Mock()
     result.mappings.return_value.first.return_value = row
     return result
 
 
+# results を execute の呼び出し順に返すセッションの代役。begin_nested も用意する。
+# Fake session returning results in execute call order, with begin_nested provided.
 def _session(*results):
     session = Mock()
     session.execute = AsyncMock(side_effect=list(results))
@@ -45,6 +59,8 @@ def _session(*results):
     return session
 
 
+# 公開側の共有ルーム検索が、失効・期限切れのリンクを除外すること。
+# The public shared-room lookup must exclude revoked and expired links.
 class SharedChatRoomLookupTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_public_lookup_filters_revoked_and_expired_links(self):
         result = Mock()
@@ -62,6 +78,8 @@ class SharedChatRoomLookupTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIn("shared_chat_rooms.expires_at > CURRENT_TIMESTAMP", sql)
 
 
+# 共有トークンの作成・再利用: 有効なら再利用し、失効・期限切れなら新しいトークンに置き換える。
+# Creating or reusing share tokens: an active link is reused; revoked or expired ones are replaced.
 class CreateOrGetSharedChatTokenTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_active_link_is_reused_without_writing(self):
         active = {"share_token": "live-token", "expires_at": None, "revoked_at": None}
@@ -125,6 +143,8 @@ class CreateOrGetSharedChatTokenTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session.execute.await_count, 1)
 
 
+# 共有トークンの失効: 失効時刻は最初の 1 回だけ記録し、所有者以外は拒否する。
+# Revoking share tokens: revoked_at is stamped only once, and non-owners are rejected.
 class RevokeSharedChatTokenTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_revoke_stamps_revoked_at_only_once(self):
         revoked = {

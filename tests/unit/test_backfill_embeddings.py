@@ -1,3 +1,11 @@
+"""埋め込みベクトルの補完スクリプト(scripts/backfill_embeddings)を検証する単体テスト。
+行ごとの生成と保存、空テキストのスキップ、プロバイダー停止時の中断、dry-run、各テーブルの本文組み立て、終了コードを確かめる。
+
+Unit tests for the embedding backfill script (scripts/backfill_embeddings).
+Covers per-row generation and storage, skipping empty text, aborting when the provider stops responding, dry-run,
+per-table text building, and exit codes.
+"""
+
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -5,6 +13,11 @@ from scripts import backfill_embeddings
 
 
 class BackfillTableTestCase(unittest.IsolatedAsyncioTestCase):
+    # 日本語: DB 取得・保存・埋め込み生成を差し替えて _backfill_table を 1 回実行し、集計(stats)と保存された (id, ベクトル) を返す。
+    #         取得は「rows を返した後は空」の 2 バッチで再現する。
+    # English: Run _backfill_table once with DB fetch/store and embedding generation replaced, returning
+    # the stats and the stored (id, vector) pairs.
+    #          Fetching is simulated as two batches: the rows, then an empty one.
     async def _run(self, *, rows, generate, available=True):
         stored: list[tuple[int, list[float]]] = []
         batches = [list(rows), []]
@@ -92,6 +105,8 @@ class BackfillTableTestCase(unittest.IsolatedAsyncioTestCase):
         generate.assert_not_awaited()
 
 
+# 日本語: 埋め込み対象のテキスト(タイトル・本文・種別など)を行から組み立てる関数を確かめる。
+# English: Checks the functions that build the text to embed (title, body, type, ...) from a row.
 class BackfillTextBuildersTestCase(unittest.TestCase):
     def test_memo_text_combines_title_and_body(self):
         text = backfill_embeddings._memo_text((1, "設計メモ", "本文です"))
@@ -114,6 +129,9 @@ class BackfillTextBuildersTestCase(unittest.TestCase):
         self.assertIn("# 手順", text)
 
 
+# 日本語: コマンドのエントリーポイント main の終了コード(埋め込み不可なら 1、--fail-on-pending で未処理があれば 1)を確かめる。
+# English: Checks the exit codes of the main entry point: 1 when embeddings are unavailable, and 1 with --fail-on-pending
+# when work is pending.
 class BackfillMainTestCase(unittest.TestCase):
     def test_exits_non_zero_when_embeddings_are_unavailable(self):
         with patch.object(backfill_embeddings, "configure_logging"), patch.object(

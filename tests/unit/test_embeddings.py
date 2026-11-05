@@ -1,3 +1,6 @@
+# 埋め込みAPIの応答処理と障害時の停止を、実プロバイダーへ接続せず検証する。
+# Tests embedding responses and failure circuit breaking without contacting a real provider.
+
 import os
 import unittest
 from types import SimpleNamespace
@@ -16,6 +19,7 @@ from services.embeddings import (
 
 
 def _fake_client(vector):
+    # 指定ベクトルを返すOpenAI埋め込みクライアントの代替を作る。
     """Return a stub OpenAI client whose embeddings endpoint returns ``vector``."""
     client = MagicMock()
     client.embeddings.create.return_value = SimpleNamespace(
@@ -66,6 +70,7 @@ class EmbeddingGenerationTestCase(unittest.TestCase):
 
 
 class EmbeddingFailureLatchTestCase(unittest.TestCase):
+    # プロバイダー障害が続くと黙って縮退せず、呼び出しを停止することを検証する。
     """Repeated provider failures must stop the calls instead of degrading silently."""
 
     def setUp(self):

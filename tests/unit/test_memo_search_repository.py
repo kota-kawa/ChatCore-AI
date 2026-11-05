@@ -1,3 +1,10 @@
+"""メモ一覧取得（fetch_memo_summaries）の検索条件を、生成される SQL で検証するテスト。pgvector の意味検索、キ
+ーワード検索、ひらがな・カタカナの揺れを見る。
+
+Tests the search conditions of fetch_memo_summaries through the generated SQL: pgvector semantic search, keyword
+search and hiragana/katakana variants.
+"""
+
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -6,12 +13,16 @@ from sqlalchemy.dialects.postgresql import dialect
 from services.repositories.memo_repository import fetch_memo_summaries
 
 
+# mappings().all() が rows を返す DB 実行結果の代役を作る。
+# Builds a database result stand-in whose mappings().all() returns rows.
 def _result(rows):
     result = MagicMock()
     result.mappings.return_value.all.return_value = rows
     return result
 
 
+# 一覧クエリが返す 1 行分のメモ辞書を作る。
+# Builds one memo row dict as the list query returns it.
 def _memo_row(*, title="Semantic result", preview="body"):
     return {
         "id": 1,
@@ -32,6 +43,8 @@ def _memo_row(*, title="Semantic result", preview="body"):
     }
 
 
+# 実行された SQL をコンパイルして、WHERE 句や並び替え、ページングの形を確かめる。
+# Compiles the executed SQL and checks the shape of its WHERE clause, ordering and pagination.
 class MemoSearchRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_semantic_search_uses_pgvector_and_database_pagination(self):
         session = MagicMock()

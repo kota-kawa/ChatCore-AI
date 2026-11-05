@@ -1,3 +1,6 @@
+# ターン間の検索根拠の保存・読み戻しと、回答に使う参照情報の整合性を検証する。
+# Tests storing and restoring search evidence and the consistency of answer references across turns.
+
 import json
 import unittest
 

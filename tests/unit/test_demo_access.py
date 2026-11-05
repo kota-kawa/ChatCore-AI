@@ -1,4 +1,7 @@
-"""Demo access codes: code format, status rules, the sign-in route and the admin routes."""
+"""デモアクセスコードの形式、状態の判定、サインイン用ルート、管理者用ルートを検証するテスト。
+
+Demo access codes: code format, status rules, the sign-in route and the admin routes.
+"""
 
 import asyncio
 import json
@@ -25,6 +28,8 @@ from tests.helpers.request_helpers import build_request
 _NOW = datetime(2026, 10, 28, 3, 0, tzinfo=UTC)
 
 
+# 日本語: デモコードの 1 行分を模した SimpleNamespace を作ります。overrides で項目を差し替えます。
+# English: Build a SimpleNamespace standing in for one demo-code row; overrides replace fields.
 def _row(**overrides):
     values = {
         "user_id": None,
@@ -36,6 +41,8 @@ def _row(**overrides):
     return SimpleNamespace(**values)
 
 
+# 日本語: 管理画面の一覧に出す DemoCodeSummary を作ります。
+# English: Build the DemoCodeSummary shown in the admin listing.
 def _summary(**overrides):
     values = {
         "id": 7,
@@ -50,10 +57,15 @@ def _summary(**overrides):
     return DemoCodeSummary(**values)
 
 
+# 日本語: JSON レスポンスの本文を辞書に戻します。
+# English: Decode a JSON response body into a dict.
 def _body(response):
     return json.loads(response.body.decode())
 
 
+# 日本語: コードの形式（読み間違えにくい文字、4 文字ずつの区切り）と、表記ゆれを吸収するダイジェストを確認します。
+# English: Check the code shape (unambiguous characters, groups of four) and the digest that ignores spelling
+# variations.
 class DemoCodeFormatTests(unittest.TestCase):
     def test_generated_code_has_the_readable_shape(self):
         code = generate_demo_code()
@@ -67,6 +79,8 @@ class DemoCodeFormatTests(unittest.TestCase):
         self.assertNotEqual(demo_code_digest("demo-ab3k-x9qa-7mpy"), digest)
 
 
+# 日本語: demo_code_status が未使用・利用中・終了・失効をどう判定するかを確認します。
+# English: Check how demo_code_status classifies a code as unused, active, ended or revoked.
 class DemoCodeStatusTests(unittest.TestCase):
     def test_unused_until_first_use(self):
         self.assertEqual(demo_code_status(_row(), _NOW), "unused")
@@ -90,6 +104,8 @@ class DemoCodeStatusTests(unittest.TestCase):
         self.assertEqual(demo_code_status(row, _NOW), "revoked")
 
 
+# 日本語: デモコードでのサインイン API（/api/auth/demo-login）を確認します。
+# English: Check the demo sign-in API (/api/auth/demo-login).
 class DemoLoginRouteTests(unittest.TestCase):
     def _post(self, body, *, session=None):
         return build_request(method="POST", path="/api/auth/demo-login", json_body=body, session=session)
@@ -151,6 +167,8 @@ class DemoLoginRouteTests(unittest.TestCase):
         redeem.assert_not_awaited()
 
 
+# 日本語: consume_demo_login_limit が、同一 IP アドレスからの試行回数を上限で止めることを確認します。
+# English: Check that consume_demo_login_limit stops attempts from one IP address at the configured cap.
 class DemoLoginRateLimitTests(unittest.TestCase):
     def setUp(self):
         auth_limits.clear_in_memory_rate_limit_state()
@@ -170,6 +188,8 @@ class DemoLoginRateLimitTests(unittest.TestCase):
         self.assertIn("デモコードの入力回数が多すぎます", message)
 
 
+# 日本語: 管理者向けのデモコード API（発行・一覧・失効）を確認します。
+# English: Check the admin demo-code APIs for issuing, listing and revoking codes.
 class AdminDemoCodeRouteTests(unittest.TestCase):
     def test_every_route_requires_an_admin_session(self):
         calls = (

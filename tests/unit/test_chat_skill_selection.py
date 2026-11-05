@@ -1,3 +1,9 @@
+"""チャットの Skill 選択（services.chat_skill_selection.select_chat_skills）が、
+LLM の判定を検証し、失敗時は安全側へ退避することを検証するテスト。
+
+Tests select_chat_skills in services.chat_skill_selection: validating the LLM's decision and falling back safely on failure.
+"""
+
 import json
 import unittest
 from unittest.mock import Mock, patch
@@ -30,12 +36,17 @@ def _context(*, user_skills=None, ui_enabled=True, memo_enabled=True, prompt_ena
     )
 
 
+# Skill 選択 LLM が返す JSON 応答（選択した ID・不確実フラグ・UI モード）の文字列を作る。
+# Builds the JSON response string the Skill-selection LLM would return (selected IDs, uncertain flag, UI mode).
 def _decision(ids=(), *, uncertain=False, ui_mode="NONE"):
     return json.dumps(
         {"selected_skill_ids": list(ids), "uncertain": uncertain, "ui_mode": ui_mode}
     )
 
 
+# 選択に渡す入力、選択結果の整合性チェック、LLM 失敗や予算超過時のフォールバック、組み込み Skill ごとの扱いを検証する。
+# Covers the input sent for selection, consistency checks on the result, fallback on LLM failure or budget overflow, and
+# per-built-in-Skill handling.
 class ChatSkillSelectionTests(unittest.TestCase):
     def test_json_decoder_limits_fall_back_without_failing_the_chat(self):
         responses = (

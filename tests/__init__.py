@@ -1,5 +1,8 @@
 # 日本語: テストパッケージ全体のエントリーポイントです。
-"""Test package."""
+"""テストパッケージの入口。import 時に、API 使用量の記録先と利用上限の読み取り元を DB 非依存のものへ差し替える。
+
+Entry point of the test package. On import it swaps the API usage sink and the usage-limit reader for database-free stand-ins.
+"""
 
 
 from services.repositories.usage_repository import SubjectUsageTotals
@@ -13,6 +16,8 @@ from services.usage_metering import set_usage_sink
 set_usage_sink(lambda _increment: None)
 
 
+# 日本語: 使用量ゼロを返す利用上限の読み取り関数。DB を読まずに上限判定を通すための代替。
+# English: Usage-totals reader that always reports zero usage, so limit checks pass without reading the database.
 async def _no_usage(_subject_key, _periods):
     return UsageTotals(
         subject=SubjectUsageTotals(daily_nano_usd=0, weekly_nano_usd=0),

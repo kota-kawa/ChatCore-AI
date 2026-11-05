@@ -1,3 +1,8 @@
+"""Google ログイン時のプロフィール同期 (update_user_profile_from_google_if_unset) のテスト。
+
+Tests for syncing the profile on Google sign-in (update_user_profile_from_google_if_unset).
+"""
+
 import unittest
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock, patch
@@ -5,11 +10,15 @@ from unittest.mock import AsyncMock, Mock, patch
 from services.users import update_user_profile_from_google_if_unset
 
 
+# session_scope の代わりに使う、渡されたセッションをそのまま返す非同期コンテキストマネージャ。
+# Async context manager used in place of session_scope; yields the given session as-is.
 @asynccontextmanager
 async def fake_session_scope(session):
     yield session
 
 
+# サービス層は既定値を添えてリポジトリを呼ぶだけで、「未設定のときだけ上書きする」判断はリポジトリ側が持つ。
+# The service just calls the repository with the default values; the "overwrite only if unset" decision lives in the repository.
 class GoogleProfileSyncTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_updates_default_username_and_avatar_from_google(self):
         session = Mock()

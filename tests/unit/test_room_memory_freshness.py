@@ -13,6 +13,8 @@ from services.chat_context import build_memory_system_message
 from services.repositories.chat_repository import ChatRepository, RememberedFact
 
 
+# all() で行を返すだけの DB 結果の代役。
+# DB result stand-in that simply returns its rows from all().
 class _FakeResult:
     def __init__(self, rows):
         self._rows = rows
@@ -21,6 +23,8 @@ class _FakeResult:
         return self._rows
 
 
+# execute に渡された SQL 文を記録し、固定の行を返すセッションの代役。
+# Session stand-in that records statements passed to execute and returns fixed rows.
 class _CapturingSession:
     def __init__(self, rows):
         self.rows = rows
@@ -31,6 +35,8 @@ class _CapturingSession:
         return _FakeResult(self.rows)
 
 
+# 部屋の記憶の取得が最終言及日で絞り込まれ、ラベル付けされ、日付の扱い方をモデルへ伝えることを検証するテストクラス。
+# Test class verifying that room memory is filtered by last mention, labelled with dates, and tells the model how to weigh them.
 class RoomMemoryFreshnessTestCase(unittest.TestCase):
     def test_repository_reads_only_facts_mentioned_since_the_cutoff(self):
         mentioned = datetime(2026, 9, 1, 12, 0)
@@ -46,6 +52,8 @@ class RoomMemoryFreshnessTestCase(unittest.TestCase):
     def test_facts_are_labelled_with_their_last_mention_and_stale_ones_are_left_out(self):
         captured = {}
 
+        # 呼び出し引数を記録して固定の記憶を返す ChatRepository の代役。
+        # ChatRepository stand-in that records its arguments and returns fixed facts.
         class _FakeRepository:
             def __init__(self, _session):
                 pass

@@ -1,3 +1,6 @@
+# 生成済みZodスキーマのfingerprintが、バックエンドモデルと一致することを検証する。
+# Tests that generated Zod schema fingerprints match backend models.
+
 from __future__ import annotations
 
 import re

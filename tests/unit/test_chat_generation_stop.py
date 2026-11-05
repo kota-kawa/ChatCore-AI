@@ -1,3 +1,10 @@
+"""チャット生成の停止（赤い停止ボタン）を、複数ワーカーが Redis を共有する構成で検証するテスト。
+部分回答の保存、ロック解放、再生成、Redis 障害時のフェイルクローズを扱う。
+
+Tests chat generation stop (the red stop button) with several workers sharing Redis: partial answer persistence,
+lock release, regeneration and fail-closed behavior on Redis failure.
+"""
+
 import json
 import threading
 import time
@@ -213,6 +220,8 @@ def _endless_answer_stream(messages, model, tools=None, generation_phase="defaul
         yield f"chunk-{index} "
 
 
+# モデルが web_search ツールを 1 回呼ぶ応答（ツール呼び出しの JSON 文字列）を作る。
+# Builds the model reply (tool-call JSON string) that calls the web_search tool once.
 def _web_search_tool_call(query):
     return json.dumps(
         [

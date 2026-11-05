@@ -1,3 +1,8 @@
+"""services.users のユーザー作成・取得・Google 連携・アカウント削除が、リポジトリとトランザクションを正しく使うかのテスト。
+
+Tests that services.users (create/lookup users, link Google, delete account) uses the repositories and transactions correctly.
+"""
+
 import unittest
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock, patch
@@ -15,11 +20,15 @@ from services.users import (
 )
 
 
+# session_scope の代わりに使う、渡されたセッションをそのまま返す非同期コンテキストマネージャ。
+# Async context manager used in place of session_scope; yields the given session as-is.
 @asynccontextmanager
 async def fake_session_scope(session):
     yield session
 
 
+# セッションとリポジトリのモック一式を作る。commit / rollback と各リポジトリメソッドは AsyncMock。
+# Builds the session and repository mocks; commit / rollback and repository methods are AsyncMocks.
 def repository_harness():
     session = Mock()
     session.commit = AsyncMock()
@@ -34,6 +43,8 @@ def repository_harness():
     return session, repository
 
 
+# DB には接続せず、リポジトリ呼び出しの引数と commit / rollback の有無だけを検証する。
+# No DB connection; only the repository call arguments and whether commit / rollback happen are verified.
 class UserAuthProvidersTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_get_user_by_id_uses_async_repository(self):
         session, repository = repository_harness()
@@ -72,6 +83,8 @@ class UserAuthProvidersTestCase(unittest.IsolatedAsyncioTestCase):
         )
         session.commit.assert_awaited_once()
 
+    # 長すぎるアバター URL は既定のアバターに置き換え、Google のプロバイダー情報はそのまま渡す。
+    # An over-long avatar URL is replaced by the default avatar, while Google provider metadata is passed through.
     async def test_create_user_normalizes_google_avatar_and_provider_metadata(self):
         session, repository = repository_harness()
         repository.create.return_value = 322
@@ -140,6 +153,8 @@ class UserAuthProvidersTestCase(unittest.IsolatedAsyncioTestCase):
         session.commit.assert_awaited_once()
         session.rollback.assert_not_awaited()
 
+    # 削除対象のユーザーが存在しない場合は commit せず rollback する。
+    # When the user to delete does not exist, roll back instead of committing.
     async def test_delete_account_rolls_back_when_user_is_missing(self):
         session, repository = repository_harness()
         repository.delete_account.return_value = False

@@ -1,3 +1,8 @@
+"""configure_logging がコンソール・app.log・error.log のハンドラーを設定し、ログファイルへ書き出すことを検証するテスト。
+
+Tests that configure_logging sets up the console, app.log and error.log handlers and writes to the log files.
+"""
+
 import logging
 import tempfile
 import unittest

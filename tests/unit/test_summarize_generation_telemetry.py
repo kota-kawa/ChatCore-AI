@@ -1,3 +1,10 @@
+"""生成テレメトリのログ集計スクリプト（scripts.summarize_generation_telemetry）を検証するテスト。
+ログ行をターン単位に畳む処理、割合・中央値の計算、ツール呼び出し拒否の集計、変更前後の比較、CLI の動作を確かめる。
+
+Tests for the generation-telemetry log summarizer (scripts.summarize_generation_telemetry): folding log lines into turns, rates and medians,
+tool-call rejection counts, before/after comparison, and the CLI.
+"""
+
 import contextlib
 import io
 import json
@@ -16,6 +23,8 @@ from services.chat_generation_telemetry import ChatGenerationTelemetry
 from services.logging_config import JsonLogFormatter
 
 
+# JsonLogFormatter で、指定した request_id と追加項目を持つ JSON ログ行を作る補助関数。
+# Helper that builds a JSON log line with the given request_id and extra fields using JsonLogFormatter.
 def _log_line(request_id: str, message: str, extra: dict) -> str:
     # 実際のフォーマッタでログ行を作る。集計側がログの形に追随できているかを確かめるため。
     # Build the line with the real formatter so the summary is tested against the real log shape.
@@ -28,6 +37,8 @@ def _log_line(request_id: str, message: str, extra: dict) -> str:
     return JsonLogFormatter().format(record)
 
 
+# 正常終了した 1 ターン分（途中経過と完了）のログ行を作る補助関数。
+# Helper that builds the log lines of one successfully completed turn (a step line and the completion line).
 def _completed_turn(request_id: str, **fields) -> list[str]:
     telemetry = ChatGenerationTelemetry(model=fields.pop("model", "claude-haiku-4-5"))
     telemetry.first_pass_finish_reason = fields.pop("first_pass_finish_reason", "stop")
@@ -44,6 +55,8 @@ def _completed_turn(request_id: str, **fields) -> list[str]:
     ]
 
 
+# 終端イベントなしで失敗した 1 ターン分のログ行を作る補助関数。
+# Helper that builds the log lines of one turn that failed without a terminal event.
 def _failed_turn(request_id: str, **fields) -> list[str]:
     telemetry = ChatGenerationTelemetry(model=fields.pop("model", "claude-haiku-4-5"))
     telemetry.first_pass_finish_reason = ""

@@ -1,3 +1,10 @@
+"""参照検索用のクエリ書き換え（services.reference_query_rewrite）を検証するテスト。
+LLM の JSON 応答からキーワード列を取り出す処理、件数上限、前の発話や日付の受け渡し、失敗時に例外を出さないことを確かめる。
+
+Tests for reference-search query rewriting (services.reference_query_rewrite): extracting keyword queries from the LLM's JSON,
+the query cap, passing the previous turn and today's date, and never raising on provider failure.
+"""
+
 import unittest
 from datetime import datetime
 from unittest.mock import patch
@@ -8,6 +15,8 @@ from services.reference_query_rewrite import (
 )
 
 
+# rewrite_reference_query の解析・上限・入力の受け渡し・失敗時の挙動を、LLM をモックして検証するテストクラス。
+# Test class for rewrite_reference_query's parsing, cap, input hand-off and failure behavior, with the LLM mocked.
 class RewriteReferenceQueryTestCase(unittest.TestCase):
     def _rewrite(self, raw, **kwargs):
         with patch(

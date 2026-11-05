@@ -1,3 +1,10 @@
+"""自分のプロンプト管理 API（blueprints.prompt_share.prompt_manage_api）を検証するテスト。
+一覧での添付 URL の保持、スキル更新時のリソース置換、いいね一覧の整形を確かめる。
+
+Tests for the prompt management APIs (blueprints.prompt_share.prompt_manage_api):
+attachment URLs kept in the list, skill resources replaced on update, and the shape of the liked-prompts list.
+"""
+
 import asyncio
 import json
 import unittest
@@ -16,6 +23,8 @@ from tests.helpers.request_helpers import build_request
 
 # いいねしたプロンプトAPIのエンドポイントの挙動や、いいね要素のシリアライズ処理をテストするクラス。
 # Test class to check the behavior of the liked prompts API endpoint and serialization.
+# 投稿者自身のプロンプト一覧・更新・いいね一覧の整形を、サービスをモックして検証するテストクラス。
+# Test class for an author's prompt list, update and liked-prompts shaping, with services mocked.
 class PromptManageApiTestCase(unittest.TestCase):
     def test_my_prompts_keeps_reference_attachment_urls(self):
         attachments = [{

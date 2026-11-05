@@ -1,3 +1,10 @@
+"""ゲストのチャット日次上限、認証コード試行の上限、管理者ログインの IP 上限と、X-Forwarded-For の偽装対策(信頼するプロキシ経由のみ採用)
+を検証する単体テスト。
+
+Unit tests for the guest daily chat limit, verification-attempt limits, the admin-login per-IP limit, and spoof protection for
+X-Forwarded-For (honored only via trusted proxies).
+"""
+
 import os
 import unittest
 from unittest.mock import patch
@@ -50,7 +57,7 @@ class GuestChatLimitTestCase(unittest.TestCase):
             os.environ["ADMIN_LOGIN_PER_IP_LIMIT"] = self.original_admin_login_limit
         auth_limits.clear_in_memory_rate_limit_state()
 
-    # ゲストチャット制限回数に到達した後、追加 of チャット要求が拒否されることを検証します。
+    # ゲストチャット制限回数に到達した後、追加のチャット要求が拒否されることを検証します。
     # Verify that additional chat requests are blocked once the guest chat limit cap is reached.
     def test_guest_chat_limit_blocks_after_reaching_cap(self):
         os.environ["GUEST_CHAT_DAILY_LIMIT"] = "2"

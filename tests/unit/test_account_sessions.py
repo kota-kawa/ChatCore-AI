@@ -1,3 +1,10 @@
+"""同じブラウザでの複数アカウント同時ログイン（切り替え・ログアウト・上限・期限切れ・改ざん Cookie）を、
+疑似 Redis とテスト用ルートで検証する。
+
+Tests for multiple signed-in accounts in one browser (switching, sign-out, the parked-session limit, expiry and tampered cookies)
+, using a fake Redis and test-only routes.
+"""
+
 import asyncio
 import unittest
 from http.cookies import SimpleCookie
@@ -13,6 +20,8 @@ from services.session_middleware import PermanentSessionMiddleware
 from services.session_scope import MAX_PARKED_SESSIONS
 from tests.unit.test_session_middleware import DummyRedis
 
+# 日本語: ユーザー ID 1〜7 の疑似ユーザーデータ。get_user_by_id の代わりに返す。
+# English: Fake user records for ids 1 to 7, returned in place of get_user_by_id.
 USERS = {
     user_id: {
         "id": user_id,
@@ -24,10 +33,14 @@ USERS = {
 }
 
 
+# 日本語: DB を使わず USERS から取り出す get_user_by_id の代替。存在しない ID は None（削除済みアカウントの再現に使う）。
+# English: Stand-in for get_user_by_id that reads USERS instead of the DB; unknown ids give None (used to mimic a deleted account).
 async def fake_get_user_by_id(user_id):
     return USERS.get(user_id)
 
 
+# 日本語: セッションミドルウェアと認証ルーターを載せ、ログイン済み状態を作るテスト専用ルートを足したアプリを組み立てる。
+# English: Build an app with the session middleware and auth router plus test-only routes that set up signed-in states.
 def build_app():
     app = FastAPI()
     app.add_middleware(PermanentSessionMiddleware, secret_key="account-sessions-test-secret", max_age=3600)
@@ -40,6 +53,8 @@ def build_app():
         establish_authenticated_session(request, user_id, USERS[user_id]["email"])
         return {"status": "ok"}
 
+    # 日本語: 現在のセッション内容（ユーザー ID・管理者フラグ・CSRF トークン）を返す。
+    # English: Return the current session contents (user id, admin flag and CSRF token).
     @app.get("/_test/session")
     async def test_session(request: Request):
         return {
@@ -48,6 +63,8 @@ def build_app():
             "csrf_token": request.session[CSRF_SESSION_KEY],
         }
 
+    # 日本語: セッションに管理者フラグを立てる（別アカウント追加時に引き継がれないことの確認用）。
+    # English: Set the admin flag on the session (to check it is not inherited by an added account).
     @app.post("/_test/admin")
     async def test_admin(request: Request):
         request.session["is_admin"] = True
@@ -66,6 +83,8 @@ def build_app():
 # 同じブラウザで複数アカウントのログイン状態を保持し、切り替え・ログアウトできることを検証する。
 # Verify that one browser can hold several signed-in accounts, switch between them and sign out of one.
 class AccountSessionsTestCase(unittest.TestCase):
+    # 日本語: 疑似 Redis とユーザー取得・URL 生成の差し替えを有効にして、非同期シナリオを 1 つ実行する。
+    # English: Run one async scenario with a fake Redis and patched user lookup and URL builders in effect.
     def run_scenario(self, scenario, redis_client=None):
         redis_client = redis_client or DummyRedis()
 
@@ -83,15 +102,21 @@ class AccountSessionsTestCase(unittest.TestCase):
         ):
             asyncio.run(runner())
 
+    # 日本語: 現在のセッションの CSRF トークンをヘッダーに付けて POST する。
+    # English: POST with the current session's CSRF token in the header.
     @staticmethod
     async def post(client, path, **kwargs):
         csrf_token = (await client.get("/_test/session")).json()["csrf_token"]
         return await client.post(path, headers={CSRF_HEADER_NAME: csrf_token}, **kwargs)
 
+    # 日本語: いま有効なアカウントのユーザー ID を返す。
+    # English: Return the user id of the currently active account.
     @staticmethod
     async def current_user_id(client):
         return (await client.get("/_test/session")).json()["user_id"]
 
+    # 日本語: アカウント一覧 API の結果を (user_id, current) の組に絞って返す。
+    # English: Return the account-list API result reduced to (user_id, current) pairs.
     @staticmethod
     async def listed_accounts(client):
         response = await client.get("/api/auth/accounts")

@@ -1,3 +1,10 @@
+"""チャット本文に含まれる URL の取得内容が、参照資料として生成ジョブやプロンプトへ渡る経路（抜粋、
+予算、過去ターンの URL）を検証するテスト。
+
+Tests how content fetched from URLs in a chat message reaches the prompt and the generation job: excerpts,
+the shared budget and URLs pasted in earlier turns.
+"""
+
 import asyncio
 import unittest
 from types import SimpleNamespace

@@ -1,3 +1,8 @@
+"""チャットルームの共有リンク作成・失効と、共有ルーム閲覧の各ルート（blueprints/chat/rooms.py）を検証するテスト。
+
+Tests the room sharing routes in blueprints/chat/rooms.py: creating and revoking share links and reading a shared room.
+"""
+
 import asyncio
 import json
 import unittest
@@ -236,6 +241,8 @@ class ChatRoomSharingTestCase(unittest.TestCase):
 
 # 日本語: チャット共有リンクの失効APIのユニットテスト
 # English: Unit tests for the chat share-link revocation API
+# 共有リンクの失効ルーム（POST /api/revoke_chat_room_share）と、失効・期限切れトークンの閲覧拒否。
+# The share revocation route (POST /api/revoke_chat_room_share) and rejection of revoked or expired tokens.
 class ChatShareRevocationTestCase(unittest.TestCase):
     # 日本語: 未ログインのユーザーが共有リンクを失効できないことを検証します。
     # English: Verify that revoking a share link requires an authenticated session.

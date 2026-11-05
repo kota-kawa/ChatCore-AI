@@ -1,3 +1,8 @@
+"""MCP ツールの認可（require_actor のスコープ判定と consume_tool_limit のレート制限の区分）を検証するテスト。
+
+Tests MCP tool authorization: the scope checks in require_actor and how consume_tool_limit partitions rate limits.
+"""
+
 import asyncio
 import unittest
 from types import SimpleNamespace
@@ -8,6 +13,8 @@ from mcp.server.fastmcp.exceptions import ToolError
 from services.mcp_tools.common import consume_tool_limit, require_actor
 
 
+# トークンのスコープごとに許可・拒否される操作と、制限がユーザーとクライアント単位で分かれることを確かめる。
+# Checks which operations each token scope allows or denies and that limits are partitioned per user and client.
 class McpToolAuthorizationTestCase(unittest.TestCase):
     def test_require_actor_accepts_only_the_required_scope(self):
         token = SimpleNamespace(

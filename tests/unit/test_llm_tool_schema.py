@@ -1,3 +1,8 @@
+"""プロバイダに渡すツール定義のスキーマ緩和（llm_tool_schema）が、拒否されうる制約を落として説明文へ移すことを検証するテスト。
+
+Tests llm_tool_schema, which relaxes tool schemas by dropping constraints a provider may reject and moving them into descriptions.
+"""
+
 import unittest
 
 from services import llm
@@ -42,6 +47,9 @@ def _sample_tool():
     }
 
 
+# 日本語: 制約の除去、元定義を変更しないこと、実際に配布しているツール定義が制約を持たないことを確かめる。
+# English: Checks constraints are dropped, the source definition is not mutated, and the shipped tool definitions
+# carry no rejectable constraint.
 class LlmToolSchemaTests(unittest.TestCase):
     # 日本語: プロバイダ側の検証で拒否されうる制約が、渡す直前に落ちることを検証します。
     # English: Verify the constraints a provider can reject on are dropped before handoff.

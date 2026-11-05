@@ -1,3 +1,6 @@
+# 固定した追質問ケースで、新しい情報が必要な場面の判定契約を検証する。
+# Tests decisions about follow-up questions needing new information with fixed evaluation cases.
+
 import json
 import re
 import unittest

@@ -57,11 +57,19 @@ _UI_MODES = frozenset({"2D", "3D", "NONE"})
 
 
 class EvalDatasetError(Exception):
-    """Raised when the dataset itself is malformed."""
+    """データセット自体の形式が壊れているときに送出する。
+
+    Raised when the dataset itself is malformed.
+    """
 
 
 @dataclass(frozen=True)
 class CitationCase:
+    """引用マーカーの検証用ケース。検索結果、モデル出力、期待値をまとめて持つ。
+
+    One citation-checking case: the search result, the model output, and the expectations.
+    """
+
     case_id: str
     description: str
     question: str
@@ -76,6 +84,11 @@ class CitationCase:
 
 @dataclass(frozen=True)
 class ArtifactCase:
+    """生成 UI アーティファクトの検証用ケース。UI モード、モデル出力、期待する判定結果を持つ。
+
+    One generative-UI artifact case: the UI mode, the model output, and the expected verdict.
+    """
+
     case_id: str
     description: str
     ui_mode: str
@@ -84,6 +97,8 @@ class ArtifactCase:
     expect: dict[str, Any]
 
 
+# 日本語: 条件を満たさなければ EvalDatasetError にする。以降の _require_* はこの検証を使う。
+# English: Raise EvalDatasetError unless the condition holds; the _require_* helpers below build on it.
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise EvalDatasetError(message)
@@ -108,6 +123,10 @@ def _require_string_list(value: Any, label: str) -> list[str]:
     return list(value)
 
 
+# 日本語: ケースの sources を WebSearchSource に変換し、label から根拠ID への対応表を作る。
+#         URL が同じ(=根拠IDが衝突する)ソースはデータ不備として弾く。
+# English: Convert a case's sources into WebSearchSource objects and build the label-to-evidence-id map.
+#          Sources whose URLs collide on the derived evidence id are rejected as a dataset error.
 def _build_sources(case_id: str, raw_sources: Any) -> tuple[tuple[WebSearchSource, ...], dict[str, str]]:
     _require(isinstance(raw_sources, list) and raw_sources, f"{case_id}: sources must be a non-empty list")
     sources: list[WebSearchSource] = []
@@ -148,6 +167,10 @@ def _render_citations(case_id: str, template: str, labels: dict[str, str]) -> st
     return rendered
 
 
+# 日本語: 生の JSON を CitationCase にする。期待値が参照する label・不正マーカー・本文が
+#         モデル出力と矛盾しないことを、ここで機械的に確かめる。
+# English: Turn raw JSON into a CitationCase, mechanically checking that the expected labels,
+#          invalid markers and plain text agree with the model output.
 def _build_citation_case(raw: Any) -> CitationCase:
     _require(isinstance(raw, dict), "citation case must be an object")
     case_id = _require_text(raw.get("id"), "citation case id")
@@ -199,6 +222,8 @@ def _build_citation_case(raw: Any) -> CitationCase:
     )
 
 
+# 日本語: 本文とアーティファクト JSON から、実際のモデル出力と同じ形(```chatcore-artifact フェンス付き)の文字列を組み立てる。
+# English: Build the string in the shape the model really emits (a ```chatcore-artifact fence) from prose and artifact JSON.
 def _artifact_model_output(case_id: str, raw: dict[str, Any]) -> str:
     artifact = raw.get("artifact")
     prose = _require_text(raw.get("prose"), f"{case_id}: prose")
@@ -209,6 +234,10 @@ def _artifact_model_output(case_id: str, raw: dict[str, Any]) -> str:
     return f"{prose}\n\n```chatcore-artifact\n{block}\n```"
 
 
+# 日本語: 生の JSON を ArtifactCase にする。ステータス・理由コード・品質ゲート指摘ラベルの組み合わせが
+#         ui_mode と矛盾しないことを検証する。
+# English: Turn raw JSON into an ArtifactCase, validating that the status, reason codes and quality-issue labels
+#          are consistent with ui_mode.
 def _build_artifact_case(raw: Any) -> ArtifactCase:
     _require(isinstance(raw, dict), "artifact case must be an object")
     case_id = _require_text(raw.get("id"), "artifact case id")

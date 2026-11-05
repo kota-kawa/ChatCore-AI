@@ -1,3 +1,10 @@
+"""AI エージェントの機能カタログ、インテント分類（LLM の構造化応答）、ページ操作アクションの解析・検証、
+メモ文脈の組み立てを検証する単体テスト。
+
+Unit tests for the AI agent capability catalog, intent classification from structured LLM output, page-action parsing and validation, and
+memo-context assembly.
+"""
+
 import asyncio
 import unittest
 from unittest.mock import AsyncMock, patch

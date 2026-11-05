@@ -1,3 +1,10 @@
+"""alembic マイグレーション 20260719_01（context_facts テーブル、トリガー、インデックスの作成）
+の連鎖と SQL を検証するテスト。
+
+Tests the revision chain and SQL of alembic migration 20260719_01, which creates the context_facts table,
+its trigger and indexes.
+"""
+
 import importlib.util
 import unittest
 from pathlib import Path
@@ -16,10 +23,14 @@ migration = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(migration)
 
 
+# 日本語: op.execute に渡された SQL を、空白を 1 つに揃えた文字列のリストにします。
+# English: Return the SQL passed to op.execute with whitespace collapsed to single spaces.
 def _normalized_statements(execute):
     return [" ".join(call.args[0].split()) for call in execute.call_args_list]
 
 
+# 日本語: マイグレーション関数は op をモックして呼び、発行される SQL だけを確認します。
+# English: The migration functions are called with op mocked, and only the emitted SQL is checked.
 class ContextVaultMigrationTestCase(unittest.TestCase):
     def test_revision_follows_mcp_reauthorization_migration(self):
         self.assertEqual(migration.revision, "20260719_01")

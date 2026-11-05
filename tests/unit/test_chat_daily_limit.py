@@ -1,3 +1,9 @@
+"""チャット API の 1 日あたり利用上限(ゲストの上限、全体の上限)を超えたときに 429 とエラーメッセージ、Retry-After
+を返すことを検証する単体テスト。
+
+Unit tests that the chat API returns 429 with the error message and a Retry-After header when the guest or global daily limit is exceeded.
+"""
+
 import asyncio
 import json
 import unittest

@@ -1,3 +1,8 @@
+"""チャット共有トークンのサービス関数（作成・再利用・失効）が、リポジトリ操作と状態の整形を正しく行うことを検証するテスト。
+
+Tests the chat share token service functions (create, reuse, revoke): repository delegation and state serialization.
+"""
+
 import unittest
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
@@ -24,6 +29,8 @@ class ChatServiceSharedTokenTestCase(unittest.IsolatedAsyncioTestCase):
             "room-1", 3, expires_at=None, force_refresh=False
         )
 
+    # 日数指定は、タイムゾーン付きの期限日時へ変換されてリポジトリへ渡される。
+    # A day count is converted to a timezone-aware deadline before reaching the repository.
     async def test_expires_in_days_is_converted_to_an_aware_deadline(self):
         with patch("services.chat_service._write", new=AsyncMock(return_value=None)) as write:
             await create_or_get_shared_chat_token("room-1", 3, expires_in_days=7)
@@ -39,6 +46,8 @@ class ChatServiceSharedTokenTestCase(unittest.IsolatedAsyncioTestCase):
             delta=60,
         )
 
+    # ルーム未存在・他人のルームの例外を別の例外へ変換しない（API 層が 404/403 にするため）。
+    # Not-found and forbidden errors are not converted to other exceptions, so the API layer can map them to 404/403.
     async def test_missing_or_forbidden_room_errors_are_not_converted(self):
         for error in (
             ResourceNotFoundError("該当ルームが見つかりません"),
@@ -61,6 +70,8 @@ class ChatServiceSharedTokenTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(state["is_active"])
         self.assertEqual(state["revoked_at"], revoked_at.isoformat())
 
+    # 一度も共有していないルームの失効は None を返す。
+    # Revoking a room that was never shared returns None.
     async def test_revoke_returns_none_when_the_room_was_never_shared(self):
         with patch("services.chat_service._write", new=AsyncMock(return_value=None)):
             self.assertIsNone(await revoke_shared_chat_token("room-1", 3))

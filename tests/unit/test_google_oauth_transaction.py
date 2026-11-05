@@ -1,3 +1,6 @@
+# Google OAuthの一時トランザクションが保存され、一度だけ消費されることを検証する。
+# Tests storage and one-time consumption of temporary Google OAuth transactions.
+
 import unittest
 from unittest.mock import patch
 

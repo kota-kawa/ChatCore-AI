@@ -1,3 +1,10 @@
+"""スキルのリソースファイルを保存するリポジトリ（PromptResourceRepository）を検証するテスト。
+まとめ挿入での順序保持、置換時の削除→挿入、公開用キー名への変換を確かめる。
+
+Tests for PromptResourceRepository, which stores skill resource files:
+order preserved on bulk insert, delete-then-insert on replace, and mapping to the public content key.
+"""
+
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -6,6 +13,8 @@ from services.repositories.prompt_resource_repository import PromptResourceRepos
 from services.request_models import SkillResourceInput
 
 
+# SQLAlchemy の scalars() 結果を最小限に真似るテスト用の結果オブジェクト。
+# Minimal test double that mimics an SQLAlchemy scalars() result.
 class _ScalarResult:
     def __init__(self, values):
         self._values = values
@@ -20,6 +29,8 @@ class _ScalarResult:
         return self._values[0] if self._values else None
 
 
+# リソースの挿入・置換・取得が同じセッション内で行われることを、セッションのモックで検証するテストクラス。
+# Test class verifying that resource insert, replace and fetch happen within one session, using a mocked session.
 class PromptResourceRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_insert_many_uses_orm_and_preserves_digest_order(self):
         session = AsyncMock()

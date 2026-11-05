@@ -1,3 +1,8 @@
+"""ルーム要約（services.chat_summary.build_room_summary_text）のモデル利用と、失敗時の抜粋要約への退避を検証するテスト。
+
+Tests room summarization in services.chat_summary.build_room_summary_text: model use and fallback to the excerpt summary.
+"""
+
 import unittest
 from unittest.mock import patch
 

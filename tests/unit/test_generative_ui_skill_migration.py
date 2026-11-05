@@ -1,3 +1,6 @@
+# 生成UIのSkill設定を追加するmigrationの契約を検証する。既存の適用履歴は変更しない。
+# Tests the migration adding the generated UI Skill preference without changing migration history.
+
 import unittest
 from pathlib import Path
 

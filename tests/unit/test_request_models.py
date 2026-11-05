@@ -1,3 +1,10 @@
+"""API の入力モデル（services.request_models）のバリデーションを検証するテスト。
+タスク・メモ・プロンプト（スキルのリソースを含む）・チャット・プロンプトアシストの各リクエストについて、受理する値と拒否する値を確かめる。
+
+Tests for validation of the API input models (services.request_models): which values are accepted and rejected for
+task, memo, prompt (including skill resources), chat and prompt-assist requests.
+"""
+
 import unittest
 
 from pydantic import ValidationError

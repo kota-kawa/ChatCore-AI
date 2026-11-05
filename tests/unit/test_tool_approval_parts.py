@@ -31,6 +31,8 @@ from services.tool_approval_parts import (
 APPROVAL_ID = "5f0c2a9e-3b7d-4c1e-9a2f-0d6b8e4c7a11"
 
 
+# メモ編集の承認カード（tool_approval パーツ）の有効な見本を作り、overrides で項目を上書きする補助関数。
+# Helper that builds a valid memo-edit approval card (tool_approval part) and applies overrides.
 def _memo_edit_approval(**overrides: Any) -> dict[str, Any]:
     approval: dict[str, Any] = {
         "id": APPROVAL_ID,
@@ -53,6 +55,8 @@ def _memo_edit_approval(**overrides: Any) -> dict[str, Any]:
     return approval
 
 
+# プロフィール設定更新の承認カードの有効な見本を作り、overrides で項目を上書きする補助関数。
+# Helper that builds a valid profile-settings approval card and applies overrides.
 def _profile_settings_approval(**overrides: Any) -> dict[str, Any]:
     approval: dict[str, Any] = {
         "id": APPROVAL_ID,
@@ -71,6 +75,8 @@ def _profile_settings_approval(**overrides: Any) -> dict[str, Any]:
     return approval
 
 
+# 承認カードのペイロード検証（正規化・未知キーの除去・不正値の拒否）を検証するテストクラス。
+# Test class for approval payload validation: normalization, dropping unknown keys and rejecting invalid values.
 class ValidateToolApprovalPayloadTests(unittest.TestCase):
     def test_valid_payload_round_trips_and_keeps_whitespace(self) -> None:
         approval = validate_tool_approval_payload(_memo_edit_approval())
@@ -162,6 +168,8 @@ class ValidateToolApprovalPayloadTests(unittest.TestCase):
         self.assertEqual(TOOL_APPROVAL_PART_TYPE, "tool_approval")
 
 
+# 後続ターンへ渡す承認の要約が、対象は残しつつ提案本文を含まずエスケープされることを検証するテストクラス。
+# Test class verifying that the approval summary handed to later turns keeps the target, leaves out the proposed body, and is escaped.
 class DescribeToolApprovalForContextTests(unittest.TestCase):
     def test_prompt_and_skill_summaries_keep_the_target_but_not_the_proposed_body(self) -> None:
         cases = (
@@ -220,6 +228,8 @@ class DescribeToolApprovalForContextTests(unittest.TestCase):
         self.assertEqual(describe_tool_approval_for_context({"tool": "memo_edit"}), [])
 
 
+# 共有ビュー向けに承認カードを概要だけへ伏せても、形式が有効なままであることを検証するテストクラス。
+# Test class verifying that redacting an approval card to its outline for shared views keeps it valid.
 class RedactToolApprovalForShareTests(unittest.TestCase):
     def test_redaction_keeps_only_the_outline_and_stays_valid(self) -> None:
         approval = validate_tool_approval_payload(
@@ -255,6 +265,8 @@ class RedactToolApprovalForShareTests(unittest.TestCase):
         self.assertTrue(redacted["readonly"])
 
 
+# 承認 API のリクエスト/レスポンスモデルが既知の操作だけを受け付けることを検証するテストクラス。
+# Test class verifying that the approval API request/response models accept only known actions.
 class ToolApprovalApiModelTests(unittest.TestCase):
     def test_decision_request_accepts_only_known_actions(self) -> None:
         for decision in ("approve_once", "approve_always", "deny"):

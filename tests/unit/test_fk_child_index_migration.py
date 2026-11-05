@@ -1,3 +1,4 @@
+# 外部キー子列の索引と不足していた外部キーをモデルとmigrationで揃え、不要な自動差分を防ぐ。
 """Keep 20260913_02's indexes and foreign keys in step with the models.
 
 The revision adds the indexes a parent delete needs on each foreign-key child

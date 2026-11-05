@@ -1,3 +1,8 @@
+"""LLM のコンテキスト窓・出力予約・入力トークン見積もりを扱う llm_context_budget の計算を検証するテスト。
+
+Tests llm_context_budget: context windows, output reservation and input token estimation.
+"""
+
 import json
 import os
 import unittest
@@ -22,6 +27,8 @@ from services.llm_context_budget import (
 )
 
 
+# モデル別の窓、環境変数による上書き、フェーズ別の出力予約、リクエストが窓に収まるかの判定を確かめる。
+# Checks per-model windows, environment overrides, per-phase output reservation and the request-fit decision.
 class LlmContextBudgetTestCase(unittest.TestCase):
     def test_known_models_have_explicit_context_windows(self):
         self.assertEqual(
@@ -214,6 +221,8 @@ class LlmContextBudgetTestCase(unittest.TestCase):
             )
         )
 
+        # 見積もりが許容量ちょうどなら受理し、1 トークンでも超えればプロバイダへ送る前に拒否する。
+        # A message estimate exactly at the allowance is accepted; one token beyond it is rejected.
         # A message estimate exactly at the allowance is accepted; one token
         # beyond it is rejected before the provider can see the request.
         budget = get_context_budget(

@@ -1,3 +1,9 @@
+"""メモ AI エージェントの編集アクション（意図分類、編集計画の生成・解析・検証、編集の適用、プロンプト組み立て）を検証するテスト。
+
+Tests the memo AI agent's edit actions: intent classification, generating, parsing and validating edit plans, applying
+edits and building prompts.
+"""
+
 import json
 import unittest
 from pathlib import Path
@@ -40,6 +46,8 @@ def _expand(value: Any) -> Any:
     return value
 
 
+# 日本語: 共有ケース表を読み込み、repeat 指定を展開した辞書の一覧にする。
+# English: Loads the shared case table and returns its cases with repeat markers expanded.
 def _load_edit_cases() -> list[dict[str, Any]]:
     cases = json.loads(EDIT_CASES_PATH.read_text(encoding="utf-8"))["cases"]
     return [
@@ -56,6 +64,8 @@ def _load_edit_cases() -> list[dict[str, Any]]:
     ]
 
 
+# 日本語: 1 ステップの編集計画を、モデルが返す JSON 文字列の形に直す。
+# English: Serialises a one-step edit plan into the JSON string shape the model returns.
 def _plan_response(step: dict[str, Any], description: str = "編集します") -> str:
     return json.dumps({"description": description, "steps": [step]}, ensure_ascii=False)
 
@@ -152,6 +162,8 @@ class ApplyMemoEditsTestCase(unittest.TestCase):
 class ParseMemoEditResponseTestCase(unittest.TestCase):
     STORED_BODY = "会議は月曜日です。\n議題は予算です。"
 
+    # 日本語: 保存済み本文を既定値にして parse_memo_edit_response を呼ぶ。
+    # English: Calls parse_memo_edit_response with a default stored body.
     def _parse(self, text: str, *, stored_body: str | None = None, body_truncated: bool = False):
         return parse_memo_edit_response(
             text,
@@ -378,6 +390,8 @@ class GenerateMemoEditPlanTestCase(unittest.TestCase):
         "edits": [{"old_string": "月曜日", "new_string": "火曜日"}],
     })
 
+    # 日本語: 固定の履歴とモデル名で generate_memo_edit_plan を呼ぶ。
+    # English: Calls generate_memo_edit_plan with a fixed history and model name.
     def _generate(self, context: MemoAgentContext | None = None):
         return generate_memo_edit_plan(
             context or self.CONTEXT,

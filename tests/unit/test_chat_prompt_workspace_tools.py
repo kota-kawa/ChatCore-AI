@@ -1,4 +1,8 @@
-"""Checks the permission and approval boundaries of chat Prompt and Skill tools."""
+"""チャットの Prompt・Skill ツール（公開投稿、保存済みプロンプト・個人 Skill の読み取りと編集、非公開本文の漏えい検出）の
+権限と承認の境界を検証するテスト。
+
+Checks the permission and approval boundaries of chat Prompt and Skill tools.
+"""
 
 from __future__ import annotations
 
@@ -25,7 +29,12 @@ from services.chat_workspace_tools.prompts import (
 from services.chat_workspace_tools.registry import WorkspaceToolError
 
 
+# 日本語: Prompt・Skill ツールの「提案（承認前）」と「実行（承認後）」の挙動、リビジョン照合、非公開テキスト追跡を検証する。
+# English: Tests Prompt and Skill tools in their propose (before approval) and execute (after approval) steps,
+# English: plus revision checks and private-text tracking.
 class PromptWorkspaceToolTests(unittest.TestCase):
+    # 日本語: タスク編集の実行が使う DB セッションの代役。2 回目の execute で対象タスクを返し、flush の呼び出しを記録する。
+    # English: Fake DB session for task edits: the second execute returns the target task and flush calls are recorded.
     @staticmethod
     def _task_edit_session(task: SimpleNamespace) -> SimpleNamespace:
         task_result = SimpleNamespace(scalar_one_or_none=lambda: task)
@@ -35,6 +44,8 @@ class PromptWorkspaceToolTests(unittest.TestCase):
             flush=AsyncMock(),
         )
 
+    # 日本語: 公開投稿は提案を返すだけで書き込まず、「常に許可」にもできない（公開は毎回ユーザーが承認する）。
+    # English: A public post only returns a proposal without writing and cannot be set to always-allow; each publish needs approval.
     def test_public_post_is_only_a_proposal_and_cannot_be_auto_approved(self):
         with patch("services.chat_workspace_tools.prompts.create_shared_prompt", new_callable=AsyncMock) as create:
             proposal = asyncio.run(_propose_publish_prompt(7, {"title": " Public ", "content": "Body"}))
@@ -43,6 +54,8 @@ class PromptWorkspaceToolTests(unittest.TestCase):
         self.assertEqual(proposal.target_ref, {})
         self.assertFalse(next(spec for spec in PROMPTS_TOOL_SPECS if spec.name == "publish_prompt").allows_always)
 
+    # 日本語: 実行時に、Web 画面と同じ投稿回数の制限を書き込みの前に適用する。
+    # English: At execution the same posting rate limit as the web UI is applied before anything is written.
     def test_public_post_uses_the_web_channel_limit_before_writing(self):
         with (
             patch("services.chat_workspace_tools.prompts.consume_prompt_create_limits", return_value=(False, None, 15)) as limit,
@@ -56,6 +69,8 @@ class PromptWorkspaceToolTests(unittest.TestCase):
         limit.assert_called_once_with("192.0.2.1", 7)
         create.assert_not_awaited()
 
+    # 日本語: 編集の提案時に対象の更新時刻（リビジョン）を記録し、承認後の実行でそれを期待値として渡す。
+    # English: A proposal records the target's revision (updated_at), and the approved execution passes it as the expected value.
     def test_edit_saved_prompt_captures_and_checks_the_owned_revision(self):
         with patch("services.chat_workspace_tools.prompts.get_owned_task", new_callable=AsyncMock) as get_task:
             get_task.return_value = {"updated_at": "2026-09-28T00:00:00+00:00"}
@@ -220,6 +235,8 @@ class PromptWorkspaceToolTests(unittest.TestCase):
         self.assertEqual(str(task.updated_at), "CURRENT_TIMESTAMP")
         session.flush.assert_awaited_once()
 
+    # 日本語: 承認までに対象が変更されていた場合は target_changed で拒否し、何も書き込まない。
+    # English: If the target changed before approval, the edit is rejected with target_changed and nothing is written.
     def test_approved_task_edit_rejects_a_stale_revision_before_writing(self):
         revision = datetime(2026, 9, 28, tzinfo=UTC)
         task = SimpleNamespace(
@@ -263,6 +280,8 @@ class PromptWorkspaceToolTests(unittest.TestCase):
         self.assertEqual(update.await_args.args[:2], (7, 9))
         self.assertEqual(update.await_args.kwargs["expected_updated_at"], "2026-09-28T00:00:00+00:00")
 
+    # 日本語: 以下の PrivateTextTracker のテストは、非公開本文が公開投稿へそのまま写されるのを検出する仕組みを確認する。
+    # English: The PrivateTextTracker tests below check detection of private text being copied verbatim into a public post.
     def test_private_text_tracker_warns_only_for_long_verbatim_overlap(self):
         private = "Private meeting notes and customer details remain in this account only."
         tracker = PrivateTextTracker()

@@ -1,3 +1,6 @@
+# 生成UIの形式違反・修復・配信状態を、固定したモデル応答で検証する。
+# Tests generated UI format failures, repair and delivery states with fixed model responses.
+
 from __future__ import annotations
 
 import json
@@ -420,6 +423,7 @@ GOOD_ARTIFACT_SOURCES: dict[str, str] = {
 
 
 def _artifact_response(**overrides: Any) -> str:
+    # モデルが返す形式のartifact応答を作る。
     """Render one artifact response exactly as a model would emit it."""
     payload = {
         "version": 1,
@@ -437,6 +441,7 @@ def _artifact_response(**overrides: Any) -> str:
 
 
 def _double_escaped_artifact_response() -> str:
+    # 各ソースが1段余計にescapeされたartifact応答を作る。
     """Emit the same artifact with every source escaped one level too many."""
     over_escaped = {
         key: value.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')

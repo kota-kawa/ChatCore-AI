@@ -1,3 +1,10 @@
+"""MCP 経由の画像を分割してアップロードするセッション（mcp_image_upload_session）の、
+順序検証・再試行・期限切れ掃除・上限・取消を検証するテスト。
+
+Tests the chunked MCP image upload sessions (mcp_image_upload_session): ordering, retries, expiry cleanup, limits and
+cancellation.
+"""
+
 from __future__ import annotations
 
 import base64
@@ -22,6 +29,8 @@ from services.mcp_prompt_publishing import save_mcp_prompt_image
 from services.prompt_attachment_storage import PROMPT_ATTACHMENT_UPLOAD_ROOT_ENV
 
 
+# 一時ディレクトリ上に分割画像を積み、完成後は共通の画像処理（save_mcp_prompt_image）に渡せることを確かめる。
+# Stages image chunks in a temp directory and checks the finished upload goes through the shared image pipeline (save_mcp_prompt_image).
 class McpImageUploadSessionTestCase(unittest.TestCase):
     def test_stages_ordered_fragments_and_accepts_an_identical_retry(self):
         with tempfile.TemporaryDirectory() as temp_dir, patch.dict(

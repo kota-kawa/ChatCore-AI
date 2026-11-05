@@ -1,3 +1,10 @@
+"""認証（現在ユーザー取得・ログアウト）とメモ（最近の一覧・作成）の API を、ルーターとセッション・CSRF を通して検証する統合テスト。
+DB 失敗時のフォールバックや 500 応答も確認する。
+
+Integration tests for the auth (current user, logout) and memo (recent list, create) APIs through the router, session and CSRF.
+Also covers the fallback and the 500 response when the database fails.
+"""
+
 import asyncio
 import unittest
 from datetime import datetime

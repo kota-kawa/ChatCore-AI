@@ -1,3 +1,10 @@
+"""メール認証コードの専用トランザクション（Redis 保存、試行回数、期限、Cookie）と、
+それを使うログイン・登録の検証ルートを確認するテスト。
+
+Tests the dedicated email-auth transaction (Redis storage, attempt counting, expiry, cookie) and the login
+and registration verification routes that use it.
+"""
+
 import asyncio
 import hashlib
 import json
@@ -29,10 +36,15 @@ from services.web import jsonify
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: redis.WatchError の代役です。WATCH したキーが変更されたときに送出されます。
+# English: Stand-in for redis.WatchError, raised when a watched key changed.
 class WatchError(Exception):
     pass
 
 
+# 日本語: WATCH / MULTI / EXEC を模したパイプラインです。DummyRedis のキーごとのバージョンを比べて、
+# 競合を検出します。
+# English: Pipeline imitating WATCH / MULTI / EXEC; it detects conflicts by comparing DummyRedis's per-key versions.
 class DummyRedisPipeline:
     def __init__(self, redis_client):
         self.redis_client = redis_client
@@ -73,6 +85,8 @@ class DummyRedisPipeline:
         self.watched = {}
 
 
+# 日本語: メモリ上の Redis の代役です。キーを書き換えるたびにバージョンを上げ、有効期限は記録だけ行います。
+# English: In-memory Redis stand-in; every write bumps the key's version, and expiry is only recorded, not enforced.
 class DummyRedis:
     def __init__(self):
         self.store = {}
@@ -102,16 +116,22 @@ class DummyRedis:
         return DummyRedisPipeline(self)
 
 
+# 日本語: execute が必ず競合する、同時更新の再現用パイプラインです。
+# English: Pipeline whose execute always conflicts, to reproduce concurrent updates.
 class AlwaysConflictPipeline(DummyRedisPipeline):
     def execute(self):
         raise WatchError("transaction changed")
 
 
+# 日本語: AlwaysConflictPipeline を返す DummyRedis です。
+# English: A DummyRedis that hands out AlwaysConflictPipeline.
 class AlwaysConflictRedis(DummyRedis):
     def pipeline(self):
         return AlwaysConflictPipeline(self)
 
 
+# 日本語: 認証コードの検証ルートへの POST リクエストを作ります。flow_cookie でトランザクション Cookie を再現します。
+# English: Build a POST request to a code-verification route; flow_cookie reproduces the transaction cookie.
 def make_request(path, code, *, flow_cookie=None, session=None):
     headers = []
     if flow_cookie:
@@ -125,6 +145,8 @@ def make_request(path, code, *, flow_cookie=None, session=None):
     )
 
 
+# 日本語: テスト用の EmailAuthTransaction を作ります。
+# English: Build an EmailAuthTransaction for tests.
 def transaction(*, flow=EMAIL_AUTH_TRANSACTION_FLOW_LOGIN):
     return EmailAuthTransaction(
         transaction_id="email-transaction",
@@ -138,6 +160,9 @@ def transaction(*, flow=EMAIL_AUTH_TRANSACTION_FLOW_LOGIN):
     )
 
 
+# 日本語: サービス層の保存・検証・期限切れ・Redis 不通時の扱い・Cookie の属性を確認します。
+# English: Check the service layer: storing, verifying, expiry, behavior when Redis is unavailable, and cookie
+# attributes.
 class EmailAuthTransactionServiceTestCase(unittest.TestCase):
     def test_transaction_stores_digest_with_ttl_and_consumes_once(self):
         redis_client = DummyRedis()
@@ -279,6 +304,9 @@ class EmailAuthTransactionServiceTestCase(unittest.TestCase):
         )
 
 
+# 日本語: ログインと登録の検証ルートが、セッションにコードを持たず専用トランザクションを使うことを確認します。
+# English: Check that the login and registration verification routes use the dedicated transaction rather than a
+# code kept in the session.
 class DedicatedEmailAuthRouteTestCase(unittest.TestCase):
     def test_login_verification_uses_dedicated_transaction_without_session_code(self):
         session = {"pre_auth": True}

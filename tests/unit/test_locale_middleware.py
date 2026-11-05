@@ -1,3 +1,9 @@
+"""LocaleMiddleware が Accept-Language・Cookie・セッション・DB の保存値からロケールを決める優先順位と、Cookie の発行条件を検証するテスト。
+
+Tests how LocaleMiddleware chooses the locale from Accept-Language, cookie, session and the saved database value,
+and when it sets the cookie.
+"""
+
 import asyncio
 import unittest
 from unittest.mock import patch
@@ -6,6 +12,8 @@ from services.i18n import get_current_locale
 from services.locale_middleware import LocaleMiddleware
 
 
+# ASGI の最小スコープで LocaleMiddleware を呼び、エンドポイントが見たロケール・レスポンスヘッダー・Set-Cookie を返す。
+# Calls LocaleMiddleware with a minimal ASGI scope and returns the locale the endpoint saw, the response headers and any Set-Cookie values.
 async def _call_middleware(*, headers=None, session=None):
     observed = {}
 
@@ -44,6 +52,8 @@ async def _call_middleware(*, headers=None, session=None):
     return observed, response_headers, set_cookies
 
 
+# ロケールの優先順位（セッション・DB・Cookie・Accept-Language）と DB 障害時のフォールバックを確かめる。
+# Checks the locale precedence (session, database, cookie, Accept-Language) and the fallback when the database fails.
 class LocaleMiddlewareTestCase(unittest.TestCase):
     def test_accept_language_does_not_persist_automatic_choice(self):
         observed, headers, set_cookies = asyncio.run(

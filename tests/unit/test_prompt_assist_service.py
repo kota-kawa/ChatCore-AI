@@ -1,3 +1,10 @@
+"""プロンプトアシストのペイロード生成（create_prompt_assist_payload）が LLM の JSON 応答を解析し、
+変更のない項目を除き、不正な応答では例外にすることを検証するテスト。
+
+Tests that create_prompt_assist_payload parses the LLM's JSON response, drops unchanged fields,
+and raises on an invalid response.
+"""
+
 import unittest
 from unittest.mock import patch
 

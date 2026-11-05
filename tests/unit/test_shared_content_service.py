@@ -1,3 +1,10 @@
+"""公開コンテンツ検索・取得のサービス（services.shared_content_service）を検証するテスト。
+一覧のフィルター正規化と件数・抜粋の上限、検索条件に結び付いたカーソル、詳細のリソース取得、公開 URL の決定、空クエリの拒否を確かめる。
+
+Tests for the shared content service (services.shared_content_service): filter normalization and the limit/snippet caps for lists,
+search-bound cursors, resource loading for details, public-URL resolution, and rejection of blank queries.
+"""
+
 import unittest
 from datetime import datetime
 from unittest.mock import patch
@@ -11,6 +18,8 @@ from services.shared_content_service import (
 )
 
 
+# 一覧・詳細の呼び出しを記録し、固定の行を返す共有コンテンツリポジトリの代役。
+# Stand-in shared content repository that records list/detail calls and returns fixed rows.
 class _Repository:
     def __init__(self, *, rows=None, has_next=False, detail=None):
         self.rows = rows or []
@@ -27,6 +36,8 @@ class _Repository:
         return self.detail
 
 
+# プロンプトのリソース一覧・個別取得を返すリポジトリの代役。
+# Stand-in repository that returns the prompt's resource list and single resources.
 class _ResourceRepository:
     def __init__(self, resources=None):
         self.resources = resources or []
@@ -41,6 +52,8 @@ class _ResourceRepository:
         return next((item for item in self.resources if item["path"] == path), None)
 
 
+# サービス層が正規化・上限・カーソル検証・詳細の組み立てをリポジトリのモック越しに行うことを検証するテストクラス。
+# Test class verifying normalization, caps, cursor validation and detail assembly in the service, with repositories mocked.
 class SharedContentServiceTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_list_normalizes_filters_clamps_limit_and_returns_bounded_snippets(self):
         created_at = datetime(2026, 7, 16, 12, 0, 0)

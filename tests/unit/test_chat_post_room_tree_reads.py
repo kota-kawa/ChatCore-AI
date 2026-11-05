@@ -1,4 +1,12 @@
-"""Guard the number of queries one chat post performs.
+"""チャット投稿 1 回あたりのクエリ数を守るテスト。
+
+POST /api/chat は以前、ルームの ``chat_history`` ツリー全体を最大 4 回読んでいた（分岐の末尾、LLM 用の履歴、
+過去の Web 検索の根拠、ルーム要約の作り直し）。それぞれ別のトランザクションを使うため、``max_overflow=0`` の
+プールから 1 回の投稿で 4 本の接続を取っていた。ターンから抽出した事実の保存も、事実ごとに
+``SELECT ... FOR UPDATE`` を撃つ同じ形だった。
+本物の :class:`ChatRepository` を記録用のセッションに繋ぎ、クエリの回数と各読み取りが転送する列を数える。
+
+Guard the number of queries one chat post performs.
 
 POST /api/chat used to load the whole ``chat_history`` tree of a room up to four
 times: once for the branch tip, once for the LLM history, once for the prior
@@ -31,7 +39,9 @@ USER_ID = 42
 
 
 class _FakeResult:
-    """Minimal stand-in for the Result objects ChatRepository consumes."""
+    """ChatRepository が使う Result オブジェクトの最小限の代役。
+
+    Minimal stand-in for the Result objects ChatRepository consumes."""
 
     def __init__(self, rows):
         self._rows = list(rows)
@@ -60,7 +70,9 @@ class _FakeResult:
 
 
 class _RecordingSession:
-    """AsyncSession double that answers chat queries and records every SELECT."""
+    """チャットのクエリに答え、SELECT をすべて記録する AsyncSession の代役。
+
+    AsyncSession double that answers chat queries and records every SELECT."""
 
     def __init__(self, room: ChatRoom, history: list[ChatHistory]) -> None:
         self.room = room
@@ -109,7 +121,9 @@ class _RecordingSession:
 
 
 def _seeded_session() -> _RecordingSession:
-    """A room whose active branch already holds one answered turn."""
+    """アクティブな分岐に回答済みのターンが 1 つある状態のルームを作る。
+
+    A room whose active branch already holds one answered turn."""
 
     first = ChatHistory(
         id=1,
@@ -132,7 +146,9 @@ def _seeded_session() -> _RecordingSession:
 
 
 def _build_use_case(session: _RecordingSession, tree_reads: list[str]):
-    """Wire the chat-post use case to the real repository over ``session``."""
+    """チャット投稿ユースケースを、``session`` 上の本物のリポジトリへ繋ぐ。ツリー読み取りの回数は tree_reads に記録する。
+
+    Wire the chat-post use case to the real repository over ``session``."""
 
     original_load_room_tree = ChatRepository._load_room_tree
 
@@ -209,6 +225,8 @@ def _build_use_case(session: _RecordingSession, tree_reads: list[str]):
     return ChatPostUseCase(deps, default_model="test-model"), deps
 
 
+# 日本語: 1 回の POST /api/chat を実行し、レスポンスの JSON を返す。
+# English: Runs one POST /api/chat and returns the response JSON.
 def _post(use_case) -> dict:
     request = build_request(
         method="POST",
@@ -227,6 +245,8 @@ def _post(use_case) -> dict:
     return json.loads(response.body.decode("utf-8"))
 
 
+# 日本語: 1 回の投稿でルームツリーを 1 回しか読まないこと、その読み取りが必要な列だけを運ぶことを検証する。
+# English: A single post reads the room tree once, and that read transfers only the needed columns.
 class ChatPostRoomTreeReadTestCase(unittest.TestCase):
     def test_one_chat_post_loads_the_room_tree_once(self):
         session = _seeded_session()
@@ -288,6 +308,8 @@ class ChatPostRoomTreeReadTestCase(unittest.TestCase):
         # get_active_leaf_id only needs ids, so it never reads a JSONB column.
         self.assertEqual(session.chat_history_selects, [["id", "parent_id", "active_child_id"]])
 
+# 日本語: 抽出した事実の保存が、事実ごとではなくバッチ 1 本のクエリで既存行を探すことを検証する。
+# English: Storing extracted facts looks up existing rows with one query per batch, not one per fact.
 class MemoryFactLookupTestCase(unittest.TestCase):
     def test_a_batch_of_facts_is_looked_up_in_one_query(self):
         session = _seeded_session()

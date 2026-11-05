@@ -1,3 +1,10 @@
+"""コンテキストボールトの API を、ルーターとセッション・CSRF ミドルウェアを通して検証する統合テスト。
+サービス層（create_fact / update_fact）だけをモックする。
+
+Integration tests for the context-vault API through the router and the session and CSRF middleware.
+Only the service layer (create_fact / update_fact) is mocked.
+"""
+
 import asyncio
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -11,6 +18,8 @@ from services.response_models import ContextFactResponse
 from tests.helpers.app_helpers import build_session_test_app
 
 
+# 日本語: ContextFactResponse のテスト用既定値を作る。overrides で個別のフィールドを上書きできる。
+# English: Build a default ContextFactResponse for tests; overrides replaces individual fields.
 def _fact_response(**overrides):
     payload = {
         "id": 3,
@@ -28,6 +37,11 @@ def _fact_response(**overrides):
     return ContextFactResponse(**payload)
 
 
+# 日本語: 未ログインは 401、CSRF なしの書き込みは 403、サービスが 409 を返す場合の応答形式をルーター経由で確かめる。
+#         （pydantic のレスポンスモデルを import しているため、docstring ではなくコメントで書く）
+# English: Checks, through the router, 401 when logged out, 403 for writes without CSRF,
+#          and the response shape when the service returns 409.
+#          (Written as a comment, not a docstring, because this file imports pydantic response models.)
 class ContextVaultEndpointIntegrationTestCase(unittest.TestCase):
     def setUp(self):
         self.app = build_session_test_app(
@@ -36,6 +50,8 @@ class ContextVaultEndpointIntegrationTestCase(unittest.TestCase):
             include_test_session_route=True,
         )
 
+    # 日本語: ネットワークを使わず、ASGI アプリへ直接つなぐ非同期 HTTP クライアントを作る。
+    # English: Create an async HTTP client wired straight to the ASGI app, without any network.
     def _make_client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(
             transport=httpx.ASGITransport(app=self.app),
@@ -46,6 +62,8 @@ class ContextVaultEndpointIntegrationTestCase(unittest.TestCase):
         response = await client.post("/_test/session", json=values)
         self.assertEqual(response.status_code, 200)
 
+    # 日本語: ログイン済みかつ CSRF トークン入りのセッションを作り、そのトークンを返す。
+    # English: Seed a logged-in session that holds a CSRF token, and return that token.
     async def _authenticate_with_csrf(self, client: httpx.AsyncClient) -> str:
         token = "context-vault-csrf-token"
         await self._set_session(

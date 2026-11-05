@@ -1,3 +1,8 @@
+"""共有スキルの取り込み元を記録する Alembic マイグレーション（20260829_01）の内容を検証するテスト。
+
+Tests the contents of the Alembic migration 20260829_01 that records the shared prompt a user skill was imported from.
+"""
+
 import unittest
 from pathlib import Path
 
@@ -9,6 +14,8 @@ MIGRATION = (
 )
 
 
+# NULL 可の出典列と検索用インデックスの追加、および取り込みの出典を守るためダウングレードを禁止していることを検証するテストクラス。
+# Test class for the nullable source column and lookup index, and for the downgrade being blocked to protect import provenance.
 class SharedSkillProvenanceMigrationTests(unittest.TestCase):
     def test_migration_adds_nullable_source_and_lookup_index(self):
         source = MIGRATION.read_text(encoding="utf-8")

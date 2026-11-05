@@ -35,6 +35,8 @@ def _conversation():
     ]
 
 
+# ターンごとに変わる文脈が履歴の後ろ（最新のユーザー発話の直前）に置かれることを検証するテストクラス。
+# Test class verifying that per-turn context is placed after the history, right before the latest user message.
 class DynamicContextPlacementTests(unittest.TestCase):
     def test_per_turn_context_goes_right_before_the_latest_user_message(self):
         messages = insert_before_latest_user_message(_conversation(), {"role": "system", "content": "state"})
@@ -93,6 +95,8 @@ class DynamicContextPlacementTests(unittest.TestCase):
         self.assertEqual(contents[3], "earlier answer")
 
 
+# 検索ツールの有無と読み取り予算に応じて、読み取りツールをいつ提示し、いつ引っ込めるかを検証するテストクラス。
+# Test class verifying when read tools are offered or withdrawn depending on search availability and the read-call budget.
 class StableToolListTests(unittest.TestCase):
     def _state(self, *, web_search: bool):
         job = ChatGenerationJob(
@@ -121,6 +125,8 @@ class StableToolListTests(unittest.TestCase):
         self.assertEqual(names, ["web_search"])
 
 
+# OpenAI 系（Luna）へ送るキャッシュの区切りが基本プロンプトと履歴末尾にだけ付くことを検証するテストクラス。
+# Test class verifying that OpenAI-side (Luna) cache breakpoints are set only on the base prompt and the end of the history.
 class OpenAiBreakpointTests(unittest.TestCase):
     def test_luna_chat_marks_the_base_prompt_and_the_history_end(self):
         marked = llm._with_openai_cache_breakpoints(llm.GPT_6_LUNA_MODEL, _conversation(), responses_api=False)
@@ -179,6 +185,8 @@ class OpenAiBreakpointTests(unittest.TestCase):
         self.assertIsInstance(groq_client.chat.completions.create.call_args.kwargs["messages"][0]["content"], str)
 
 
+# Claude へ送る system ブロックのキャッシュ指定と、後続の system 文がユーザーターンへ移る並びを検証するテストクラス。
+# Test class verifying Claude's cached system blocks and how later system text moves into the user turn.
 class ClaudeCacheLayoutTests(unittest.TestCase):
     def test_leading_system_block_is_cached_and_later_system_text_joins_the_user_turn(self):
         system_blocks, messages = llm._prepare_claude_messages(_conversation())
@@ -215,8 +223,11 @@ class ClaudeCacheLayoutTests(unittest.TestCase):
         self.assertEqual(sent["system"][0]["cache_control"], _EPHEMERAL)
 
 
+# キャッシュ書き込みの料金（割増の有無）をモデル別に検証するテストクラス。
+# Test class verifying cache-write pricing (premium or none) per model.
 class CacheWritePricingTests(unittest.TestCase):
     def test_cache_writes_are_billed_at_the_premium(self):
+        # GPT-6 Luna の料金: 入力 100、キャッシュ読み 10、キャッシュ書き込み 125 ナノドル/トークン。
         # GPT-6 Luna: input 100, cached 10, cache write 125 nano-dollars per token.
         cost = token_cost_nano_usd(
             llm.GPT_6_LUNA_MODEL,

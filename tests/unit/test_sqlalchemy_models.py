@@ -1,3 +1,10 @@
+"""SQLAlchemy モデル（services.models）のメタデータを検証するテスト。
+テーブル一覧、PostgreSQL 固有の型・インデックスのコンパイル、チャットのツール承認の CHECK 制約、OAuth クライアント列の外部キーを確かめる。
+
+Tests for the SQLAlchemy model metadata (services.models): the table inventory, compilation of PostgreSQL-specific types and indexes,
+the tool-approval CHECK constraints, and the OAuth client-ID foreign keys.
+"""
+
 from __future__ import annotations
 
 import unittest
@@ -28,6 +35,8 @@ from services.models import (
 from services.models.types import Vector
 
 
+# モデル定義が想定するテーブル・制約・インデックスと一致し、PostgreSQL 向けに生成できることを検証するテストクラス。
+# Test class verifying that the model definitions match the expected tables, constraints and indexes, and compile for PostgreSQL.
 class SqlAlchemyModelMetadataTests(unittest.TestCase):
     def test_metadata_matches_current_table_inventory(self) -> None:
         expected_tables = {

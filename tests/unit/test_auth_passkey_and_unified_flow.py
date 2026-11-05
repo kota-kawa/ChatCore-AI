@@ -1,3 +1,9 @@
+"""メール認証の統合フロー(ログイン/新規登録の振り分け)と、パスキーのルート(登録・認証オプション、検証、期限切れ、署名カウンタ更新失敗、レート制限)を検証する単体テスト。
+
+Unit tests for the unified email-auth flow (routing between login and registration)
+and the passkey routes (register/authenticate options, verification, expired ceremonies, sign-count update failures, rate limits).
+"""
+
 import asyncio
 import json
 import unittest
@@ -16,10 +22,14 @@ from services.web import jsonify
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: POST リクエストの疑似オブジェクトを作る。
+# English: Build a fake POST request.
 def make_request(path: str, *, json_body=None, session=None):
     return build_request(method="POST", path=path, json_body=json_body, session=session)
 
 
+# 日本語: run_blocking の代替。スレッドに逃がさず、その場で同期関数を実行する。
+# English: Stand-in for run_blocking that runs the sync function in place instead of offloading it to a thread.
 async def immediate_run_blocking(func, *args, **kwargs):
     return func(*args, **kwargs)
 
@@ -27,7 +37,7 @@ async def immediate_run_blocking(func, *args, **kwargs):
 # 日本語: Unified Email Auth Flowの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of Unified Email Auth Flow.
 class UnifiedEmailAuthFlowTestCase(unittest.TestCase):
-    # 日本語: 検証済みユーザーに対して、送信メールコードusesログインフローことを検証します。
+    # 日本語: 登録済みで検証済みのユーザーには、メールコード送信がログインフロー(api_send_login_code)に振り分けられることを検証します。
     # English: Verify that send email code uses login flow for verified user.
     def test_send_email_code_uses_login_flow_for_verified_user(self):
         request = make_request(
@@ -47,7 +57,7 @@ class UnifiedEmailAuthFlowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_login.await_count, 1)
 
-    # 日本語: 未登録ユーザーに対して、送信メールコードuses新規登録フローことを検証します。
+    # 日本語: 未登録のユーザーには、メールコード送信が新規登録フロー(確認メール送信)に振り分けられることを検証します。
     # English: Verify that send email code uses registration flow for unknown user.
     def test_send_email_code_uses_registration_flow_for_unknown_user(self):
         request = make_request(
@@ -67,7 +77,7 @@ class UnifiedEmailAuthFlowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_register.await_count, 1)
 
-    # 日本語: ログインセッション存在のとき、検証メールコードusesログイン検証ことを検証します。
+    # 日本語: セッションにログイン中のコード検証状態があるとき、コード検証がログイン用の検証に振り分けられることを検証します。
     # English: Verify that verify email code uses login verification when login session exists.
     def test_verify_email_code_uses_login_verification_when_login_session_exists(self):
         request = make_request(
@@ -90,7 +100,7 @@ class UnifiedEmailAuthFlowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_verify.await_count, 1)
 
-    # 日本語: 新規登録セッション存在のとき、検証メールコードuses新規登録検証ことを検証します。
+    # 日本語: セッションに新規登録中のコード検証状態があるとき、コード検証が新規登録用の検証に振り分けられることを検証します。
     # English: Verify that verify email code uses registration verification when registration session exists.
     def test_verify_email_code_uses_registration_verification_when_registration_session_exists(self):
         request = make_request(
@@ -117,7 +127,7 @@ class UnifiedEmailAuthFlowTestCase(unittest.TestCase):
 # 日本語: Passkey Routeの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of Passkey Route.
 class PasskeyRouteTestCase(unittest.TestCase):
-    # 日本語: レート制限のとき、パスキーauthenticateオプション返却する429ことを検証します。
+    # 日本語: レート制限を超えたとき、パスキー認証オプション取得 API が 429 を返すことを検証します。
     # English: Verify that passkey authenticate options returns 429 when rate limited.
     def test_passkey_authenticate_options_returns_429_when_rate_limited(self):
         request = make_request("/api/passkeys/authenticate/options", session={})
@@ -136,14 +146,14 @@ class PasskeyRouteTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "fail")
         self.assertEqual(payload["error"], "too many attempts")
 
-    # 日本語: パスキー登録オプション要求するログインことを検証します。
+    # 日本語: パスキー登録オプション取得 API がログインを要求することを検証します。
     # English: Verify that passkey register options requires login.
     def test_passkey_register_options_requires_login(self):
         request = make_request("/api/passkeys/register/options", session={})
         response = asyncio.run(api_passkey_register_options(request))
         self.assertEqual(response.status_code, 401)
 
-    # 日本語: パスキー登録オプション保存するchallengeことを検証します。
+    # 日本語: パスキー登録オプション取得 API が、発行した challenge をセッションに保存することを検証します。
     # English: Verify that passkey register options stores challenge.
     def test_passkey_register_options_stores_challenge(self):
         session = {"user_id": 7}
@@ -179,7 +189,7 @@ class PasskeyRouteTestCase(unittest.TestCase):
         self.assertIn("ceremony_id", session["passkey_registration"])
         self.assertEqual(payload["challenge"], "challenge-token")
 
-    # 日本語: パスキーauthentication検証記録するユーザーことを検証します。
+    # 日本語: パスキー認証の検証に成功すると、対象ユーザーのログイン状態が記録されることを検証します。
     # English: Verify that passkey authentication verify logs user in.
     def test_passkey_authentication_verify_logs_user_in(self):
         session = {
@@ -232,7 +242,7 @@ class PasskeyRouteTestCase(unittest.TestCase):
         mock_get_passkey.assert_called_once_with("cred-raw-1")
         self.assertNotIn("passkey_authentication", session)
 
-    # 日本語: パスキーauthentication検証拒否する期限切れのセレモニーことを検証します。
+    # 日本語: パスキー認証の検証が、期限切れの認証セレモニー(challenge)を拒否することを検証します。
     # English: Verify that passkey authentication verify rejects expired ceremony.
     def test_passkey_authentication_verify_rejects_expired_ceremony(self):
         session = {
@@ -311,7 +321,7 @@ class PasskeyRouteTestCase(unittest.TestCase):
         self.assertNotIn("user_id", session)
         self.assertNotIn("passkey_authentication", session)
 
-    # 日本語: レート制限のとき、パスキーauthentication検証返却する429ことを検証します。
+    # 日本語: レート制限を超えたとき、パスキー認証の検証 API が 429 を返すことを検証します。
     # English: Verify that passkey authentication verify returns 429 when rate limited.
     def test_passkey_authentication_verify_returns_429_when_rate_limited(self):
         session = {

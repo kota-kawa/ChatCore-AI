@@ -1,3 +1,11 @@
+"""入力超過などでモデルへの要求が拒否されたときに再試行する、縮めた会話文脈(build_recovery_base_messages)を検証する単体テスト。
+直近のやり取りと基本指示を残し、ツールの履歴や任意の文脈を落とすこと、長い履歴でも予算内に収まることを確かめる。
+
+Unit tests for the reduced conversation context (build_recovery_base_messages) used to retry a rejected model request.
+It keeps the base guidance and the latest exchange, drops tool traffic and optional context, and stays within the
+budget even for long history.
+"""
+
 import unittest
 
 from services.chat_context import estimate_token_count
@@ -8,6 +16,11 @@ from services.chat_context_recovery import (
 
 
 class ChatContextRecoveryTestCase(unittest.TestCase):
+    """メッセージ列を入力にした純粋関数のテスト。何を残し、何を落とし、何を書き換えないかを確かめる。
+
+    Tests of a pure function over message lists: what is kept, what is dropped, and what must not be rewritten.
+    """
+
     def test_keeps_latest_exchange_and_drops_tools_and_optional_context(self):
         recent = [
             {"role": "user", "content": "Compare the two storage options."},

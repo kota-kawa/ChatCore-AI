@@ -1,3 +1,10 @@
+"""チャットの個人ナレッジ検索（メモと Context Vault の事実）が、結果の統合、失敗の記録、ツール呼び出しの契約、
+未確認の事実の扱いを検証するテスト。
+
+Tests chat personal knowledge search (memos and context vault facts): merging results, recording failures, the
+tool call contract and handling of unconfirmed facts.
+"""
+
 import json
 import unittest
 from typing import ClassVar
@@ -21,6 +28,8 @@ from services.selected_reference_context import (
 )
 
 
+# メモ検索の 1 件分の代役。
+# Stand-in for one memo search hit.
 class _Memo:
     def __init__(self, memo_id=1, title="沖縄旅行", excerpt="予算"):
         self.id = memo_id
@@ -30,15 +39,21 @@ class _Memo:
         self.collection_name = None
 
 
+# メモ詳細の代役。本文だけを持つ。
+# Stand-in for memo detail; it only carries the body.
 class _MemoDetail:
     content = "本文全体"
 
 
+# メモ検索結果の代役。
+# Stand-in for a memo search result.
 class _MemoSearch:
     def __init__(self, memos):
         self.memos = memos
 
 
+# Context Vault の事実 1 件の代役。
+# Stand-in for one context vault fact.
 class _Fact:
     id = 9
     fact_type = "preference"
@@ -50,10 +65,14 @@ class _Fact:
     last_confirmed_at = "2026-08-02T09:30:00"
 
 
+# 事実検索結果の代役。
+# Stand-in for a fact search result.
 class _FactSearch:
     facts: ClassVar[list] = [_Fact()]
 
 
+# 検索・概観の非同期サービスをモックし、メモと事実の結果の統合とフォールバックを確かめる。
+# Mocks the async search and overview services and checks merging of memo and fact results and the fallbacks.
 class PersonalKnowledgeSearchTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_merges_async_memo_and_context_hits(self):
         with patch(
@@ -174,6 +193,8 @@ class PersonalKnowledgeSearchTestCase(unittest.IsolatedAsyncioTestCase):
             )
 
 
+# 失敗と結果なしが、ペイロード上で区別できることを確かめる。
+# Checks failed and empty results are distinguishable in the payload.
 class PersonalKnowledgePayloadTestCase(unittest.TestCase):
     def test_failed_and_empty_payloads_are_distinct(self):
         failed = build_personal_knowledge_tool_payload(
@@ -184,6 +205,8 @@ class PersonalKnowledgePayloadTestCase(unittest.TestCase):
         self.assertEqual(empty["status"], "no_results")
 
 
+# ツール呼び出しが生成の契約（予算・台帳・証拠・信頼度）を保つことを確かめる。
+# Checks the tool call keeps the generation contract (budget, ledger, evidence and trust level).
 class PersonalKnowledgeToolCallTestCase(unittest.TestCase):
     def test_tool_call_keeps_generation_contract(self):
         events = []

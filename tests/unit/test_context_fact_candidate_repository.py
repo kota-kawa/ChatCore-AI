@@ -1,3 +1,10 @@
+"""ContextFactCandidateRepository（文脈の候補の保存・承認・却下）が発行する SQL と、
+リビジョンによる楽観的排他を検証するテスト。
+
+Tests the SQL emitted by ContextFactCandidateRepository (store, approve, reject candidates) and its
+optimistic revision checks.
+"""
+
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -9,6 +16,8 @@ from services.repositories.context_fact_candidate_repository import (
 )
 
 
+# 日本語: 候補テーブルの 1 行分の辞書を作ります。overrides で項目を差し替えます。
+# English: Build one candidate-table row dict; overrides replace individual fields.
 def _candidate(**overrides):
     row = {
         "id": 8,
@@ -32,6 +41,8 @@ def _candidate(**overrides):
     return row
 
 
+# 日本語: 事実テーブルの 1 行分の辞書を作ります。
+# English: Build one fact-table row dict.
 def _fact(**overrides):
     row = {
         "id": 31,
@@ -54,6 +65,9 @@ def _fact(**overrides):
     return row
 
 
+# 日本語: DB の実行結果を模したモックを作ります。mapping は 1 行取得、scalar_rows は複数行取得の戻り値になります。
+# English: Build a mock of a DB execution result; mapping backs single-row reads and scalar_rows backs multi-row
+# reads.
 def _result(*, mapping=None, scalar_rows=None):
     result = MagicMock()
     result.mappings.return_value.first.return_value = mapping
@@ -62,6 +76,8 @@ def _result(*, mapping=None, scalar_rows=None):
     return result
 
 
+# 日本語: AsyncSession をモックし、リポジトリが実行する SQL の内容を確認します。
+# English: Mock the AsyncSession and inspect the SQL the repository executes.
 class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_store_candidates_uses_user_lock_and_partial_unique_upsert(self):
         session = MagicMock()

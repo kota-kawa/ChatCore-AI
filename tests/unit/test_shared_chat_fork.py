@@ -1,3 +1,10 @@
+"""共有されたチャットを自分のルームへ複製（フォーク）する処理を検証するテスト。
+サービス層（fork_shared_chat_into_db_room）のメッセージ件数上限と、ルート（fork_shared_chat_room）のログイン/ゲスト/レート制限/不正トークンの扱いを確かめる。
+
+Tests for forking a shared chat into the viewer's own room: the message cap in the service (fork_shared_chat_into_db_room)
+and login / guest / rate-limit / invalid-token handling in the route (fork_shared_chat_room).
+"""
+
 import asyncio
 import json
 import unittest
@@ -8,6 +15,8 @@ from services.api_errors import ResourceNotFoundError
 from services.chat_service import fork_shared_chat_into_db_room
 from tests.helpers.request_helpers import build_request
 
+# 共有チャットのペイロード（ルームとメッセージ）の見本。
+# Sample shared-chat payload (room and messages).
 SHARED_PAYLOAD = {
     "room": {"id": "room-1", "title": "共有された会話"},
     "messages": [
@@ -21,6 +30,8 @@ SHARED_PAYLOAD = {
 }
 
 
+# フォーク用エンドポイントへの POST リクエストを組み立てる補助関数。
+# Helper that builds a POST request for the fork endpoint.
 def make_fork_request(json_body, session=None):
     return build_request(
         method="POST",
@@ -30,6 +41,8 @@ def make_fork_request(json_body, session=None):
     )
 
 
+# フォークがルームとメッセージのリポジトリを組み合わせ、書き込み前に件数を制限することを検証するテストクラス。
+# Test class verifying that forking composes the room and message repositories and caps messages before writing.
 class SharedChatForkServiceTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_authenticated_fork_composes_room_and_message_repositories(self):
         with patch("services.chat_service._write", new=AsyncMock()) as write:
@@ -68,6 +81,8 @@ class SharedChatForkServiceTestCase(unittest.IsolatedAsyncioTestCase):
             MAX_FORKED_MESSAGES,
         )
 
+# フォークのルートが閲覧者の種別に応じてルームを作り、制限や不正入力を拒否することを検証するテストクラス。
+# Test class verifying that the fork route creates rooms per viewer type and rejects limits and invalid input.
 class ForkSharedChatRoomRouteTestCase(unittest.TestCase):
     def test_authenticated_viewer_forks_into_own_room(self):
         request = make_fork_request({"token": "token-1", "id": "room-new"}, session={"user_id": 42})

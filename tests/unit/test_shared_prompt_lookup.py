@@ -1,3 +1,10 @@
+"""チャットのツールが使う共有プロンプト検索（services.shared_prompt_lookup）を検証するテスト。
+上位ヒットの本文展開、本文取得失敗時の継続、検索失敗と 0 件の区別、ツール向けペイロードの形を確かめる。
+
+Tests for shared-prompt lookup used by chat tools (services.shared_prompt_lookup): expanding the top hit's body,
+keeping a hit when the body fails, distinguishing search failure from no results, and the tool payload shape.
+"""
+
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -9,6 +16,8 @@ from services.shared_prompt_lookup import (
 )
 
 
+# 検索結果の 1 件（要約）を表す代役。
+# Stand-in for one search result summary.
 class _Summary:
     def __init__(self, prompt_id, title):
         self.prompt_id = prompt_id
@@ -21,11 +30,15 @@ class _Summary:
         self.public_url = f"https://example.test/shared/prompt/{prompt_id}"
 
 
+# 検索結果のページ（items のみ）を表す代役。
+# Stand-in for a page of search results (items only).
 class _Page:
     def __init__(self, items):
         self.items = items
 
 
+# プロンプト詳細（本文・スキル本文・説明）を表す代役。
+# Stand-in for a prompt detail (content, skill markdown, description).
 class _Detail:
     def __init__(self, content, skill_markdown="", description=""):
         self.content = content
@@ -33,6 +46,8 @@ class _Detail:
         self.description = description
 
 
+# 検索の非同期実行、上位ヒットの本文展開、失敗の扱い、空クエリ時の挙動を検証するテストクラス。
+# Test class for async search, top-hit body expansion, failure handling and blank-query behavior.
 class SharedPromptSearchTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_search_is_native_async_and_expands_top_hit(self):
         service = type("Service", (), {})()

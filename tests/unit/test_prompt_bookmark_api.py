@@ -1,3 +1,10 @@
+"""公開プロンプトを自分のタスクやスキルとして取り込む API（add/remove_prompt_as_task、add_prompt_as_skill）を検証するテスト。
+タスク用テンプレートの組み立てと、スキルとして保存する際の出典の保持も確かめる。
+
+Tests for the APIs that import a public prompt as the caller's task or skill (add/remove_prompt_as_task, add_prompt_as_skill),
+including task-template composition and source-prompt provenance for imported skills.
+"""
+
 import asyncio
 import json
 import unittest
@@ -8,6 +15,8 @@ from services.shared_content_service import SharedContentService
 from tests.helpers.request_helpers import build_request
 
 
+# テスト用の JSON リクエストを組み立てる補助関数。
+# Helper that builds a JSON request for the tests.
 def make_request(method, path, payload, session=None):
     return build_request(
         method=method,
@@ -17,6 +26,8 @@ def make_request(method, path, payload, session=None):
     )
 
 
+# 「チャットで使う」系の API（タスク追加・削除、スキル取り込み）が非同期サービスへ委譲することを検証するテストクラス。
+# Test class verifying that the use-in-chat APIs (task add/remove, skill import) delegate to the async service.
 class PromptUseInChatApiTestCase(unittest.TestCase):
     def test_add_prompt_as_task_uses_async_service(self):
         request = make_request(

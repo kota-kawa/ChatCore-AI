@@ -1,3 +1,9 @@
+"""ログイン成功時の認証セッション確立(establish_authenticated_session)が、旧セッション ID の無効化、ユーザー情報の設定、
+ロケールの扱いを正しく行うことを検証する単体テスト。
+
+Unit tests that establish_authenticated_session retires the old session ID, stores the user data, and handles the locale correctly on login.
+"""
+
 import unittest
 
 from services.auth_session import establish_authenticated_session
@@ -42,6 +48,10 @@ class AuthSessionTestCase(unittest.TestCase):
         self.assertEqual(request.session["user_email"], "user2@example.com")
         self.assertTrue(request.session.get("_permanent"))
 
+    # 日本語: preferred_locale を明示すると、言語タグ("en-US")が基本言語("en")に正規化されてセッションに入り、
+    #         読み込み済みフラグが立つことを検証します。
+    # English: Verify that an explicit preferred_locale ("en-US") is normalized to its base language ("en")
+    #          in the session and marks it as loaded.
     def test_establish_authenticated_session_sets_explicit_locale(self):
         request = build_request(path="/api/login", session={})
 

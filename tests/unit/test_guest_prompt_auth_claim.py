@@ -1,3 +1,8 @@
+"""メールログイン成功時に、同じブラウザのゲスト投稿プロンプトがログインユーザーへ引き継がれることを検証するテスト。
+
+Tests that a successful email login claims this browser's guest prompts for the logged-in user.
+"""
+
 import asyncio
 import unittest
 from unittest.mock import patch
@@ -6,10 +11,14 @@ from blueprints.auth import api_verify_login_code
 from tests.helpers.request_helpers import build_request
 
 
+# run_blocking を差し替え、スレッドへ逃がさずその場で同期関数を実行する。
+# Replaces run_blocking so the sync function runs inline instead of in a worker thread.
 async def immediate_run_blocking(func, *args, **kwargs):
     return func(*args, **kwargs)
 
 
+# api_verify_login_code が認証後のゲスト投稿の引き継ぎ（claim）を呼ぶことを確かめる。
+# Checks that api_verify_login_code triggers the guest prompt claim after authentication.
 class GuestPromptAuthClaimTestCase(unittest.TestCase):
     def test_email_login_claims_this_browser_guest_prompt_after_session_rotation(self):
         guest_token = "guest-token-which-is-long-enough-to-be-valid"

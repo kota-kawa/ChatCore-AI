@@ -1,3 +1,8 @@
+"""MCP サーバー設定（有効化フラグ、公開 URL、許可ホスト、投稿の上限値）を環境変数から読む mcp_config を検証するテスト。
+
+Tests mcp_config, which reads the MCP server settings (enable flag, public URL, allowed hosts, publish limits) from environment variables.
+"""
+
 import os
 import unittest
 from unittest.mock import patch
@@ -15,6 +20,8 @@ from services.mcp_config import (
 )
 
 
+# 既定値、真偽値の解釈、URL の検証、環境変数による上書きを確かめる。
+# Checks defaults, boolean parsing, URL validation and environment overrides.
 class McpConfigTestCase(unittest.TestCase):
     def test_mcp_is_disabled_by_default(self):
         with patch.dict(os.environ, {}, clear=True):

@@ -1,3 +1,10 @@
+"""プロンプトアシストのサービス層（services.prompt_assist）が行う、メッセージ組み立て・リクエスト検証・
+LLM 応答の解析と正規化を検証するテスト。
+
+Tests for the prompt-assist service logic (services.prompt_assist): message building, request validation,
+and parsing and normalizing LLM responses.
+"""
+
 import unittest
 
 from services.llm import LlmProviderError

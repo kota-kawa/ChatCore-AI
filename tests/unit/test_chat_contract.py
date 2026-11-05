@@ -1,3 +1,10 @@
+"""チャット API の契約定数(履歴のページサイズ、リクエスト/レスポンスの命名規則、日時のシリアライズ形式)が想定
+どおり宣言されていることを検証する単体テスト。
+
+Unit tests that the chat API contract constants (history page sizes, request/response naming case, datetime serialization)
+are declared as expected.
+"""
+
 import unittest
 
 from services.chat_contract import (

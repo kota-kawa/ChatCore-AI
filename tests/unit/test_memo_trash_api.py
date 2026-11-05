@@ -1,3 +1,8 @@
+"""メモのゴミ箱機能を、HTTP ルート（復元・完全削除・空にする）、リポジトリの SQL、シリアライザの三層で検証するテスト。
+
+Tests the memo trash feature at three layers: HTTP routes (restore, purge, empty), repository SQL and serializers.
+"""
+
 import asyncio
 import unittest
 from datetime import datetime
@@ -27,14 +32,20 @@ from tests.helpers.app_helpers import build_session_test_app
 CSRF_TOKEN = "trash-test-csrf"
 
 
+# SQLAlchemy の文を PostgreSQL 用にコンパイルし、空白を詰めた文字列で返す。
+# Compiles a SQLAlchemy statement for PostgreSQL and returns it with whitespace collapsed.
 def _sql(statement) -> str:
     return " ".join(str(statement.compile(dialect=dialect())).split())
 
 
+# セッション付きのテスト用アプリへ HTTP で要求し、ログインと CSRF の要件、エラー応答を確かめる。
+# Sends HTTP requests to a session-enabled test app and checks login and CSRF requirements and error responses.
 class MemoTrashRoutesTestCase(unittest.TestCase):
     def setUp(self):
         self.app = build_session_test_app(memo_bp, include_test_session_route=True)
 
+    # テスト用セッションを作ってから、指定した条件（ログイン・CSRF の有無）でリクエストを送る。
+    # Creates a test session and then sends a request with the given login and CSRF conditions.
     def _request(self, method: str, path: str, *, logged_in: bool = True, csrf: bool = True, json=None):
         async def scenario():
             async with httpx.AsyncClient(
@@ -130,7 +141,11 @@ class MemoTrashRoutesTestCase(unittest.TestCase):
         self.assertEqual(bulk.await_args.args[:3], (7, "restore", [1, 2]))
 
 
+# セッションをモックし、リポジトリが発行する SQL がゴミ箱の対象と範囲を正しく絞ることを確かめる。
+# Mocks the session and checks the SQL the repository issues scopes trash items and users correctly.
 class MemoTrashRepositoryStatementsTestCase(unittest.IsolatedAsyncioTestCase):
+    # リポジトリ関数に渡す DB セッションの代役を作る。
+    # Builds a database session stand-in to hand to repository functions.
     def _session(self, *, scalar=0, scalars=(), rows=()):
         session = MagicMock()
         session.scalar = AsyncMock(return_value=scalar)
@@ -142,6 +157,8 @@ class MemoTrashRepositoryStatementsTestCase(unittest.IsolatedAsyncioTestCase):
         session.scalars = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=list(scalars))))
         return session
 
+    # 既定の検索条件で fetch_memo_summaries を呼ぶ。overrides で条件を変える。
+    # Calls fetch_memo_summaries with default conditions; overrides change them.
     async def _summaries(self, session, **overrides):
         options = {
             "limit": 10,
@@ -268,6 +285,8 @@ class MemoTrashRepositoryStatementsTestCase(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(revoked, action == "delete")
 
 
+# 一覧・詳細の出力に削除時刻と完全削除の予定時刻が載ることを確かめる。
+# Checks list and detail payloads carry the deletion time and the scheduled purge time.
 class MemoTrashSerializationTestCase(unittest.TestCase):
     def test_summary_and_detail_carry_the_deletion_time_and_purge_time(self):
         deleted_at = datetime(2026, 10, 1, 9, 0)

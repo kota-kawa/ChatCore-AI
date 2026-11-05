@@ -1,3 +1,10 @@
+"""共有リンクの共通処理（services.share_common）を検証するテスト。
+種別ごとのパス・URL の組み立て、共有ベース URL の決定、有効/期限切れ/失効の判定、トークン生成、一意制約違反の判定を確かめる。
+
+Tests for the shared-link helpers (services.share_common): per-kind paths and URLs, share base-URL resolution,
+active/expired/revoked lifecycle checks, token generation, and unique-violation detection.
+"""
+
 import os
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -17,6 +24,8 @@ from services.share_common import (
 from services.web_constants import DEFAULT_FRONTEND_URL
 
 
+# 共有リンク機能が共有する URL・有効期限・トークンの規則を検証するテストクラス。
+# Test class for the URL, lifecycle and token rules shared by all share-link features.
 class ShareCommonTestCase(unittest.TestCase):
     def test_builds_the_canonical_paths_for_each_content_kind(self):
         self.assertEqual(build_share_path(ShareContentKind.CHAT, "chat-token"), "/shared/chat-token")
@@ -93,9 +102,13 @@ class ShareCommonTestCase(unittest.TestCase):
         self.assertEqual(received, [DEFAULT_SHARE_TOKEN_BYTES])
 
     def test_unique_violation_detection_reads_wrapped_sqlstate(self):
+        # PostgreSQL の一意制約違反（SQLSTATE 23505）を表す例外の代役。
+        # Stand-in for a PostgreSQL unique-violation error (SQLSTATE 23505).
         class UniqueViolationError(Exception):
             sqlstate = "23505"
 
+        # ドライバ例外を orig に包む SQLAlchemy 風の例外の代役。
+        # SQLAlchemy-style exception stand-in that wraps the driver error in orig.
         class WrappedError(Exception):
             def __init__(self):
                 self.orig = UniqueViolationError()

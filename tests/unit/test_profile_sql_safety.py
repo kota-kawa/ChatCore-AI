@@ -1,3 +1,8 @@
+"""プロフィール API の永続化境界と、ユーザーのシリアライザが現行スキーマの列だけを読むことを検証するテスト。
+
+Tests the persistence boundary of the profile API and that the user serializers read only columns in the current schema.
+"""
+
 import json
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
@@ -9,6 +14,8 @@ from services.repositories.user_repository import UserRepository
 from tests.helpers.request_helpers import build_request
 
 
+# プロフィールのハンドラーが非同期リポジトリへ委譲し、メールを更新対象から除くことを確かめる。
+# Checks the profile handlers delegate to the async repository and exclude the email from updates.
 class ProfilePersistenceBoundaryTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_profile_get_returns_the_async_repository_payload(self):
         request = build_request(
@@ -73,7 +80,11 @@ class ProfilePersistenceBoundaryTestCase(unittest.IsolatedAsyncioTestCase):
                 await _update_user_profile(12, "charlie", "charlie@example.com", "bio", None, "丁寧に答える")
 
 
+# 削除済みの列を読まないこと（スキーマとの整合）を確かめる。
+# Checks the serializers do not read removed columns, keeping them in line with the schema.
 class UserSerializerSchemaBoundaryTestCase(unittest.IsolatedAsyncioTestCase):
+    # 全項目を埋めた User モデルを作る。
+    # Builds a User model with every field set.
     def _user(self):
         return User(
             id=7,

@@ -1,3 +1,12 @@
+"""チャットで選択された参照元（メモなど）の事前検索（services.selected_reference_context）を検証するテスト。
+結果の挿入位置、0 件時の書き換え再検索と試行上限、保存済み一覧の引き渡し、
+制御用マークアップのエスケープ、並列検索の順序を確かめる。
+
+Tests for prefetching the references selected in chat (services.selected_reference_context): where results are inserted,
+retry with a rewritten query on zero hits and the attempt cap, handing over the saved inventory,
+escaping control markup, and a stable order for parallel lookups.
+"""
+
 import time
 import unittest
 from unittest.mock import Mock, patch
@@ -12,6 +21,8 @@ from services.selected_reference_context import (
 )
 
 
+# 日本語: 選択された参照元を検索し、その結果をメッセージへ組み込む処理全体を検証するテストクラス。
+# English: Test class for the whole flow that searches selected references and embeds the results into the messages.
 class SelectedReferenceContextTestCase(unittest.TestCase):
     def setUp(self):
         # 既定の言い換えはLLMを呼ぶため、明示的に差し替えないテストでは無効化する。
@@ -425,6 +436,9 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
         )
 
 
+# 日本語: 検索候補クエリの計画（原文→言い換えの順、言い換えは遅延・共有・失敗時は原文のみ）を検証するテストクラス。
+# English: Test class for the candidate-query plan: original first, then a lazily computed, shared rewrite, falling
+# back to the original on failure.
 class CandidateQueryPlanTestCase(unittest.TestCase):
     # 日本語: 最初の候補で当たる限り、言い換え用のLLMは呼びません。
     # English: While the first candidate is enough, the rewrite model is never called.

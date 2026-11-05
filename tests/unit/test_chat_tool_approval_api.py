@@ -51,13 +51,18 @@ from tests.helpers.app_helpers import build_session_test_app
 TOOL_NAME = "memo_create"
 
 
+# 日本語: 承認カードのプレビュー（memo_create の形）を作る。
+# English: Builds an approval card preview in the memo_create shape.
 def _preview(content: str = "hi") -> dict[str, Any]:
     return {"kind": TOOL_NAME, "title": "Target", "content": content}
 
 
+# repository境界を代替するインメモリ実装。
 # --- In-memory doubles for the repository boundary ---------------------------------------------
 
 
+# 日本語: 承認テーブルの 1 行に相当するインメモリの行。
+# English: In-memory row standing for one row of the approvals table.
 @dataclass
 class _Row:
     id: UUID
@@ -76,6 +81,8 @@ class _Row:
     decided_at: datetime | None = None
 
 
+# 日本語: 承認行と「常に許可」の付与（grant）を保持するインメモリのストア。
+# English: In-memory store holding approval rows and "always approve" grants.
 class _FakeStore:
     def __init__(self) -> None:
         self.rows: dict[UUID, _Row] = {}
@@ -83,7 +90,10 @@ class _FakeStore:
 
 
 class _FakeApprovalRepository:
-    """Mirrors services/repositories/chat_tool_approval_repository.py in memory."""
+    """services/repositories/chat_tool_approval_repository.py の動きをメモリ上で再現する代役。
+
+    Mirrors services/repositories/chat_tool_approval_repository.py in memory.
+    """
 
     def __init__(self, store: _FakeStore) -> None:
         self.store = store
@@ -201,6 +211,8 @@ class _FakeApprovalRepository:
         return self.store.grants.pop((user_id, tool_name), None) is not None
 
 
+# 日本語: 「常に許可」の付与 1 件に相当するインメモリの行。
+# English: In-memory row standing for one "always approve" grant.
 @dataclass
 class _Grant:
     user_id: int
@@ -210,7 +222,10 @@ class _Grant:
 
 
 class _FakeChatRepository:
-    """Captures message-part update calls instead of touching chat_history."""
+    """chat_history に触れず、メッセージのパート更新の呼び出しだけを記録する代役。
+
+    Captures message-part update calls instead of touching chat_history.
+    """
 
     def __init__(self, calls: list[tuple[str, int, dict[str, Any]]]) -> None:
         self.calls = calls
@@ -220,6 +235,8 @@ class _FakeChatRepository:
         return True
 
 
+# 日本語: 何もしない非同期コンテキスト。トランザクション（begin / begin_nested）の代役。
+# English: Inert async context standing in for a transaction (begin / begin_nested).
 class _NullAsyncContext:
     async def __aenter__(self):
         return None
@@ -228,6 +245,8 @@ class _NullAsyncContext:
         return False
 
 
+# 日本語: トランザクションの開始だけができる DB セッションの代役。
+# English: DB session double that can only open transactions.
 class _FakeSession:
     def begin(self):
         return _NullAsyncContext()
@@ -236,6 +255,8 @@ class _FakeSession:
         return _NullAsyncContext()
 
 
+# 日本語: session_scope の代役。実 DB に接続せず _FakeSession を渡す。
+# English: Stand-in for session_scope that yields a _FakeSession without touching a real DB.
 class _FakeSessionScope:
     async def __aenter__(self):
         return _FakeSession()
@@ -248,6 +269,9 @@ def _fake_session_scope():
     return _FakeSessionScope()
 
 
+# 日本語: 実行ハンドラだけを差し替えた ToolSpec を作る。execute_result が例外なら実行時に送出し、無ければ成功の結果を返す。
+# English: Builds a ToolSpec with only the execute handler faked; an exception execute_result is raised, otherwise a success outcome is
+# returned.
 def _fake_spec(
     *,
     allows_always: bool = True,
@@ -268,9 +292,13 @@ def _fake_spec(
     )
 
 
+# 承認サービスの検証。
 # --- services/chat_tool_approval_service.py -----------------------------------------------------
 
 
+# 日本語: 決定ロジックのテスト。所有者確認、冪等性と競合、期限切れ、実行失敗、レート制限、「常に許可」、承認の置き換え・取り消しを扱う。
+# English: Tests the decision logic: ownership, idempotency and conflicts, expiry, failed execution, rate limits, "always approve", and
+# superseding or cancelling approvals.
 class ChatToolApprovalServiceTests(unittest.TestCase):
     def setUp(self):
         self.store = _FakeStore()
@@ -295,6 +323,8 @@ class ChatToolApprovalServiceTests(unittest.TestCase):
 
         self.auth_limit_service = AuthLimitService(redis_client_getter=lambda: None)
 
+    # 日本語: 保留中の承認行を 1 件作る。attached=False なら、まだ返信メッセージに紐づいていない行になる。
+    # English: Seeds one pending approval row; attached=False leaves it not yet linked to a reply message.
     def _seed_pending(
         self,
         *,
@@ -332,6 +362,7 @@ class ChatToolApprovalServiceTests(unittest.TestCase):
             )
         )
 
+    # 所有者確認と、メッセージ未紐付け期間の検証。
     # Ownership and the unattached (message_id NULL) window --------------------------------------
 
     def test_someone_elses_row_reads_as_not_found(self):
@@ -348,6 +379,7 @@ class ChatToolApprovalServiceTests(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.code, "approval_not_found")
 
+    # 冪等性と競合の検証。
     # Idempotency and conflicts -----------------------------------------------------------------
 
     def test_repeating_the_same_decision_is_idempotent(self):
@@ -370,6 +402,7 @@ class ChatToolApprovalServiceTests(unittest.TestCase):
         payload = ctx.exception.to_payload()
         self.assertEqual(payload["approval"], settled)
 
+    # 期限切れの検証。
     # Expiry ---------------------------------------------------------------------------------------
 
     def test_an_expired_row_settles_to_expired_and_reports_409(self):
@@ -386,6 +419,7 @@ class ChatToolApprovalServiceTests(unittest.TestCase):
             self._decide(row, "deny")
         self.assertEqual(ctx2.exception.code, "approval_expired")
 
+    # 実行失敗の検証。
     # Failure execution ------------------------------------------------------------------------
 
     def test_a_failed_execution_settles_to_failed_without_raising(self):
@@ -396,6 +430,7 @@ class ChatToolApprovalServiceTests(unittest.TestCase):
         self.assertEqual(card["result"]["error_code"], "target_not_found")
         self.assertEqual(self.store.rows[row.id].status, "failed")
 
+    # 利用制限の検証。
     # Rate limiting ------------------------------------------------------------------------------
 
     def test_the_write_limit_blocks_the_run_and_leaves_the_card_pending(self):
@@ -409,6 +444,7 @@ class ChatToolApprovalServiceTests(unittest.TestCase):
         self.assertEqual(ctx.exception.retry_after, 42)
         self.assertEqual(self.store.rows[row.id].status, "pending")
 
+    # メッセージパーツ更新の検証。
     # Message-part updates -----------------------------------------------------------------------
 
     def test_deciding_updates_the_saved_messages_card(self):
@@ -421,6 +457,7 @@ class ChatToolApprovalServiceTests(unittest.TestCase):
         self.assertEqual(updated_approval["id"], card["id"])
         self.assertEqual(updated_approval["status"], "succeeded")
 
+    # 常に承認する権限の検証。
     # "Always approve" grants -------------------------------------------------------------------
 
     def test_approve_always_on_a_shared_target_is_rejected(self):
@@ -469,6 +506,7 @@ class ChatToolApprovalServiceTests(unittest.TestCase):
         revoked_second = asyncio.run(revoke_auto_approval(row.user_id, TOOL_NAME))
         self.assertFalse(revoked_second)
 
+    # 提案の置き換えと取り消しの検証。
     # Superseding and cancellation ----------------------------------------------------------------
 
     def test_a_new_message_supersedes_the_rooms_pending_approvals(self):
@@ -490,6 +528,7 @@ class ChatToolApprovalServiceTests(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertEqual(self.store.rows[row.id].status, "cancelled")
 
+    # 提案作成時の補助処理。
     # Proposal-time helpers -----------------------------------------------------------------------
 
     def test_create_pending_approval_inserts_a_pending_row(self):
@@ -523,10 +562,17 @@ class ChatToolApprovalServiceTests(unittest.TestCase):
         self.assertEqual(card["decision"], "auto")
 
 
+# 承認APIの検証。
 # --- blueprints/chat/tool_approvals.py ------------------------------------------------------------
 
 
+# 日本語: 承認 API のルート（認証、CSRF、入力検証、エラーの状態コード、プロフィール言語の返却、レート制限、自動承認の一覧と取り消し）
+# のテスト。
+# English: Tests the approval API routes: auth, CSRF, input validation, error status codes, profile locale return, rate limiting, and
+# listing/revoking auto-approvals.
 class ChatToolApprovalRouteTests(unittest.IsolatedAsyncioTestCase):
+    # 日本語: chat ブループリントを載せ、認証制限サービスをメモリ実装に差し替えたテスト用アプリを作る。
+    # English: Builds a test app with the chat blueprint and an in-memory auth limit service.
     def _app(self):
         from blueprints.chat import chat_bp
 
@@ -537,6 +583,8 @@ class ChatToolApprovalRouteTests(unittest.IsolatedAsyncioTestCase):
     def _client(self, app) -> httpx.AsyncClient:
         return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver")
 
+    # 日本語: テスト用セッション経由で CSRF トークン（と user_id）を設定済みのクライアントを返す。user_id=None なら未ログイン。
+    # English: Yields a client whose session has the CSRF token (and user_id) set via the test session route; user_id=None means signed out.
     @asynccontextmanager
     async def _authenticated_client(self, app, *, user_id: int | None = 1, csrf_token: str = "token-1"):
         async with self._client(app) as client:

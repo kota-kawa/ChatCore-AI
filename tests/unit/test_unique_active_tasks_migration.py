@@ -1,3 +1,10 @@
+"""有効なタスクの一意性（ユーザー別の正規化名・システムキー・取り込み元プロンプト）を
+部分ユニークインデックスで保証する Alembic マイグレーション（20260730_01）を検証するテスト。
+
+Tests the Alembic migration 20260730_01 that enforces uniqueness of active tasks
+(normalized name per user, system key, source prompt) with partial unique indexes.
+"""
+
 import importlib.util
 import unittest
 from pathlib import Path
@@ -11,6 +18,8 @@ MIGRATION_PATH = (
 )
 
 
+# マイグレーションのファイルを直接読み込んでモジュールとして返す補助関数（alembic の実行なし）。
+# Helper that loads the migration file directly as a module, without running Alembic.
 def load_migration():
     spec = importlib.util.spec_from_file_location("unique_active_tasks_migration", MIGRATION_PATH)
     if spec is None or spec.loader is None:
@@ -20,6 +29,8 @@ def load_migration():
     return migration
 
 
+# 重複データの整理がインデックス作成より前に行われること、およびダウングレードで元に戻ることを検証するテストクラス。
+# Test class verifying that duplicate cleanup runs before the indexes are created and that the downgrade removes them.
 class UniqueActiveTasksMigrationTestCase(unittest.TestCase):
     def test_upgrade_cleans_data_before_adding_partial_unique_indexes(self):
         migration = load_migration()

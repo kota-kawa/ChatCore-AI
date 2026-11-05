@@ -1,3 +1,6 @@
+# 生成UIの検証・正規化と、許可されないpayloadの拒否を検証する。
+# Tests generated UI validation, normalization and rejection of unsupported payloads.
+
 import json
 import unittest
 
@@ -915,6 +918,7 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertEqual(decoded[0]["artifact"]["libraries"], ["three"])
 
     def test_normalizes_three_module_import_to_local_global(self):
+        # 一般的なmodule出力を、ローカルの通常スクリプト実行形式へ変換できることを検証する。
         """Common provider module output is adapted to the local classic-script runtime."""
         payload = {
             **VALID_ARTIFACT,
@@ -931,6 +935,7 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertEqual(artifact["libraries"], ["three"])
 
     def test_normalizes_orbit_controls_import_for_local_compatibility(self):
+        # OrbitControlsのimportを除き、iframeの互換処理用の印を付けることを検証する。
         """OrbitControls imports are removed and marked for the iframe compatibility control."""
         payload = {
             **VALID_ARTIFACT,
@@ -947,6 +952,7 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertEqual(artifact["libraries"], ["three"])
 
     def test_unsupported_three_addon_is_dropped_without_fallback(self):
+        # 未対応のmodule addonを拒否し、代わりのUIを作らないことを検証する。
         """Unsupported module addons fail closed without creating replacement UI."""
         raw = (
             "3Dモデルを表示します。\n```chatcore-artifact\n"
@@ -1120,6 +1126,7 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertEqual(requested_artifact_quality_issues(normalized, "2D"), [])
 
     def test_explicit_text_only_request_does_not_create_fallback(self):
+        # UI不要という明示指示を、依頼に応じた救済処理でも守ることを検証する。
         """Request-aware recovery respects explicit UI opt-outs."""
         normalized = normalize_response_with_artifacts(
             "文章だけで回答します。",

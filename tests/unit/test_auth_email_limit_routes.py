@@ -1,3 +1,10 @@
+"""ログインコード送信・確認メール送信 API の、メールアドレス単位/日次の送信制限による 429 応答と、制限判定(Redis 待ち)
+がイベントループ外のスレッドで実行されることを検証する単体テスト。
+
+Unit tests for the 429 responses from the login-code and verification-email APIs when per-email or daily send limits are hit, and that the
+limit check (a Redis round trip) runs on a worker thread off the event loop.
+"""
+
 import asyncio
 import json
 import threading

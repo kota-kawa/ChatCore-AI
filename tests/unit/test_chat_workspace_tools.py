@@ -75,6 +75,8 @@ from services.tool_approval_parts import TOOL_APPROVAL_PART_TYPE
 FIXTURE_PATH = Path(__file__).resolve().parent.parent / "fixtures" / "memo_agent_edit_cases.json"
 
 
+# 日本語: モデルが返すツール呼び出し 1 件分の辞書（OpenAI 形式）を作ります。
+# English: Build one model tool-call dict in the OpenAI format.
 def _tool_call(name: str, **arguments) -> dict:
     return {
         "id": f"call-{name}",
@@ -83,6 +85,8 @@ def _tool_call(name: str, **arguments) -> dict:
     }
 
 
+# 日本語: ChatTurnRunState をモック中心の最小構成で作ります。overrides で個別の項目を差し替えます。
+# English: Build a ChatTurnRunState from mostly mocks; overrides replace individual fields.
 def _make_state(**overrides) -> ChatTurnRunState:
     defaults = {
         "chunks": [],
@@ -103,6 +107,8 @@ def _make_state(**overrides) -> ChatTurnRunState:
     return ChatTurnRunState(**defaults)
 
 
+# 日本語: 読み取り専用のダミー ToolSpec（予算は reads）を作ります。
+# English: Build a stub read-only ToolSpec charged against the reads budget.
 def _fake_read_spec(
     *,
     allows_always: bool = False,
@@ -125,6 +131,8 @@ def _fake_read_spec(
     )
 
 
+# 日本語: 書き込み提案を返すダミー ToolSpec を作ります。
+# English: Build a stub ToolSpec that produces write proposals.
 def _fake_write_spec(
     *,
     allows_always: bool = True,
@@ -153,6 +161,8 @@ def _fake_write_spec(
     )
 
 
+# 日本語: ツール引数の解析、ツール定義の登録、予算の振り分けといったレジストリ側の契約を確認します。
+# English: Cover the registry-side contract: argument parsing, tool definitions and budget routing.
 class RegistryTests(unittest.TestCase):
     def test_parse_tool_arguments_accepts_dict_and_json_string(self):
         self.assertEqual(parse_tool_arguments({"a": 1}), {"a": 1})
@@ -232,6 +242,8 @@ class RegistryTests(unittest.TestCase):
         self.assertIsNone(get_workspace_tool_spec("does_not_exist"))
 
 
+# 日本語: メモ作成・追記・編集ツールの引数モデルが、不正な組み合わせを拒否することを確認します。
+# English: Check that the memo create, append and edit argument models reject invalid combinations.
 class MemoArgumentValidationTests(unittest.TestCase):
     def test_memo_create_requires_nonblank_content(self):
         with self.assertRaises(ValidationError):
@@ -259,6 +271,8 @@ class MemoArgumentValidationTests(unittest.TestCase):
         self.assertIsNone(parsed.content)
 
 
+# 日本語: メモ書き込みツールが、承認カード用のプレビューと対象情報を作る処理を確認します。
+# English: Check how the memo write tools build the preview and target reference for an approval card.
 class MemoProposeHandlerTests(unittest.TestCase):
     def _memo(self, **overrides) -> McpMemoDetail:
         defaults = {
@@ -321,6 +335,8 @@ class MemoProposeHandlerTests(unittest.TestCase):
         self.assertEqual(proposal.preview["content"], "全文書き換え")
 
 
+# 日本語: 自分のプロンプト（タスク）を保存するツールで、編集時の省略項目の扱いと必須項目の検証を確認します。
+# English: Check how the prompt-save tool treats omitted fields on edit and validates required ones.
 class MyPromptSaveTests(unittest.TestCase):
     def test_edit_without_body_preserves_long_existing_task_body(self):
         body = "x" * 12_000
@@ -414,12 +430,16 @@ class MyPromptSaveTests(unittest.TestCase):
         self.assertIn("omit this to keep the existing title", properties["title"]["description"])
 
 
+# 日本語: フィクスチャ内の {repeat, times} 指定を、実際の繰り返し文字列へ展開します。
+# English: Expand a {repeat, times} marker in the fixtures into the actual repeated string.
 def _expand_repeats(value):
     if isinstance(value, dict) and "repeat" in value:
         return str(value["repeat"]) * int(value["times"])
     return value
 
 
+# 日本語: WorkspaceToolRunner の実行境界（振り分け、読み取り、書き込み提案、自動承認、中断、予算とテレメトリ）を確認します。
+# English: Cover the WorkspaceToolRunner boundary: dispatch, reads, write proposals, auto approval, interruption, budget and telemetry.
 class WorkspaceToolRunnerTests(unittest.TestCase):
     def _runner(self, spec: ToolSpec | list[ToolSpec]) -> tuple[WorkspaceToolRunner, list]:
         specs = spec if isinstance(spec, list) else [spec]
@@ -490,6 +510,7 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
 
         self.assertEqual(flagged.target_ref["private_overlap_excerpts"], [left + right])
 
+    # ディスパッチ: 読み取りは read へ、書き込みは propose へ振り分ける。
     # Dispatch -----------------------------------------------------------------
 
     def test_run_dispatches_reads_to_read_and_writes_to_propose(self):
@@ -513,6 +534,7 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
         self.assertEqual(state.telemetry.workspace_write_proposals, 1)
         self.assertEqual(state.telemetry.workspace_read_calls, 0)
 
+    # 読み取り: 証拠の登録と検索履歴の記録。
     # Reads ----------------------------------------------------------------------
 
     def test_read_registers_evidence_and_records_the_search(self):
@@ -559,6 +581,7 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
         self.assertEqual(result["status"], "invalid_arguments")
         self.assertEqual(state.telemetry.workspace_invalid_arguments, 1)
 
+    # 書き込み提案: 承認待ちカードの作成。
     # Write proposals --------------------------------------------------------------
 
     def test_propose_creates_a_pending_card_and_a_server_summary(self):
@@ -671,6 +694,7 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
         state.turn_state.record_search.assert_called_once()
         self.assertEqual(state.turn_state.record_search.call_args.kwargs["status"], "target_not_found")
 
+    # 自動承認: 許可されている場合に書き込みをその場で実行する。
     # Auto approval ------------------------------------------------------------------
 
     def test_auto_approval_runs_the_write_immediately_when_granted(self):
@@ -752,6 +776,7 @@ class WorkspaceToolRunnerTests(unittest.TestCase):
         execute.assert_not_called()
         create.assert_awaited_once()
 
+    # 中断: 承認待ちのカードの扱い。
     # Interruption -------------------------------------------------------------------
 
     def test_settle_after_interruption_cancels_only_pending_cards(self):

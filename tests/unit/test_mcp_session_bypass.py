@@ -1,3 +1,8 @@
+"""/mcp への要求では、HybridSessionMiddleware が Web セッションの復元もコミットも行わないことを検証するテスト。
+
+Tests that HybridSessionMiddleware neither restores nor commits a web session for requests to /mcp.
+"""
+
 import asyncio
 import unittest
 from unittest.mock import patch
@@ -5,6 +10,8 @@ from unittest.mock import patch
 from services.session_middleware import HybridSessionMiddleware
 
 
+# bypass_paths に /mcp を指定したミドルウェアを通し、セッション処理が呼ばれないことを確かめる。
+# Runs the middleware with /mcp in bypass_paths and checks session handling is never invoked.
 class McpSessionBypassTestCase(unittest.TestCase):
     def test_mcp_path_does_not_restore_or_commit_a_web_session(self):
         async def downstream(scope, receive, send):

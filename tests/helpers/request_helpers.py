@@ -1,3 +1,8 @@
+"""ハンドラや依存関数を直接呼ぶ単体テスト用に、疑似の Starlette Request を作るヘルパー。
+
+Helper that builds a fake Starlette Request for unit tests that call handlers and dependencies directly.
+"""
+
 import json
 
 from starlette.requests import Request

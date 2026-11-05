@@ -1,3 +1,10 @@
+"""チャット API のストリーミング応答（SSE）、バックグラウンド生成ジョブ、Web 検索の根拠、ターン状態（TurnState）の封筒、
+履歴取得、再生成、Redis を介した分散生成、回答の下書き表示を検証する最大のテスト。
+
+Largest test module for chat streaming (SSE), background generation jobs, web search evidence, the TurnState envelope,
+history reads, regeneration, Redis-backed distributed generation and answer-draft streaming.
+"""
+
 import asyncio
 import json
 import threading
@@ -188,8 +195,11 @@ class _FakeRedis:
     def pipeline(self):
         return _FakeRedisPipeline(self)
 
-    # 日本語: RedisのLuaスクリプト評価をシミュレートします（常に1を返します）。
+    # 日本語: ロックの解放・更新や状態の復元に使う Redis の Lua スクリプトを模擬します。
+    # 日本語: トークンが一致しなければ 0 を返し、一致すれば（DEL を含むスクリプトならキーを削除し、前の生成 ID
+    # が渡されたときは復元して）1 を返します。
     # English: Simulate Redis Lua scripts used for releasing, renewing, and restoring state.
+    # English: Return 0 on a token mismatch; otherwise delete the key for DEL scripts, restore a given previous generation ID, and return 1.
     def eval(self, script, key_count, key, token, *_args):
         del key_count
         if self._values.get(key) != token:
@@ -258,6 +268,8 @@ def make_request(json_body, session=None):
     )
 
 
+# 日本語: 生成ターンの作業状態（TurnState）を置き換える封筒（タグ付き JSON）の文字列を作ります。overrides で項目を上書きできます。
+# English: Builds the tagged JSON envelope that replaces the turn's working state (TurnState); overrides replace individual fields.
 def _turn_state_update(**overrides):
     payload = {
         "objective": "テスト質問に回答する",
@@ -274,8 +286,13 @@ def _turn_state_update(**overrides):
     )
 
 
+# 日本語: モデルがタグを付けずに出力した封筒 JSON を作ります。タグ無しの封筒の扱いを検証するために使います。
+# English: Builds envelope JSON as a model might emit it without tags, for the untagged-envelope tests.
 def _bare_turn_state(**overrides):
-    """Return the envelope JSON a model emitted without its tags."""
+    """モデルがタグ無しで出力した封筒 JSON を返す。
+
+    Return the envelope JSON a model emitted without its tags.
+    """
     payload = {
         "objective": "京都の紅葉の見頃を答える",
         "unresolved_questions": [],
@@ -287,6 +304,8 @@ def _bare_turn_state(**overrides):
     return json.dumps(payload, ensure_ascii=False)
 
 
+# 日本語: モデルが web_search ツールを 1 回呼ぶ応答（ツール呼び出しの JSON 文字列）を作ります。
+# English: Builds the model reply (tool-call JSON string) that calls the web_search tool once.
 def _web_search_tool_call_chunk(query):
     return json.dumps(
         [
@@ -299,6 +318,8 @@ def _web_search_tool_call_chunk(query):
     )
 
 
+# 日本語: テスト用の固定の Web 検索結果（京都の紅葉、1 件）を作ります。
+# English: Builds a fixed web search result for tests (Kyoto autumn leaves, one source).
 def _kyoto_search_result():
     return WebSearchResult(
         query="京都の紅葉",
@@ -316,12 +337,18 @@ def _kyoto_search_result():
 
 
 def _direct_answer_stream(*answer_chunks, state=None):
-    """Return one agent stream containing a state replacement and the final answer."""
+    """状態の置き換え 1 回と最終回答を含む、エージェントの 1 ストリームを返す。
+
+    Return one agent stream containing a state replacement and the final answer.
+    """
     return iter([_turn_state_update(**(state or {})), *answer_chunks])
 
 
 def _search_then_answer_stream(query, *answer_chunks, state=None):
-    """Return one tool decision followed by a state-updating answer decision."""
+    """ツール呼び出しの判断 1 回と、続く状態更新付きの回答判断 1 回を返す。
+
+    Return one tool decision followed by a state-updating answer decision.
+    """
     tool_call = json.dumps(
         [
             {
@@ -344,6 +371,7 @@ class ChatStreamingTestCase(unittest.TestCase):
     # English: Clear running temporary job state before starting each test.
     def setUp(self):
         clear_generation_job_state(cancel_running=True)
+        # 選択プロトコルは別のテストで検証し、ルートテストから実プロバイダーを呼ばない。
         # The real selection protocol is covered separately; route tests never call providers.
         for target in (
             "blueprints.chat.messages.select_chat_skills",
@@ -376,6 +404,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self._project_context_patch.stop()
         clear_generation_job_state(cancel_running=True)
 
+    # 日本語: イベントが無い間は ID の無い「: keepalive」コメントを流し、実イベントには ID を付けることを検証します。
+    # English: Verify idle gaps emit an ID-less ': keepalive' comment while real events keep their IDs.
     def test_serialized_stream_emits_comment_keepalive_without_event_id(self):
         payload = b"".join(
             _iter_serialized_stream_events(
@@ -391,6 +421,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertTrue(payload.startswith(": keepalive\n\n"))
         self.assertIn("id: 1\nevent: done", payload)
 
+    # 日本語: 封筒の解析は置き換え対象の項目だけを受け取り、それ以外の項目（別の要約など）は捨てることを検証します。
+    # English: Verify envelope parsing accepts only the replacement fields and drops anything else, such as a separate summary.
     def test_parse_turn_state_update_accepts_replacement_fields_only(self):
         payload = {
             "objective": "鎌倉の紅葉を説明する",
@@ -421,6 +453,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertFalse(update["ready_to_answer"])
         self.assertNotIn("separate_summary", update)
 
+    # 日本語: JSON として壊れている封筒と、文字数上限を超える封筒は None（無効）として扱うことを検証します。
+    # English: Verify a malformed envelope and one over the size cap are both treated as invalid (None).
     def test_parse_turn_state_update_rejects_invalid_or_oversized_envelope(self):
         self.assertIsNone(
             parse_turn_state_update(
@@ -474,6 +508,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             )
         )
 
+    # 日本語: ターンの指示文が、状態は TurnState の 1 つだけ・判断は「ツールを呼ぶ」か「回答する」のどちらか 1 つだけ、
+    # というループを定めることを検証します。
+    # English: Verify the turn loop prompt defines a single TurnState and a single decision per step: call a tool or answer.
     def test_turn_loop_messages_define_one_state_and_one_decision_loop(self):
         messages = [{"role": "user", "content": "鎌倉の紅葉を教えて"}]
         loop_messages = build_turn_loop_messages(messages)
@@ -495,6 +532,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertNotIn("research_summary", system_contents)
         self.assertEqual(messages, [{"role": "user", "content": "鎌倉の紅葉を教えて"}])
 
+    # 日本語: ツール予算を使い切ったときは、ツール呼び出しの選択肢を取り下げて回答を求める指示に変わることを検証します。
+    # English: Verify that once tool budgets are exhausted, the prompt withdraws the tool option and asks for the answer.
     def test_turn_loop_messages_withdraw_tools_at_search_limit(self):
         messages = [{"role": "user", "content": "鎌倉の紅葉を教えて"}]
         forced = build_turn_loop_messages(messages, force_answer=True)
@@ -535,6 +574,8 @@ class ChatStreamingTestCase(unittest.TestCase):
             [message["content"] for message in plain],
         )
 
+    # 日本語: 表示・保存する本文から、閉じタグのある封筒も閉じていない封筒も取り除くことを検証します。
+    # English: Verify both complete and unterminated envelopes are removed from the displayed and saved body.
     def test_strip_turn_state_update_removes_complete_and_unterminated_envelopes(self):
         self.assertEqual(strip_turn_state_update("通常の本文です。"), "通常の本文です。")
         self.assertEqual(
@@ -1384,6 +1425,10 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(persisted_messages[0][0], "説明します。")
         self.assertEqual(persisted_messages[0][1][1]["type"], "sandbox_artifact")
 
+    # 日本語: 生成 UI を求められたのに本文が文章だけだったとき、修復の LLM 呼び出しで UI のブロックを補い、sandbox_artifact
+    # として配信することを検証します。
+    # English: Verify that when generative UI was requested but the reply is plain text, a repair LLM call supplies the UI block and it
+    # is delivered as a sandbox_artifact.
     def test_background_generation_job_repairs_missing_requested_generative_ui(self):
         repaired_artifact = {
             "version": 1,
@@ -1440,8 +1485,10 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn('"type": "sandbox_artifact"', body)
         self.assertEqual(persisted_messages[0][1][1]["artifact"]["title"], "比較マップ")
 
-    # 日本語: Web検索拡張を行った際、バックグラウンド生成ジョブが検索ソース情報を応答文末に追加することを検証します。
-    # English: Verify that the background generation job appends web search sources to the end of the reply.
+    # 日本語: 辿ったリンク先を含む多数のソースでも、ツール結果のペイロードが文脈の文字数上限に収まり、全ソースの根拠 ID
+    # を保つことを検証します。
+    # English: Verify the tool-result payload stays within the context character cap for many followed sources and still keeps every
+    # evidence ID.
     def test_web_search_tool_payload_keeps_followed_sources_within_context_budget(self):
         sources = tuple(
             WebSearchSource(
@@ -1475,6 +1522,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         )
         self.assertTrue(all(item.get("page_text") for item in payload["sources"]))
 
+    # 日本語: Web 根拠の文脈予算が、最初の検索と追加の検索で共有され、許可されたすべてのツール実行に満額の取り分が配られることを検証します。
+    # English: Verify the web evidence context budget is shared by the first and extra searches and grants every permitted tool call
+    # its full share.
     def test_web_evidence_context_budget_is_shared_across_initial_and_extra_searches(self):
         sources = tuple(
             WebSearchSource(
@@ -1513,6 +1563,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         for evidence_id in (source.evidence_id for source in sources):
             self.assertTrue(all(evidence_id in message for message in serialized_messages))
 
+    # 日本語: Web検索拡張を行った際、バックグラウンド生成ジョブが検索ソース情報を応答文末に追加することを検証します。
+    # English: Verify that the background generation job appends web search sources to the end of the reply.
     def test_background_generation_job_appends_web_search_sources_to_reply(self):
         persisted_messages = []
         search_result = WebSearchResult(
@@ -1638,6 +1690,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("回答本文", body)
         self.assertNotIn("web_search_policy", body)
 
+    # 日本語: LLM が選んだ Web 検索の画像が、本文の指定位置にパートとして挿入され、保存と配信の両方に載ることを検証します。
+    # English: Verify the web search image chosen by the LLM is inserted as a part at its placement and appears in both persistence and
+    # delivery.
     def test_background_generation_job_publishes_llm_selected_web_search_image(self):
         persisted_records = []
         search_result = WebSearchResult(
@@ -1846,6 +1901,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("web_search_image", persisted_types)
         self.assertEqual(persisted_types[-1], "interactive_buttons")
 
+    # 日本語: 選択した参照（メモ・マイコンテキスト・共有プロンプト）の検索が、「回答までのステップ」として応答に追加されることを検証します。
+    # English: Verify lookups of selected references (memos, personal context, shared prompts) are appended to the reply as answer steps.
     def test_background_generation_job_appends_selected_reference_steps(self):
         persisted_messages = []
         selected_trace = [
@@ -3066,6 +3123,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("configuration error", logged_text)
         self.assertIn("OPENAI_API_KEY が未設定です。", logged_text)
 
+    # 日本語: 認証エラーとレート制限エラーが、ユーザーへの表示だけでなくログにも残ることを検証します。
+    # English: Verify authentication and rate-limit errors are logged, not only shown to the user.
     def test_background_generation_job_logs_authentication_and_rate_limit_errors(self):
         # 認証エラー・レート制限エラーもユーザー表示だけでなく必ずログに残ることを検証する。
         # Authentication and rate-limit errors must also be logged, not just shown to the user.
@@ -3180,6 +3239,10 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertLess(names.index("answer_draft_reset"), second_draft)
         self.assertIn("event: done", body)
 
+    # 日本語: 最終回答が出力トークン上限で途切れたら継続リクエストで続きを取得し、重複部分を除いて 1
+    # つの回答として保存することを検証します。
+    # English: Verify a final answer cut off by the output token limit is continued with another request and saved as one answer with
+    # the overlap removed.
     def test_background_generation_job_continues_token_limited_final_answer(self):
         persisted = []
         phases = []
@@ -3194,6 +3257,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 return limited_answer()
             self.assertEqual(messages[-2]["role"], "assistant")
             self.assertEqual(messages[-2]["content"], "first half")
+            # 繰り返し接頭部分は完全一致する場合だけ除去する。
             # The repeated prefix is removed only because it exactly overlaps.
             return iter(["first half and second half"])
 
@@ -3221,6 +3285,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("event: done", body)
         self.assertNotIn("event: incomplete", body)
 
+    # 日本語: 継続の回数上限に達したら、そこまでの部分回答を保存し、done ではなく incomplete イベントで終えることを検証します。
+    # English: Verify that after hitting the continuation limit, the partial answer is saved and the job ends with an incomplete event
+    # instead of done.
     def test_background_generation_job_persists_partial_after_continuation_limit(self):
         persisted = []
 
@@ -3520,6 +3587,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("配信済みの本文。", persisted[0])
         self.assertIn("未配信のバッファ本文。", persisted[0])
 
+    # 日本語: やり直した継続の最中に停止しても、回答が二重に保存されず、停止後の出力も含まれないことを検証します。
+    # English: Verify stopping during a restarted continuation never saves the answer twice or includes output produced after the stop.
     def test_stop_during_restarted_continuation_does_not_duplicate_the_answer(self):
         persisted = []
         job_holder = {}
@@ -3606,6 +3675,10 @@ class ChatStreamingTestCase(unittest.TestCase):
 
     # 日本語: 入力超過の回復経路ごとに、直前のやり取りが残ることを検証するヘルパーです。
     # English: Helper asserting the previous exchange survives one input-recovery path.
+    # 日本語: 入力が長すぎて文脈を縮めるとき（プロバイダー拒否とローカル予算超過の 2 通り）、任意の背景だけを捨て、
+    # 直前のやり取りは残すことを確認する共通処理です。
+    # English: Shared check that when the context must shrink (provider rejection or local budget overflow), only the optional
+    # background is dropped and the previous exchange is kept.
     def _assert_context_recovery_keeps_previous_exchange(self, recovery, recent, optional):
         calls = []
 
@@ -3648,6 +3721,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("event: done", body)
         self.assertNotIn(TURN_STATE_UPDATE_OPEN_TAG, body)
 
+    # 日本語: 「それなら増えたら?」のような追質問でも、意図を解決する前に文脈を縮めると直前のやり取りが消えないことを検証します。
+    # English: Verify that a follow-up like 'And if we grow?' keeps the previous exchange when context is shrunk before intent resolution.
     def test_context_recovery_keeps_the_previous_exchange_before_intent_resolution(self):
         recent = [
             {"role": "user", "content": "Compare plans A and B for a small team."},
@@ -3661,6 +3736,8 @@ class ChatStreamingTestCase(unittest.TestCase):
                     recovery, recent, optional,
                 )
 
+    # 日本語: 検索後に入力超過で文脈を縮めても、解決済みの追質問の目的（objective）が TurnState に残ることを検証します。
+    # English: Verify the resolved follow-up objective stays in TurnState even when the input is shrunk after a search.
     def test_resolved_followup_objective_survives_input_recovery_after_search(self):
         objective = "Compare plans A and B for a team growing to 50 people."
         recent = [
@@ -3883,6 +3960,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
             release_generation.set()
             self.assertTrue(generation_finished.wait(timeout=1.0))
+            # 保存完了の直後に終端イベントが出るため、最後のcallbackがスレッド境界を越えるのを待つ。
             # Persistence completes immediately before the terminal event marks the
             # background job done, so allow that final callback to cross the thread boundary.
             for _ in range(100):
@@ -3990,6 +4068,9 @@ class ChatStreamingTestCase(unittest.TestCase):
 
     # 日本語: 再生成エンドポイントのテストが共有する、DB／LLM境界の差し替え一式を返します。
     # English: The shared DB/LLM boundary patches the regenerate endpoint tests reuse.
+    # 日本語: 再生成ルート（chat_regenerate）のテストで共通に使う、外部依存（検索履歴・利用制限・保存など）の差し替え一式を返します。
+    # English: Returns the shared set of patches for external dependencies (history, limits, persistence) used by the chat_regenerate
+    # route tests.
     def _regenerate_patches(self, *, user_message: str):
         return (
             patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
@@ -4014,6 +4095,8 @@ class ChatStreamingTestCase(unittest.TestCase):
             patch("blueprints.chat.messages.save_message_to_db", new=AsyncMock(return_value=12)),
         )
 
+    # 日本語: 再生成リクエストの theme_preference が、有効な値なら再生成パイプラインの入力へそのまま渡ることを検証します。
+    # English: Verify a valid theme_preference in a regenerate request is forwarded unchanged to the regeneration pipeline input.
     def test_regenerate_forwards_valid_browser_theme_preference_to_pipeline(self):
         request = build_request(
             method="POST",
@@ -4766,6 +4849,10 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn('"response": "分散完了"', body)
         self.assertEqual(stream_response.headers["X-Chat-Generation-ID"], generation_id)
 
+    # 日本語: 別ワーカーで実行された生成について、ID 指定なしなら最新の生成を、ID 指定なら その生成を配信し、使用済みの ID
+    # は再利用できないことを検証します。
+    # English: Verify that for generations run on another worker, the stream endpoint serves the latest one by default or the requested
+    # ID, and a used ID cannot be reused.
     def test_chat_generation_stream_selects_latest_remote_generation_and_explicit_id(self):
         session = {"user_id": 89}
         fake_redis = _FakeRedis()
@@ -4863,6 +4950,9 @@ class ChatStreamingTestCase(unittest.TestCase):
                 )
         self.assertEqual(expired_response.status_code, 404)
 
+    # 日本語: 生成ジョブの開始に失敗したら、「最新の生成」ポインタを開始前の値に戻し、前回のイベントを読める状態を保つことを検証します。
+    # English: Verify that when a job fails to start, the latest-generation pointer is restored to its previous value so the earlier
+    # events stay readable.
     def test_failed_remote_generation_start_restores_previous_latest_pointer(self):
         fake_redis = _FakeRedis()
         service = ChatGenerationService(redis_client_getter=lambda: fake_redis)
@@ -4908,6 +4998,8 @@ class ChatStreamingTestCase(unittest.TestCase):
             None,
         )
 
+    # 日本語: 前回の生成が無い状態で開始に失敗したら、新しく作った「最新の生成」ポインタを削除することを検証します。
+    # English: Verify that when a start fails with no earlier generation, the newly written latest-generation pointer is deleted.
     def test_failed_generation_start_deletes_latest_pointer_when_none_existed(self):
         fake_redis = _FakeRedis()
         service = ChatGenerationService(redis_client_getter=lambda: fake_redis)
@@ -4930,6 +5022,9 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         self.assertIsNone(fake_redis.get(latest_key))
 
+    # 日本語: ポインタの書き込みは Redis に反映されたのに応答が失われた場合でも、前の値へ戻し、予約も解放することを検証します。
+    # English: Verify that even when the pointer write was applied by Redis but the reply was lost, the previous value is restored and
+    # the reservation released.
     def test_failed_latest_pointer_write_restores_previous_pointer(self):
         class _WriteThenRaiseRedis(_FakeRedis):
             def __init__(self):
@@ -4970,6 +5065,8 @@ class ChatStreamingTestCase(unittest.TestCase):
             None,
         )
 
+    # 日本語: 開始失敗の巻き戻し中に別の生成がポインタを進めていた場合、その新しいポインタを古い値で上書きしないことを検証します。
+    # English: Verify a rollback after a failed start never overwrites a pointer that another generation has advanced in the meantime.
     def test_failed_start_does_not_restore_over_a_newer_latest_pointer(self):
         fake_redis = _FakeRedis()
         service = ChatGenerationService(redis_client_getter=lambda: fake_redis)
@@ -5053,6 +5150,8 @@ DRAFT_OPENING = "検索せずにお答えできる内容なので、このまま
 # 日本語: 判断ステップの本文を、確定前に表示専用の下書きとして先に流す挙動（ADR 0020）を検証します。
 # English: Verify that a decision step's body streams ahead of confirmation as a display-only draft (ADR 0020).
 class AnswerDraftStreamingTestCase(unittest.TestCase):
+    # 日本語: 回答の下書き表示を検証するための生成ジョブ（永続化は何もしない）を作ります。
+    # English: Builds a generation job for the answer-draft tests; persistence is a no-op.
     def make_job(self, **kwargs):
         return ChatGenerationJob(
             conversation_messages=[{"role": "user", "content": "説明して"}],
@@ -5061,6 +5160,8 @@ class AnswerDraftStreamingTestCase(unittest.TestCase):
             **kwargs,
         )
 
+    # 日本語: 外部呼び出しを差し替えたうえで、ジョブを同期的に最後まで実行します。LLM ストリームは stream で与えます。
+    # English: Runs the job synchronously to completion with external calls patched; the LLM stream comes from stream.
     def run_job(self, job, stream, *, max_retries="0"):
         with (
             patch.dict("os.environ", {"LLM_STREAM_MAX_RETRIES": max_retries}, clear=False),

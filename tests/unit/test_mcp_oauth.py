@@ -1,3 +1,10 @@
+"""MCP の OAuth 実装（mcp_oauth）の、CIMD クライアント、同意画面、認可コード、
+リフレッシュトークンのローテーション、スコープ検証を検証するテスト。
+
+Tests the MCP OAuth implementation (mcp_oauth): CIMD clients, consent, authorization codes, refresh token rotation and scope
+validation.
+"""
+
 import asyncio
 import unittest
 from contextlib import asynccontextmanager
@@ -17,6 +24,8 @@ from services.repositories.mcp_oauth_repository import McpOAuthRepository
 SERVER_URL = "https://chat.example.test/mcp"
 
 
+# session_scope の代役。begin() でトランザクションの代役を返す、何もしないセッションを渡す。
+# Stand-in for session_scope that yields a no-op session whose begin() returns a no-op transaction.
 @asynccontextmanager
 async def _session_scope():
     class _Transaction:
@@ -33,6 +42,8 @@ async def _session_scope():
     yield _Session()
 
 
+# 認可リクエストのパラメータを作る。scopes を省略するとプロンプト書き込みスコープだけを要求する。
+# Builds authorization parameters; omitting scopes requests only the prompt-write scope.
 def _make_params(resource, scopes=None):
     return AuthorizationParams(
         state="state",
@@ -44,6 +55,8 @@ def _make_params(resource, scopes=None):
     )
 
 
+# DB やネットワークをモックし、認可・トークン・クライアント登録の各経路の判断を確かめる。
+# Mocks the database and network and checks the decisions on the authorization, token and client registration paths.
 class McpOAuthTestCase(unittest.TestCase):
     def test_cimd_idn_fetch_is_pinned_without_environment_credentials_or_signed_url_logs(self):
         client_id = "https://例え.テスト/metadata?token=SECRET"
@@ -303,6 +316,8 @@ class McpOAuthTestCase(unittest.TestCase):
         self.assertEqual(str(client.client_id), "dcr-client")
         repository.load_registered_client.assert_awaited_once()
 
+    # 保存済みリフレッシュトークンのテスト用の値を作る。
+    # Builds a stored refresh token value for tests.
     def _refresh_token(self, scopes=None, grant_id=None):
         return mcp_oauth.StoredRefreshToken(
             token="refresh-token-value",
@@ -314,6 +329,8 @@ class McpOAuthTestCase(unittest.TestCase):
             resource=SERVER_URL,
         )
 
+    # リポジトリが返すリフレッシュトークン行の代役を作る。replaced_at でローテーション済みの状態を再現する。
+    # Builds a stand-in for the refresh token row returned by the repository; replaced_at simulates an already rotated token.
     def _refresh_record(self, *, replaced_at=None, scope_version=None):
         token = SimpleNamespace(
             grant_id=uuid4(),

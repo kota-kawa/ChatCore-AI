@@ -1,3 +1,9 @@
+"""services.db の接続 URL の組み立て（psycopg 3）と、
+非同期エンジンのコネクションプール上限を検証するテスト。
+
+Tests how services.db builds the psycopg 3 database URL and bounds the async engine's connection pool.
+"""
+
 from __future__ import annotations
 
 import os
@@ -7,6 +13,10 @@ from unittest.mock import patch
 import services.db as database
 
 
+# 日本語: 環境変数を差し替えて、接続 URL とエンジン設定を確認します。
+# テストごとにモジュールのエンジンを初期化し直します。
+# English: Swap environment variables and check the URL and engine settings; the module-level engine is reset after
+# every test.
 class AsyncEngineConfigurationTests(unittest.TestCase):
     def tearDown(self) -> None:
         database._engine = None

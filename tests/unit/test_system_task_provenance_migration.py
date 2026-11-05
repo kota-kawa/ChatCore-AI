@@ -1,3 +1,10 @@
+"""既定（システム）タスクの出所を記録する Alembic マイグレーション（20260728_02）を検証するテスト。
+親リビジョンと、出荷済みの全タスクキーが固定の fingerprint を持つこと、カスタマイズ済みタスクが一致しないことを確かめる。
+
+Tests the Alembic migration 20260728_02 that records the provenance of default (system) tasks:
+its parent revision, a frozen fingerprint for every shipped task key, and non-matching customized tasks.
+"""
+
 import importlib.util
 import json
 import unittest
@@ -13,6 +20,8 @@ MIGRATION_PATH = (
 TASKS_PATH = REPO_ROOT / "frontend" / "data" / "default_tasks.json"
 
 
+# マイグレーションのファイルを直接読み込んでモジュールとして返す補助関数（alembic の実行なし）。
+# Helper that loads the migration file directly as a module, without running Alembic.
 def _load_migration_module():
     spec = importlib.util.spec_from_file_location("system_task_migration", MIGRATION_PATH)
     if spec is None or spec.loader is None:
@@ -22,6 +31,8 @@ def _load_migration_module():
     return module
 
 
+# リビジョンの連鎖と、タスク本文の fingerprint による照合を検証するテストクラス。
+# Test class for the revision chain and matching by task-text fingerprints.
 class SystemTaskProvenanceMigrationTestCase(unittest.TestCase):
     def test_migration_follows_locale_preference_revision(self):
         module = _load_migration_module()

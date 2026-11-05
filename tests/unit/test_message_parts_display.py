@@ -1,4 +1,7 @@
-"""メッセージパーツの表示順規約（回答トレースとWeb検索画像の並び）を検証する。"""
+"""メッセージパーツの表示順規約（回答トレースとWeb検索画像の並び）を検証する。
+
+Verifies the display-order contract of message parts (the answer trace and web search images).
+"""
 
 import unittest
 
@@ -24,6 +27,8 @@ IMAGE_PART = {
 }
 
 
+# 回答トレースの Markdown ブロックを組み立てる。with_sources=True なら検索結果（出典）付きのトレースにする。
+# Builds an answer-trace Markdown block; with_sources=True includes search results as sources.
 def _trace_markdown(*, with_sources: bool = False) -> str:
     if not with_sources:
         return build_web_search_trace_markdown(
@@ -48,6 +53,8 @@ def _trace_markdown(*, with_sources: bool = False) -> str:
     )
 
 
+# split_answer_trace_block が先頭のトレースブロックと回答本文を分けることを確かめる。
+# Checks split_answer_trace_block separates the trace block from the answer text.
 class SplitAnswerTraceBlockTestCase(unittest.TestCase):
     def test_splits_the_trace_block_off_the_answer_text(self):
         trace = _trace_markdown()
@@ -73,6 +80,8 @@ class SplitAnswerTraceBlockTestCase(unittest.TestCase):
         self.assertEqual(remainder, "本文だけの回答")
 
 
+# 画像の枚数上限と、トレース・画像・本文の並び（旧形式を含む）が冪等に整うことを確かめる。
+# Checks the image cap and that trace, image and text ordering (including legacy shapes) is normalised idempotently.
 class NormalizeMessagePartsForDisplayTestCase(unittest.TestCase):
     def test_at_most_five_images_are_retained_per_reply(self):
         images = [
@@ -146,6 +155,8 @@ class NormalizeMessagePartsForDisplayTestCase(unittest.TestCase):
         self.assertEqual(normalized[0]["text"], f"{trace}\n\n本文です。")
 
 
+# 表示規約の適用がトレースブロックを分割しないことを確かめる。
+# Checks applying the visual part contract never splits the trace block.
 class ApplyVisualPartContractTestCase(unittest.TestCase):
     def test_contract_does_not_split_the_trace_block(self):
         # 引用解決が本文テキストを書き戻す前段では、テキストパートを分割しない。

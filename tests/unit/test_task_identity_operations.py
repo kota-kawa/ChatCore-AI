@@ -1,3 +1,12 @@
+"""タスクを task_id で扱う操作（追加・編集・並べ替え・削除）とタスク起動メッセージの扱いを検証するテスト。
+サービス・リポジトリへの委譲、楽観ロック用の expected_updated_at の受け渡し、
+起動入力を LLM 用コピーにだけ目印付けする処理を確かめる。
+
+Tests for task operations keyed by task_id (add, edit, reorder, delete) and for task-launch messages:
+delegation to services and repositories, passing expected_updated_at for optimistic locking,
+and labelling launch input only in the LLM copy.
+"""
+
 import asyncio
 import json
 import unittest
@@ -19,6 +28,8 @@ from services.chat_service import edit_task as edit_task_service
 from tests.helpers.request_helpers import build_request
 
 
+# タスクの ID を軸にした操作が非同期サービスへ委譲され、DB の API オブジェクトを渡さないことを検証するテストクラス。
+# Test class verifying that ID-based task operations delegate to the async services without passing database API objects.
 class TaskIdentityOperationsTestCase(unittest.TestCase):
     def test_chat_task_service_returns_created_task_id(self):
         fake_repository = SimpleNamespace(add_task=AsyncMock(return_value=42))

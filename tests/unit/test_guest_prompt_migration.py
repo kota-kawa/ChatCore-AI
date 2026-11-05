@@ -1,3 +1,8 @@
+"""ゲスト投稿用 Alembic migration（guest_prompt_submissions の追加と prompts.user_id の NULL 許可）の SQL を静的に検証するテスト。
+
+Static tests of the guest prompt Alembic migration (guest_prompt_submissions table and nullable prompts.user_id).
+"""
+
 import unittest
 from pathlib import Path
 
@@ -9,6 +14,8 @@ MIGRATION_PATH = (
 )
 
 
+# migration ファイルの SQL 文字列を読み、ゲスト所有とハッシュ化された識別子の索引が含まれることを確かめる。
+# Reads the migration SQL and checks it allows guest ownership and indexes the hashed identifiers.
 class GuestPromptMigrationTestCase(unittest.TestCase):
     def test_migration_allows_guest_owner_and_indexes_hashed_identifiers(self):
         sql = MIGRATION_PATH.read_text()

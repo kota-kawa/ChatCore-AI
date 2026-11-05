@@ -1,3 +1,10 @@
+"""ログイン中ユーザーのメールアドレス変更（現在のアドレスと新しいアドレスの 2 段階確認）
+の開始・確認と、プロフィール API から変更できないことを検証するテスト。
+
+Tests the email-address change flow for a signed-in user (two-step confirmation at the current and new
+addresses) and that the profile API cannot change the address.
+"""
+
 import asyncio
 import json
 import threading
@@ -14,6 +21,8 @@ from blueprints.chat.profile import (
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: メールアドレス変更の API への POST リクエストを作ります。session でセッション状態を再現します。
+# English: Build a POST request to an email-change API; session reproduces the session state.
 def make_request(path, json_body, session=None):
     return build_request(
         method="POST",
@@ -23,10 +32,10 @@ def make_request(path, json_body, session=None):
     )
 
 
-# 日本語: Request Email Changeの機能や仕様を検証するテストクラスです。
+# 日本語: メールアドレス変更の開始（request_email_change）の入力検証と、確認コードの送信を検証する。
 # English: Test case class to verify the functionality and specifications of Request Email Change.
 class RequestEmailChangeTestCase(unittest.TestCase):
-    # 日本語: 拒否するunauthenticatedrequestsことを検証します。
+    # 日本語: 未ログインのリクエストが 401 で拒否されることを検証します。
     # English: Verify that rejects unauthenticated requests.
     def test_rejects_unauthenticated_requests(self):
         request = make_request(
@@ -36,7 +45,7 @@ class RequestEmailChangeTestCase(unittest.TestCase):
         response = asyncio.run(request_email_change(request))
         self.assertEqual(response.status_code, 401)
 
-    # 日本語: 拒否するメールmatching現在アドレスことを検証します。
+    # 日本語: 現在のアドレスと同じメールアドレスへの変更が拒否されることを検証します。
     # English: Verify that rejects email matching current address.
     def test_rejects_email_matching_current_address(self):
         session = {"user_id": 1, "csrf_token": "x"}
@@ -55,7 +64,7 @@ class RequestEmailChangeTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("同じ", json.loads(response.body.decode("utf-8"))["error"])
 
-    # 日本語: anotherユーザーによって、拒否するメールownedことを検証します。
+    # 日本語: 他のユーザーが使っているメールアドレスが拒否されることを検証します。
     # English: Verify that rejects email owned by another user.
     def test_rejects_email_owned_by_another_user(self):
         session = {"user_id": 1}
@@ -83,7 +92,7 @@ class RequestEmailChangeTestCase(unittest.TestCase):
             json.loads(response.body.decode("utf-8"))["error"],
         )
 
-    # 日本語: 拒否するmalformedメールことを検証します。
+    # 日本語: 形式が不正なメールアドレスが拒否されることを検証します。
     # English: Verify that rejects malformed email.
     def test_rejects_malformed_email(self):
         session = {"user_id": 1}
@@ -95,7 +104,7 @@ class RequestEmailChangeTestCase(unittest.TestCase):
         response = asyncio.run(request_email_change(request))
         self.assertEqual(response.status_code, 400)
 
-    # 日本語: newlineインジェクションを使用する場合、拒否するメールことを検証します。
+    # 日本語: 改行を含むメールアドレス（ヘッダーインジェクション）が拒否されることを検証します。
     # English: Verify that rejects email with newline injection.
     def test_rejects_email_with_newline_injection(self):
         session = {"user_id": 1}
@@ -107,7 +116,7 @@ class RequestEmailChangeTestCase(unittest.TestCase):
         response = asyncio.run(request_email_change(request))
         self.assertEqual(response.status_code, 400)
 
-    # 日本語: およびnewメール、セッション内の、成功するにおける、保存するコードことを検証します。
+    # 日本語: 成功時に、確認コードと新しいメールアドレスがセッションに保存されることを検証します。
     # English: Verify that stores code and new email in session on success.
     def test_stores_code_and_new_email_in_session_on_success(self):
         session = {"user_id": 1}
@@ -152,6 +161,7 @@ class RequestEmailChangeTestCase(unittest.TestCase):
         self.assertEqual(state["new_email"], "new@example.com")
         self.assertEqual(state["issued_at"], 1000)
         self.assertEqual(state["attempts"], 0)
+        # 最初の確認メールは、現在のアドレスへ送られなければならない。
         # The first verification mail must be sent to the current address.
         mock_send.assert_called_once()
         kwargs = mock_send.call_args.kwargs
@@ -200,9 +210,11 @@ class RequestEmailChangeTestCase(unittest.TestCase):
         mock_send.assert_not_called()
 
 
-# 日本語: Confirm Email Changeの機能や仕様を検証するテストクラスです。
+# 日本語: メールアドレス変更の確認（confirm_email_change）の、コード照合・期限・試行回数・確定を検証する。
 # English: Test case class to verify the functionality and specifications of Confirm Email Change.
 class ConfirmEmailChangeTestCase(unittest.TestCase):
+    # 日本語: メールアドレス変更の途中状態（段階、コード、発行時刻、試行回数）を持つセッションを作ります。
+    # English: Build a session holding an in-progress email change (stage, code, issue time, attempts).
     def _session_with_state(self, **overrides):
         state = {
             "stage": EMAIL_CHANGE_STAGE_NEW,
@@ -215,7 +227,7 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
         state.update(overrides)
         return {"user_id": 1, EMAIL_CHANGE_SESSION_KEY: state}
 
-    # 日本語: なしpendingリクエストのとき、拒否することを検証します。
+    # 日本語: 保留中の変更リクエストが無いとき、確認が拒否されることを検証します。
     # English: Verify that rejects when no pending request.
     def test_rejects_when_no_pending_request(self):
         request = make_request(
@@ -226,7 +238,7 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
         response = asyncio.run(confirm_email_change(request))
         self.assertEqual(response.status_code, 400)
 
-    # 日本語: 期限切れのコードがclearedことを検証します。
+    # 日本語: 期限切れのコードが破棄されることを検証します。
     # English: Verify that expired code is cleared.
     def test_expired_code_is_cleared(self):
         session = self._session_with_state()
@@ -242,7 +254,7 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertNotIn(EMAIL_CHANGE_SESSION_KEY, session)
 
-    # 日本語: 誤ったコードincrementsattemptsことを検証します。
+    # 日本語: 誤ったコードを送ると、試行回数が増えることを検証します。
     # English: Verify that wrong code increments attempts.
     def test_wrong_code_increments_attempts(self):
         session = self._session_with_state()
@@ -258,7 +270,7 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(session[EMAIL_CHANGE_SESSION_KEY]["attempts"], 1)
 
-    # 日本語: toomanyfailuresクリアするセッションことを検証します。
+    # 日本語: 失敗が上限を超えると 429 になり、セッションの変更状態が消去されることを検証します。
     # English: Verify that too many failures clears session.
     def test_too_many_failures_clears_session(self):
         session = self._session_with_state(attempts=4)
@@ -274,7 +286,7 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 429)
         self.assertNotIn(EMAIL_CHANGE_SESSION_KEY, session)
 
-    # 日本語: newアドレスへ、現在メールconfirmation送信するコードことを検証します。
+    # 日本語: 現在のメールアドレスの確認が済むと、新しいアドレスへコードが送られることを検証します。
     # English: Verify that current email confirmation sends code to new address.
     def test_current_email_confirmation_sends_code_to_new_address(self):
         session = self._session_with_state(stage=EMAIL_CHANGE_STAGE_CURRENT)
@@ -345,7 +357,7 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
         self.assertEqual(session["user_email"], "new@example.com")
         mock_commit.assert_called_once_with(1, "new@example.com")
 
-    # 日本語: およびconfirm返却する409、メールtakenbetweenリクエストことを検証します。
+    # 日本語: リクエストから確認までの間にメールアドレスが他者に使われた場合、409 を返すことを検証します。
     # English: Verify that email taken between request and confirm returns 409.
     def test_email_taken_between_request_and_confirm_returns_409(self):
         session = self._session_with_state()
@@ -367,10 +379,10 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
 
 
-# 日本語: Profile Endpoint Refuses Email Changeの機能や仕様を検証するテストクラスです。
+# 日本語: プロフィール更新 API から、確認なしにメールアドレスを変えられないことを検証する。
 # English: Test case class to verify the functionality and specifications of Profile Endpoint Refuses Email Change.
 class ProfileEndpointRefusesEmailChangeTestCase(unittest.TestCase):
-    # 日本語: differentメール返却する400を使用する場合、プロフィールpostことを検証します。
+    # 日本語: プロフィール更新に別のメールアドレスが付いていると、400 で拒否されることを検証します。
     # English: Verify that profile post with different email returns 400.
     def test_profile_post_with_different_email_returns_400(self):
         from blueprints.chat.profile import user_profile

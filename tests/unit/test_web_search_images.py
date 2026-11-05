@@ -1,3 +1,10 @@
+"""Web 検索結果の画像選択 (services.web_search_images) のテスト。
+非写真 URL の除外、LLM による画像選択と配置計画、回答パーツへの挿入を確かめる。
+
+Tests for web-search image selection (services.web_search_images): non-photo URL filtering,
+LLM image selection and placement plans, and insertion into answer parts.
+"""
+
 import unittest
 from unittest.mock import patch
 
@@ -21,6 +28,8 @@ def choose_web_search_image(user_question, result):
     return selections[0] if selections else None
 
 
+# 単一の選択結果を複数形 API の形式 (リスト) に包んで渡すテスト用アダプタ。
+# Test adapter that wraps a single selection into the list form the plural API expects.
 def append_web_search_image_part(parts, selection, *, fallback_text=""):
     return append_web_search_image_parts(
         parts,
@@ -29,6 +38,8 @@ def append_web_search_image_part(parts, selection, *, fallback_text=""):
     )
 
 
+# 画像候補を 9 件持つ 1 ソースの検索結果を作る。ロゴ (logo.svg) と空枠素材 (noimage.png) をわざと混ぜてある。
+# Builds a one-source search result with nine image candidates, deliberately including a logo (logo.svg) and a placeholder (noimage.png).
 def _result() -> web_search.WebSearchResult:
     return web_search.WebSearchResult(
         query="京都の紅葉名所",
@@ -92,6 +103,8 @@ def _result() -> web_search.WebSearchResult:
     )
 
 
+# URL の文字列だけで、プレースホルダやロゴ・アイコンなど写真ではない画像を判定する関数のテスト。
+# Tests for the URL-only check that rejects non-photo images such as placeholders, logos and icons.
 class NonPhotoImageUrlTestCase(unittest.TestCase):
     def test_placeholders_and_site_furniture_are_rejected(self):
         for url in (
@@ -124,7 +137,12 @@ class NonPhotoImageUrlTestCase(unittest.TestCase):
                 self.assertFalse(_is_non_photo_image_url(url))
 
 
+# 選定 LLM (get_llm_json_response) をモックし、プロンプトの内容、応答の解釈、回答パーツへの挿入結果を確かめる。
+# Mocks the selection LLM (get_llm_json_response) and checks the prompt content, response parsing and the resulting answer parts.
 class WebSearchImageSelectionTestCase(unittest.TestCase):
+    # LLM が選んだ画像の URL・代替テキスト・出典・配置が選択結果に反映され、選定プロンプトに必要な指示が入っていること。
+    # The chosen image's URL, alt text, source and placement appear in the selection,
+    # and the selection prompt carries the required instructions.
     def test_llm_can_select_one_relevant_image(self):
         with patch(
             "services.web_search_images.get_llm_json_response",
@@ -178,6 +196,8 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             IMAGE_SELECTION_REASONING_FORMAT,
         )
 
+    # LLM が 6 件選んでも採用は 5 件までで、代替テキストの指定が無い画像は候補側の alt を使う。
+    # Even if the LLM picks six, only five are used, and an image with no alt text from the LLM keeps the candidate's own alt.
     def test_llm_can_select_up_to_five_relevant_images(self):
         with patch(
             "services.web_search_images.get_llm_json_response",
@@ -273,6 +293,8 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
                 )
             )
 
+    # 候補に無い画像 ID が返されても表示しない (LLM の出力を信用しきらない)。
+    # An image id that is not among the candidates is never rendered (the LLM output is not trusted blindly).
     def test_unknown_candidate_id_is_never_rendered(self):
         with patch(
             "services.web_search_images.get_llm_json_response",
@@ -331,6 +353,8 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         self.assertEqual(parts[2]["text"], " 説明です。東慶寺")
         self.assertEqual(parts[4]["text"], " 説明です。")
 
+    # ストリーミング中は、LLM が指定したアンカー (明月院) の直後の文字位置で画像を出す。戻り値は (文字位置, 画像の番号)。
+    # While streaming, the image is revealed right after the LLM-specified anchor (明月院). The return value is (text offset, image index).
     def test_streaming_reveals_an_image_at_the_llm_planned_boundary(self):
         images = build_web_search_image_parts(
             [
@@ -349,6 +373,8 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             (3, 0),
         )
 
+    # アンカーの指定が無い場合に、画像の alt などから配置先を推測しない (文頭を既定の位置にする)。
+    # With no anchor specified, the placement is not inferred from image metadata such as alt text (the start of the answer is the default).
     def test_backend_does_not_infer_a_subject_from_image_metadata(self):
         images = build_web_search_image_parts(
             [
@@ -365,6 +391,8 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             (0, 0),
         )
 
+    # 同じ URL は重複させず、画像は最大 5 件まで追加する。
+    # Duplicate URLs are collapsed and at most five images are appended.
     def test_appends_up_to_five_images_and_deduplicates_urls(self):
         selections = [
             {
@@ -417,6 +445,8 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
         self.assertEqual(parts[1]["image"]["url"], existing_image["image"]["url"])
         self.assertEqual(parts[3]["image"]["url"], "https://example.com/images/new.jpg")
 
+    # 回答に生成UI (sandbox_artifact) が含まれるときは画像を足さない。
+    # No image is added when the answer already contains a generated UI (sandbox_artifact).
     def test_does_not_add_image_when_a_generated_ui_is_present(self):
         parts = append_web_search_image_part(
             [
@@ -438,6 +468,8 @@ class WebSearchImageSelectionTestCase(unittest.TestCase):
             ],
         )
 
+    # javascript: など http(s) 以外の URL は画像として採用しない。
+    # URLs that are not http(s), such as javascript:, are not accepted as images.
     def test_rejects_non_http_image_selection(self):
         part = append_web_search_image_part(
             None,

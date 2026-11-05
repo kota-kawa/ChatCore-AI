@@ -1,3 +1,8 @@
+"""メモの埋め込みベクトル保存（store_memo_embedding）が、期待するリビジョンで更新を絞り込むことを検証するテスト。
+
+Tests that store_memo_embedding restricts its update to the expected memo revision.
+"""
+
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -6,6 +11,8 @@ from sqlalchemy.dialects.postgresql import dialect
 from services.memo_embedding_service import store_memo_embedding
 
 
+# session_scope の代役。with ブロックに渡されたセッションをそのまま返す。
+# Stand-in for session_scope that yields the session it was given.
 class _SessionScope:
     def __init__(self, session):
         self.session = session
@@ -17,6 +24,8 @@ class _SessionScope:
         return False
 
 
+# 実行された UPDATE をコンパイルし、メモ ID と期待リビジョンが条件に入っていることを確かめる。
+# Compiles the executed UPDATE and checks the memo id and expected revision are part of its conditions.
 class MemoEmbeddingRevisionTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_store_embedding_uses_native_async_revision_guard(self):
         session = MagicMock()

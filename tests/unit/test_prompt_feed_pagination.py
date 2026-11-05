@@ -1,3 +1,10 @@
+"""公開プロンプトのフィードのページング（blueprints.prompt_share.prompt_share_api）を検証するテスト。
+カーソルの符号化と不正値の拒否、件数・フィルターの正規化、ルートからサービスへの引き渡しを確かめる。
+
+Tests for the public prompt feed pagination (blueprints.prompt_share.prompt_share_api):
+cursor encoding and rejection of malformed values, limit and filter normalization, and how the route passes them to the service.
+"""
+
 import asyncio
 import json
 import unittest
@@ -17,6 +24,8 @@ from services.api_errors import ApiServiceError
 from tests.helpers.request_helpers import build_request
 
 
+# フィードのカーソル・件数・フィルターの扱いとルートの委譲を検証するテストクラス。
+# Test class for feed cursor, limit and filter handling and the route's delegation to the service.
 class PromptFeedPaginationTestCase(unittest.TestCase):
     def test_cursor_round_trip_preserves_view_count_timestamp_and_id(self):
         cursor = _encode_prompt_feed_cursor(

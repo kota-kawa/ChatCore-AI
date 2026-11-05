@@ -1,3 +1,10 @@
+"""MCP サーバーの共有コンテンツ・プロンプト／スキル公開・メモ取得ツールが、
+サービス層へ上限つきの引数で委譲し、画像の保存と後始末を正しく扱うことを検証するテスト。
+
+Tests that the MCP server's shared-content, prompt/skill publishing and memo tools delegate to the service layer with bounded
+arguments and handle image storage and cleanup correctly.
+"""
+
 import asyncio
 import os
 import unittest
@@ -17,6 +24,8 @@ from services.shared_content_service import (
     PublicSkillResourceMetadata,
 )
 
+# MCP サーバーを生成するのに必要な最小の環境変数（開発環境用）。
+# Minimal environment variables (development) needed to build the MCP server.
 MCP_ENVIRONMENT = {
     "MCP_PUBLIC_BASE_URL": "http://localhost:5004",
     "MCP_OAUTH_ENCRYPTION_KEYS": "5JZY8WHt_PU2CaUYi7ccVLq_rNfYQsg6dCXoyxa0Y0I=",
@@ -24,7 +33,11 @@ MCP_ENVIRONMENT = {
 }
 
 
+# mcp_server に登録されたツールを直接呼び、サービス層のモックへ渡る引数と返り値の形を確かめる。
+# Calls the tools registered on mcp_server directly and checks the arguments passed to mocked services and the shape of the results.
 class McpContentToolTestCase(unittest.TestCase):
+    # テスト用の環境変数を当てて MCP サーバーを生成する。
+    # Builds an MCP server under the test environment variables.
     def _server(self):
         with patch.dict(os.environ, MCP_ENVIRONMENT, clear=False):
             return mcp_server._create_mcp()

@@ -1,3 +1,8 @@
+"""ゲストの 1 日あたりのチャットルーム作成上限（POST /api/new_chat_room）を検証するテスト。
+
+Tests the guest daily limit on creating chat rooms (POST /api/new_chat_room).
+"""
+
 import asyncio
 import json
 import unittest
