@@ -1,3 +1,6 @@
+// 会話分岐の切り替えと操作の無効化を検証する。
+// Tests branch navigator behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

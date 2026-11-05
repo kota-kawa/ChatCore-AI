@@ -1,3 +1,6 @@
+// 投稿カテゴリの定義と表示を検証する。
+// Tests prompt category registry behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

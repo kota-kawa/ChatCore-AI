@@ -1,3 +1,6 @@
+// 明示操作での貼り付けとテキスト・画像の取り込みを検証する。
+// Tests chat clipboard paste behavior.
+
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";

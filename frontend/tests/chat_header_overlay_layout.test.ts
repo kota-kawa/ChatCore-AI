@@ -1,3 +1,6 @@
+// 会話上に重ねるヘッダーとポインター操作領域を検証する。
+// Tests chat header overlay layout behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

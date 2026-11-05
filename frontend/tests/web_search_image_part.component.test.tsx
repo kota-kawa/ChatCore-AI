@@ -1,3 +1,6 @@
+// 検索画像の出典リンクと読み込み失敗時の非表示を検証する。
+// Tests web search image part behavior.
+
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

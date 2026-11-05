@@ -1,3 +1,6 @@
+// メモ画面の表示領域への適合を検証する。
+// Tests memo viewport behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

@@ -1,3 +1,6 @@
+// テーマの既定値・明示設定と保存を検証する。
+// Tests theme behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

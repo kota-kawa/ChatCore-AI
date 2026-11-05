@@ -1,3 +1,6 @@
+// 投稿カードのキーボード操作を検証する。
+// Tests prompt card keyboard behavior.
+
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

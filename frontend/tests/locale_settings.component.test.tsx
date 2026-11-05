@@ -1,3 +1,6 @@
+// 言語設定の保存とアクセシブルな選択表示を検証する。
+// Tests locale settings behavior.
+
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";

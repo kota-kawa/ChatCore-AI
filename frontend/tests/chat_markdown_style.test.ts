@@ -1,3 +1,6 @@
+// 回答Markdownの読み込み順とコード表示を検証する。
+// Tests chat markdown style behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

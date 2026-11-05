@@ -1,3 +1,6 @@
+// 投稿カードから詳細へのリンクを検証する。
+// Tests prompt card detail link behavior.
+
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

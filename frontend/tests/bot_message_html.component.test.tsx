@@ -1,3 +1,6 @@
+// 回答内の出典・アイコンと危険なURLの拒否を検証する。
+// Tests bot message html behavior.
+
 import { render } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
 

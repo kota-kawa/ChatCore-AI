@@ -1,3 +1,6 @@
+// メモの検索・操作ツールバーを検証する。
+// Tests memo toolbar behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";

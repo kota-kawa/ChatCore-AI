@@ -1,3 +1,6 @@
+// 認証状態キャッシュの読み書きと不正値の扱いを検証する。
+// Tests auth state cache behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

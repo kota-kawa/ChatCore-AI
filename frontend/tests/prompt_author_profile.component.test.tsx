@@ -1,3 +1,6 @@
+// 公開投稿の作者プロフィールを検証する。
+// Tests prompt author profile behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

@@ -1,3 +1,6 @@
+// メモ一覧表示モードの切り替えを検証する。
+// Tests memo view switcher behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";

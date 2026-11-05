@@ -1,3 +1,6 @@
+// コピーブロックの改行・折り返しと操作位置を検証する。
+// Tests copy block style behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

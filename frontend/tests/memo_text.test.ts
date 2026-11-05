@@ -1,3 +1,6 @@
+// メモ本文の表示用テキスト処理を検証する。
+// Tests memo text behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

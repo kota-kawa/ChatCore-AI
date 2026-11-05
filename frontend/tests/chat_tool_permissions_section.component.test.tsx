@@ -1,3 +1,6 @@
+// 常時承認されたツール権限の表示と取り消しを検証する。
+// Tests chat tool permissions section behavior.
+
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

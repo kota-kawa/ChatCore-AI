@@ -1,3 +1,6 @@
+// スマートフォン幅のチャットヘッダーを検証する。
+// Tests mobile chat header style behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

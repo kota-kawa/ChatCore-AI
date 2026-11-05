@@ -1,3 +1,6 @@
+// メモ一覧の分割取得と更新時の送信容量制限を検証する。
+// Tests memo list pagination behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -51,6 +54,7 @@ test("buildMemoListUrl asks for the trash only in the trash scope and keeps sear
   }
 });
 
+// 一覧の取得件数はサーバーの1要求あたり上限に従う。
 // ---------------------------------------------------------------------------
 // loadMemoList: the backend caps one request at MAX_MEMO_LIST_REQUEST_LIMIT rows
 // ---------------------------------------------------------------------------
@@ -126,6 +130,7 @@ test("loadMemoList stops once the server runs out of rows", async () => {
   }
 });
 
+// keepalive送信はブラウザーの64KiB未満の本文に限る。
 // ---------------------------------------------------------------------------
 // updateMemo: keepalive is only usable for bodies under the browser's 64KiB cap
 // ---------------------------------------------------------------------------

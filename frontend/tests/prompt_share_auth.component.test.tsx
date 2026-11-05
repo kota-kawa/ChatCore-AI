@@ -1,3 +1,6 @@
+// 公開投稿画面の認証状態を検証する。
+// Tests prompt share auth behavior.
+
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

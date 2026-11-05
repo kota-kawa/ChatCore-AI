@@ -1,3 +1,6 @@
+// 共有投稿の関連投稿とSkillリソース表示を検証する。
+// Tests shared prompt page behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";

@@ -1,3 +1,6 @@
+// 回答生成中の自動スクロール抑制と再接続を検証する。
+// Tests generation auto scroll behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import { useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";

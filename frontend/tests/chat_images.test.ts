@@ -1,3 +1,6 @@
+// 画像対応モデルの制約と添付プレビューを検証する。
+// Tests chat images behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

@@ -1,3 +1,6 @@
+// フレーム埋め込みを拒否するセキュリティヘッダーを検証する。
+// Tests security headers behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

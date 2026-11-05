@@ -1,3 +1,6 @@
+// 投稿カードの本文プレビューを検証する。
+// Tests prompt card preview behavior.
+
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

@@ -1,3 +1,6 @@
+// デモコードの発行・停止と利用状態の表示を検証する。
+// Tests admin demo codes panel behavior.
+
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";

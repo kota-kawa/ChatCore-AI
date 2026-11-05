@@ -1,3 +1,6 @@
+// メモ詳細モーダルの配置規則を検証する。
+// Tests memo detail modal layout behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

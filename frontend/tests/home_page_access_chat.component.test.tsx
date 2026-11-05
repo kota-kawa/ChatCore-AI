@@ -1,3 +1,6 @@
+// ルーム一覧からのチャット表示とサイドバー初期状態を検証する。
+// Tests home page access chat behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

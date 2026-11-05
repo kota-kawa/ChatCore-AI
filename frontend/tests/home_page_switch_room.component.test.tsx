@@ -1,3 +1,6 @@
+// ルーム切り替え時の履歴読み込みと再利用を検証する。
+// Tests home page switch room behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

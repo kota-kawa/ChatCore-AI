@@ -1,3 +1,6 @@
+// 投稿カードのスタイル契約を検証する。
+// Tests prompt card style behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

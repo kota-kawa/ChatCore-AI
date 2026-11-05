@@ -1,3 +1,6 @@
+// 個人コンテキストAPIのフィルター・カーソルと認証失効を検証する。
+// Tests context api behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

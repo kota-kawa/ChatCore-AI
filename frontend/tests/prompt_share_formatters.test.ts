@@ -1,3 +1,6 @@
+// 公開投稿データと表示ラベルの整形を検証する。
+// Tests prompt share formatters behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

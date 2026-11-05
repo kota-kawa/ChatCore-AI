@@ -1,3 +1,6 @@
+// タスクIDと空リストの保持を検証する。
+// Tests task utils identity behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

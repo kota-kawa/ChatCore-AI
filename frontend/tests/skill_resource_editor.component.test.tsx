@@ -1,3 +1,6 @@
+// Skill同梱リソースの追加・編集・削除を検証する。
+// Tests skill resource editor behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";

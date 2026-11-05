@@ -1,3 +1,6 @@
+// メモ検索語の強調表示を検証する。
+// Tests memo search highlight behavior.
+
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

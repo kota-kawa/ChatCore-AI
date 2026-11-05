@@ -1,3 +1,6 @@
+// タスクカードのキーボード起動と編集時の抑制を検証する。
+// Tests task card keyboard behavior.
+
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

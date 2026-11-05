@@ -1,3 +1,6 @@
+// カテゴリ別公開ページの内容と取得契約を検証する。
+// Tests prompt category page behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

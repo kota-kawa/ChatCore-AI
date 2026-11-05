@@ -1,3 +1,6 @@
+// メモ操作の一時通知を検証する。
+// Tests memo flash toast behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

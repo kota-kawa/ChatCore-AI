@@ -1,3 +1,6 @@
+// 設定画面のパスキー取得と言語確定の順序を検証する。
+// Tests settings passkey loading behavior.
+
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

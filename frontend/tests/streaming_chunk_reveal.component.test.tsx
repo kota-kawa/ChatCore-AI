@@ -1,3 +1,6 @@
+// チャンク単位の表示と表示済み文字の保持を検証する。
+// Tests streaming chunk reveal behavior.
+
 import { describe, expect, it } from "vitest";
 
 import { formatLLMOutput } from "../scripts/chat/chat_ui";

@@ -1,3 +1,6 @@
+// 選択ボタンの送信形式と重複回答防止を検証する。
+// Tests interactive buttons behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

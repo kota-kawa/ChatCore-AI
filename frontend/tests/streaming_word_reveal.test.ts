@@ -1,3 +1,6 @@
+// 日本語・英字の表示単位への分割を検証する。
+// Tests streaming word reveal behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

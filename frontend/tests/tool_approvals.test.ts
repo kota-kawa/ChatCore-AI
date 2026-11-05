@@ -1,3 +1,6 @@
+// 承認カードの形式とモデル検証契約を検証する。
+// Tests tool approvals behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

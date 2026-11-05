@@ -1,3 +1,6 @@
+// 永続キャッシュの保存と復元を検証する。
+// Tests persistent cache behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

@@ -1,3 +1,6 @@
+// 取り込みボタンの待機中表示と操作制御を検証する。
+// Tests content import button behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

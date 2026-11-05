@@ -1,3 +1,6 @@
+// メモの一括選択と一括操作を検証する。
+// Tests memo page bulk behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import { useState } from "react";
 import type { KeyedMutator } from "swr";

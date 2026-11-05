@@ -1,3 +1,6 @@
+// Enter送信と生成中・IME変換中の誤操作防止を検証する。
+// Tests chat input enter key behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import { useCallback, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";

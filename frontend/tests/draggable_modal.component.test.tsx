@@ -1,3 +1,6 @@
+// モーダルのフォーカス・位置保存とドラッグ操作を検証する。
+// Tests draggable modal behavior.
+
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

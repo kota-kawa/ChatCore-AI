@@ -1,3 +1,6 @@
+// 入力時の更新範囲と最新の操作ハンドラを検証する。
+// Tests home page context rerender behavior.
+
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { memo, startTransition, Suspense, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";

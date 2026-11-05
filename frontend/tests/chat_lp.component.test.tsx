@@ -1,3 +1,6 @@
+// チャット紹介のモデル一覧・多言語表示と制限説明を検証する。
+// Tests chat lp behavior.
+
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

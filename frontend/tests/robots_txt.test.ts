@@ -1,3 +1,6 @@
+// 公開ページのクロール許可と内部APIの除外を検証する。
+// Tests robots txt behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

@@ -1,3 +1,6 @@
+// MCP認可画面の権限表示と承認操作を検証する。
+// Tests mcp oauth authorize behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

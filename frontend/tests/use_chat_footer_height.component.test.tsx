@@ -1,3 +1,6 @@
+// 表示時だけ行うチャットフッターの高さ計測を検証する。
+// Tests use chat footer height behavior.
+
 import { render } from "@testing-library/react";
 import { useChatFooterHeight } from "../hooks/chat_page/use_chat_footer_height";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

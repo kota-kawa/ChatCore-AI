@@ -1,3 +1,6 @@
+// メモ本文からのクローラー向け要約を検証する。
+// Tests memo crawl summary behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";

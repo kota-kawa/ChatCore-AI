@@ -1,3 +1,6 @@
+// SSEの解析と画面操作先の安全性を検証する。
+// Tests ai agent behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -44,6 +47,7 @@ test("pathnamesMatch treats trailing slash and sub-route redirects as the same d
   assert.equal(pathnamesMatch("/settings", "/settings/"), true);
   assert.equal(pathnamesMatch("/settings", "/settings/profile"), true);
   assert.equal(pathnamesMatch("/memo", "/settings"), false);
+  // ルートの指定がすべてのパスへ前方一致しないことを確認する。
   // The root must not prefix-match every path.
   assert.equal(pathnamesMatch("/", "/memo"), false);
   assert.equal(pathnamesMatch("/", "/"), true);
@@ -52,6 +56,7 @@ test("pathnamesMatch treats trailing slash and sub-route redirects as the same d
 test("isUnexpectedAuthRedirect flags only unrequested auth landings", () => {
   assert.equal(isUnexpectedAuthRedirect("/settings", "/login"), true);
   assert.equal(isUnexpectedAuthRedirect("/memo", "/register"), true);
+  // ログイン画面を開く明示依頼は、予期しないリダイレクトとしない。
   // Asking to open the login page is not an unexpected redirect.
   assert.equal(isUnexpectedAuthRedirect("/login", "/login"), false);
   assert.equal(isUnexpectedAuthRedirect("/settings", "/settings"), false);
@@ -61,6 +66,7 @@ test("isAllowedNavigationPath permits app pages and blocks side-effecting endpoi
   assert.equal(isAllowedNavigationPath("/settings"), true);
   assert.equal(isAllowedNavigationPath("/settings/profile"), true);
   assert.equal(isAllowedNavigationPath("/prompt_share?q=mail"), true);
+  // 状態変更するGETと、不明または外部の移動先は拒否する。
   // Mutating GET endpoints and unknown/external destinations are rejected.
   assert.equal(isAllowedNavigationPath("/logout"), false);
   assert.equal(isAllowedNavigationPath("/google-login"), false);

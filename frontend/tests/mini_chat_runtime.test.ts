@@ -65,6 +65,7 @@ test("describeActionStep exposes the selector and typed value of an input step",
   const rows = new Map(details.map((detail) => [detail.label, detail.value]));
   assert.equal(rows.get("対象要素"), "#searchInput");
   assert.equal(rows.get("入力する値"), "メール返信");
+  // 生のDOM操作にはcommandとargsがないため、その行を表示しない。
   // No command/args on a raw DOM step, so those rows must be absent.
   assert.equal(rows.has("コマンド"), false);
   assert.equal(rows.has("パラメータ"), false);

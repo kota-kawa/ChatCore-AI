@@ -1,3 +1,6 @@
+// 確認ダイアログの操作・キューとアクセシビリティを検証する。
+// Tests alert modal behavior.
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { showAlertModal, showConfirmModal, showPromptModal } from "../scripts/core/alert_modal";
@@ -24,6 +27,7 @@ describe("global alert & confirm modal", () => {
   });
 
   afterEach(() => {
+    // ダイアログはプロセス共通なので、前のテストが残した表示を片付ける。
     // The dialogs are process-wide singletons, so drain anything a test left open.
     for (let i = 0; i < 5; i += 1) {
       document
@@ -93,12 +97,14 @@ describe("global alert & confirm modal", () => {
     expect(dialog.classList.contains("is-visible")).toBe(true);
     expect(dialog.querySelector(".cc-alert-modal__title")?.textContent).toBe("チャット名を変更");
     expect(dialog.querySelector(".cc-alert-modal__field-label")?.textContent).toBe("チャットルーム名");
+    // 依頼文は入力ラベルで表示するため、説明段落は空に保つ。
     // The label carries the prompt, so the description paragraph stays empty.
     expect(dialog.querySelector(".cc-alert-modal__message")?.textContent).toBe("");
 
     const input = dialog.querySelector<HTMLInputElement>('input[data-cc-prompt-input="true"]');
     if (!input) throw new Error("prompt input is missing");
     expect(input.value).toBe("旧タイトル");
+    // 見た目だけでなく、支援技術からも入力欄のラベルを読めるようにする。
     // The field must be labelled for assistive tech, not just visually.
     expect(dialog.querySelector(".cc-alert-modal__field-label")?.getAttribute("for")).toBe(input.id);
 

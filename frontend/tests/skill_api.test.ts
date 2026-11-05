@@ -1,3 +1,6 @@
+// 個人Skill APIの検証と操作先を検証する。
+// Tests skill api behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

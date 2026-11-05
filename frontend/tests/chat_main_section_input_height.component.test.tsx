@@ -1,3 +1,6 @@
+// 入力変更時の高さ計測と行数制限を検証する。
+// Tests chat main section input height behavior.
+
 import { fireEvent, render } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";

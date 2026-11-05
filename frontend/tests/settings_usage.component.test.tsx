@@ -1,3 +1,6 @@
+// 利用量・リセット時刻とデモ期限の表示を検証する。
+// Tests settings usage behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

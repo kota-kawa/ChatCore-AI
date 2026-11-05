@@ -1,3 +1,6 @@
+// HTMLの安全化と出典表示用クラスの保持を検証する。
+// Tests html behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

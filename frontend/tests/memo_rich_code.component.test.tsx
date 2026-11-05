@@ -1,3 +1,6 @@
+// メモ内コードの表示と編集を検証する。
+// Tests memo rich code behavior.
+
 import { Editor } from "@tiptap/core";
 import hljs from "highlight.js";
 import { describe, expect, it, vi } from "vitest";

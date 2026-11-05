@@ -1,3 +1,6 @@
+// スマートフォン幅でのメモ画面のナビゲーションを検証する。
+// Tests memo mobile navigation behavior.
+
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";

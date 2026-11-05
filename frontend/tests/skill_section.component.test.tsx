@@ -1,3 +1,6 @@
+// 個人Skillの表示条件・切り替えと詳細を検証する。
+// Tests skill section behavior.
+
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

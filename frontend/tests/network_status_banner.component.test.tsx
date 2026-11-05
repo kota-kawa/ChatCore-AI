@@ -1,3 +1,6 @@
+// ネットワーク状態の通知を検証する。
+// Tests network status banner behavior.
+
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

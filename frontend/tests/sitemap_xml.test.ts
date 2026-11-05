@@ -1,3 +1,6 @@
+// 公開URLと更新日時を含むXMLサイトマップを検証する。
+// Tests sitemap xml behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

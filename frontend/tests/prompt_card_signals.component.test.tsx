@@ -1,3 +1,6 @@
+// 投稿カードの反応表示を検証する。
+// Tests prompt card signals behavior.
+
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

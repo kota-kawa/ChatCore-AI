@@ -1,3 +1,6 @@
+// メニューからの画面移動の事前読み込みを検証する。
+// Tests menu navigation prefetch behavior.
+
 import { act, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NextRouter } from "next/router";

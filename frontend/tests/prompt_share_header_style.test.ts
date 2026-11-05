@@ -1,3 +1,6 @@
+// 公開投稿ヘッダーの固定と狭い画面での折り返しを検証する。
+// Tests prompt share header style behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

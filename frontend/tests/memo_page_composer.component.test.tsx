@@ -1,3 +1,6 @@
+// メモ作成フォームと保存を検証する。
+// Tests memo page composer behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import type { FormEvent } from "react";
 import type { KeyedMutator } from "swr";

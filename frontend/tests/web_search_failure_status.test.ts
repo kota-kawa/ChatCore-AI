@@ -1,3 +1,6 @@
+// 検索エラーコードからの安定した表示状態判定を検証する。
+// Tests web search failure status behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

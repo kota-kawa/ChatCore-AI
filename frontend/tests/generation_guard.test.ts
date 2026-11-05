@@ -1,3 +1,6 @@
+// 同時生成の排他と古い解除要求の無視を検証する。
+// Tests generation guard behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

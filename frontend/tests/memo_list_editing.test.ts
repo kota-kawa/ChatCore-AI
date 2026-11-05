@@ -1,3 +1,6 @@
+// メモ一覧での編集内容の反映を検証する。
+// Tests memo list editing behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

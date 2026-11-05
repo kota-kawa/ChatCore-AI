@@ -1,3 +1,6 @@
+// メール・パスキー認証後の旧利用者データの消去を検証する。
+// Tests auth gateway page storage clear behavior.
+
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";

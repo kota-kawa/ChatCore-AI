@@ -1,3 +1,6 @@
+// タスク指示の展開時に会話幅を保つ規則を検証する。
+// Tests task prompt disclosure style behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

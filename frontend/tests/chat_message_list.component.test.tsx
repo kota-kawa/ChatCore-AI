@@ -1,3 +1,6 @@
+// 継続回答の操作対象と最新メッセージ判定を検証する。
+// Tests chat message list behavior.
+
 import { describe, expect, it } from "vitest";
 
 import { hasLaterUserMessage, isLastActionableAssistantMessage } from "../components/chat_page/chat_message_list";

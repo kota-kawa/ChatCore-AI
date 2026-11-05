@@ -1,3 +1,6 @@
+// 添付メニューの貼り付けと読み込み中の操作制御を検証する。
+// Tests setup attach menu behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

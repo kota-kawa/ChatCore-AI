@@ -1,3 +1,6 @@
+// 日英の公開URLと検索向け言語設定を検証する。
+// Tests seo locales behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

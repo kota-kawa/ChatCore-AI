@@ -1,3 +1,6 @@
+// 公開投稿の初回SSR取得とカーソル保持を検証する。
+// Tests prompt share page data behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

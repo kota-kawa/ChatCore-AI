@@ -1,3 +1,6 @@
+// 公開投稿機能のカテゴリ紹介と多言語表示を検証する。
+// Tests prompt share lp behavior.
+
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

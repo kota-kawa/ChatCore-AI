@@ -1,3 +1,6 @@
+// ルーム削除後の画面遷移と一括削除を検証する。
+// Tests home page room delete behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import { useCallback, useRef, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";

@@ -1,3 +1,6 @@
+// 文書添付の許可形式・重複除去と件数上限を検証する。
+// Tests file attachments behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

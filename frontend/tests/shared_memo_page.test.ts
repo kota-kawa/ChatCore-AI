@@ -1,3 +1,6 @@
+// 共有メモの共通表示面を検証する。
+// Tests shared memo page behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

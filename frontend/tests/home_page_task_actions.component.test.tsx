@@ -1,3 +1,6 @@
+// タスクIDによる操作と古い取得応答の無視を検証する。
+// Tests home page task actions behavior.
+
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";

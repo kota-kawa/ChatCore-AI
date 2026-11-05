@@ -1,3 +1,6 @@
+// コンテキスト候補の承認待ち表示と自動抽出の明示有効化を検証する。
+// Tests context candidate panel behavior.
+
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import { describe, expect, it, vi } from "vitest";

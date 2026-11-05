@@ -1,3 +1,6 @@
+// Skillリソースの言語推定と旧形式の互換性を検証する。
+// Tests skill resources behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

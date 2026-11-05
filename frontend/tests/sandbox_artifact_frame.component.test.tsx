@@ -1,3 +1,6 @@
+// 生成UIの隔離実行・配信状態とCSPを検証する。
+// Tests sandbox artifact frame behavior.
+
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

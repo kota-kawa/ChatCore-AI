@@ -1,3 +1,6 @@
+// メモ一覧の描画と状態反映を検証する。
+// Tests memo page list behavior.
+
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { SWRConfig } from "swr";

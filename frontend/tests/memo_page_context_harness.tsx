@@ -10,10 +10,12 @@ const asyncNoop = async () => undefined;
 const asyncFalse = async () => false;
 
 export const memoPageControllerStubDefaults: MemoPageControllerState = {
+  // 認証状態。
   // auth
   isLoggedIn: false,
   authUiReady: true,
   currentUserId: null,
+  // 一時通知。
   // flash
   flashState: null,
   setFlashState: noop,
@@ -21,6 +23,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   runFlashAction: noop,
   holdFlash: noop,
   releaseFlash: noop,
+  // 配置状態。
   // layout
   activeView: "memos",
   setActiveView: noop,
@@ -30,6 +33,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   setIsFiltersOpen: noop,
   isSidebarCollapsed: false,
   setIsSidebarCollapsed: noop,
+  // 一覧状態。
   // list
   query: "",
   debouncedQuery: "",
@@ -51,6 +55,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   mutate: asyncNoop,
   updateMemoListOptimistically: asyncNoop,
   hasActiveFilters: false,
+  // コレクション状態。
   // collections
   collections: [],
   mutateCollections: asyncNoop,
@@ -71,6 +76,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   handleCreateCollection: asyncNoop,
   handleUpdateCollection: asyncNoop,
   handleDeleteCollection: asyncNoop,
+  // 作成フォーム。
   // composer
   formState: { ai_response: "", title: "", collection_id: null, background_color: null },
   setFormState: noop,
@@ -91,6 +97,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   openComposePalette: noop,
   hasComposeDraft: false,
   composeIsExpanded: false,
+  // 詳細表示。
   // detail
   selectedMemo: null,
   isMemoDetailClosing: false,
@@ -119,6 +126,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   patchSelectedMemoOptimistically: noop,
   refreshSelectedMemoIfNeeded: asyncNoop,
   startMemoDetailCloseAnimation: noop,
+  // 操作メニュー。
   // action menu
   openMenuMemoId: "",
   setOpenMenuMemoId: noop,
@@ -126,6 +134,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   setMenuPosition: noop,
   closeMemoActionMenu: noop,
   toggleMemoActionMenu: noop,
+  // 一括操作。
   // bulk
   isBulkMode: false,
   setIsBulkMode: noop,
@@ -139,6 +148,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   deselectAll: noop,
   executeBulkAction: asyncNoop,
   exitBulkMode: noop,
+  // ドラッグ操作。
   // drag
   canDragMemos: false,
   canReorderCurrentView: false,
@@ -151,6 +161,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   handleMemoDragStart: noop,
   handleMemoSectionDragOver: noop,
   handleMemoDrop: asyncNoop,
+  // 項目ごとの操作。
   // item actions
   actionLoadingId: "",
   copyingMemoId: "",
@@ -163,6 +174,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   handleEmptyTrash: asyncNoop,
   emptyingTrash: false,
   copyMemoFullText: asyncFalse,
+  // 共有操作。
   // share
   isShareModalOpen: false,
   setIsShareModalOpen: noop,
@@ -175,6 +187,7 @@ export const memoPageControllerStubDefaults: MemoPageControllerState = {
   closeShareModal: noop,
   copyShareLink: asyncFalse,
   openNativeShareSheet: asyncNoop,
+  // エクスポート。
   // export
   isExportModalOpen: false,
   setIsExportModalOpen: noop,

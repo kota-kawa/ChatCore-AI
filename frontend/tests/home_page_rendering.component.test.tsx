@@ -1,3 +1,6 @@
+// 入力中の閉じたモーダル・SEOの更新抑制を検証する。
+// Tests home page rendering behavior.
+
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
@@ -91,6 +94,7 @@ describe("home page rendering", () => {
       view.rerender(<HomePage />);
     }
 
+    // ページ自体は入力ごとに描画するが、モーダル内の翻訳hookは再実行しない。
     // The page still renders each keystroke; modal-local translation hooks do not.
     expect(useTranslation.mock.calls.length - translationsBefore).toBe(3);
     expect(renderSeo.mock.calls.length).toBe(seoBefore);
