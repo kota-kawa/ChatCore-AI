@@ -1349,8 +1349,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 }
 
-/* ===== Dark Mode ===== */
-/* Form inputs */
+/* ダークモード / Dark Mode */
+/* フォームの入力要素 / Form inputs */
 /* 濃色面ではリンク色に --primary-dark のコントラストが足りないので、明るい --primary-color を使う */
 /* On dark surfaces --primary-dark lacks contrast for text, so use the lighter --primary-color */
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .recent-chats__chip:hover,

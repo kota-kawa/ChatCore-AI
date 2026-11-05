@@ -96,7 +96,7 @@ tpl.innerHTML = `
       object-fit: cover;
       display: block;
     }
-    /* ▼ dropdown */
+    /* ドロップダウン / ▼ dropdown */
     .dropdown {
       position: absolute;
       top: 3.5rem;

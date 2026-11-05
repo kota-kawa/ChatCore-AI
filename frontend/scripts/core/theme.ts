@@ -40,6 +40,10 @@ export function getStoredThemePreference(): ThemePreference {
   return DEFAULT_THEME_PREFERENCE;
 }
 
+// テーマへの言及だけでは設定を送らない。現在の設定を読む依頼かを段階的に絞り、
+// 変更依頼は別の承認経路が扱うため、読み取り用の設定注入から除外する。
+// Require a reference to the current theme setting and a read request, rather than a theme mention alone.
+// Exclude writes from this read-context injection; they use the separate approval path.
 export function shouldSendThemePreference(message: string): boolean {
   return (
     THEME_NAME_PATTERN.test(message) &&
