@@ -20,7 +20,7 @@ import type { Cache, State } from "swr";
 const STORAGE_KEY = "chatcore.swr.cache.v1";
 // 既定の TTL（ミリ秒）。これを超えたら即表示はせず、通常どおり再取得する。
 // Default TTL (ms). Beyond this, the stale entry is dropped instead of shown.
-const DEFAULT_TTL_MS = 1000 * 60 * 30; // 30 minutes
+const DEFAULT_TTL_MS = 1000 * 60 * 30; // 30分 / 30 minutes
 const MAX_ENTRIES = 80;
 // localStorage 書き込みのデバウンス（ミリ秒）。連続する set をまとめる。
 // Debounce window (ms) for localStorage writes; coalesces bursts of `set` calls.
