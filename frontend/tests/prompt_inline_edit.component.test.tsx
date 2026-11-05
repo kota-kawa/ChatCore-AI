@@ -1,3 +1,6 @@
+// 公開投稿のインライン編集を検証する。
+// Tests prompt inline edit behavior.
+
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

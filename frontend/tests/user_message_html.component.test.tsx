@@ -1,3 +1,6 @@
+// ユーザー入力の安全なHTML化と添付表示を検証する。
+// Tests user message html behavior.
+
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

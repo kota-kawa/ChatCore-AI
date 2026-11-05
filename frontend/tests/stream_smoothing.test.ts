@@ -1,3 +1,6 @@
+// ストリーム本文の表示速度と過剰な先行表示の防止を検証する。
+// Tests stream smoothing behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

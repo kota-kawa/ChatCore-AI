@@ -1,3 +1,6 @@
+// メモのドラッグ操作を検証する。
+// Tests memo page drag behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import type { DragEvent } from "react";
 import type { KeyedMutator } from "swr";

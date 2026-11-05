@@ -1,3 +1,6 @@
+// ルームごとの参照設定の保持と切り替えを検証する。
+// Tests room scoped reference toggles behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import { useCallback, useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";

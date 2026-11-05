@@ -1,3 +1,6 @@
+// Markdown見出しの整形を検証する。
+// Tests markdown headings behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

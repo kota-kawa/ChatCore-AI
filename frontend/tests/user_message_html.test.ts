@@ -1,3 +1,6 @@
+// ユーザー入力の安全なHTML化と添付表示を検証する。
+// Tests user message html behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

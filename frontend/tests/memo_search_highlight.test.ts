@@ -1,3 +1,6 @@
+// メモ検索語の強調表示を検証する。
+// Tests memo search highlight behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

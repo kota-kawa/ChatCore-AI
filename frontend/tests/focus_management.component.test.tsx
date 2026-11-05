@@ -1,3 +1,6 @@
+// 領域を隠す前の安全なフォーカス移動を検証する。
+// Tests focus management behavior.
+
 import { describe, expect, it } from "vitest";
 
 import { moveFocusOutOfHiddenRegion } from "../lib/chat_page/focus_management";

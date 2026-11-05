@@ -1,3 +1,6 @@
+// 配信本文からの生成UIフェンスの除去を検証する。
+// Tests generative ui stream behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

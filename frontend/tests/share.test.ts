@@ -1,3 +1,6 @@
+// ネイティブ共有とSNS用URLの生成を検証する。
+// Tests share behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

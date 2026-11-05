@@ -1,3 +1,6 @@
+// 承認成功後の設定反映と競合応答を検証する。
+// Tests use chat tool approvals behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

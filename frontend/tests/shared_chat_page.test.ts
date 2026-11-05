@@ -1,3 +1,6 @@
+// 共有会話の表示と会話を続ける導線を検証する。
+// Tests shared chat page behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

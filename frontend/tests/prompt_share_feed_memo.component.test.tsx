@@ -1,3 +1,6 @@
+// 公開投稿フィードからのメモ操作を検証する。
+// Tests prompt share feed memo behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useMemo, useState } from "react";
 import { describe, expect, it, vi } from "vitest";

@@ -1,3 +1,6 @@
+// サーバー時刻によるルーム固定と失敗時の状態保持を検証する。
+// Tests home page room pin behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";

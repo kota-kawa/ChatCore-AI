@@ -1,3 +1,6 @@
+// コンポーネントテスト用のブラウザー環境を初期化する。
+// Initializes the browser environment for component tests.
+
 import "@testing-library/jest-dom/vitest";
 
 import { cleanup } from "@testing-library/react";

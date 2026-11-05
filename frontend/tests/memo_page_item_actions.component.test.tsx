@@ -1,3 +1,6 @@
+// メモ項目ごとの操作を検証する。
+// Tests memo page item actions behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import type { KeyedMutator } from "swr";
 import { beforeEach, describe, expect, it, vi } from "vitest";

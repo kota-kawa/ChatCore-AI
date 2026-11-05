@@ -1,3 +1,6 @@
+// Markdownエディターの入力・選択と表示を検証する。
+// Tests memo editor behavior.
+
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useRef, useState } from "react";
 import type { MemoEditorHandle } from "../lib/memo/editor";

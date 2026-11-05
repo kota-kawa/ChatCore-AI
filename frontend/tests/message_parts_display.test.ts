@@ -1,3 +1,6 @@
+// 回答を構成する本文以外のパーツ表示を検証する。
+// Tests message parts display behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

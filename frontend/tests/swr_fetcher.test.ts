@@ -1,3 +1,6 @@
+// JSON取得とHTTPエラーの情報保持を検証する。
+// Tests swr fetcher behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

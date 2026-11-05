@@ -1,3 +1,6 @@
+// 配信テキストを変えないチャンクDOM化を検証する。
+// Tests streaming word dom behavior.
+
 import { describe, expect, it } from "vitest";
 
 import { applyStreamingWordReveal } from "../lib/chat_page/streaming_word_dom";

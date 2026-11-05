@@ -1,3 +1,6 @@
+// 英語の紹介見出しとCTAの単語区切りを検証する。
+// Tests lp localization behavior.
+
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

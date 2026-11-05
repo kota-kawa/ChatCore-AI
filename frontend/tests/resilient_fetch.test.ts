@@ -1,3 +1,6 @@
+// HTTP失敗時の再試行と対象ステータスを検証する。
+// Tests resilient fetch behavior.
+
 import assert from "node:assert/strict";
 import { getEventListeners } from "node:events";
 import test from "node:test";

@@ -1,3 +1,6 @@
+// 設定セクションとURLクエリの同期を検証する。
+// Tests settings section url behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

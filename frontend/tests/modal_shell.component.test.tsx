@@ -1,3 +1,6 @@
+// モーダル共通枠の表示と操作を検証する。
+// Tests modal shell behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

@@ -1,3 +1,6 @@
+// 保存済みタスク起動メッセージの解析を検証する。
+// Tests parse task launch message behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -23,6 +26,7 @@ test("captures multi-line setup info verbatim", () => {
 });
 
 test("parses the reload format (html-escaped with <br> joins) identically", () => {
+  // ユーザー入力はサーバーでHTMLエスケープし、改行をbrへ変えて保存される。
   // services/chat_use_case.py stores user messages as html.escape(text).replace("\n", "<br>").
   const stored = "【タスク】ℹ️ 情報提供<br>【状況・作業環境】A &amp; B を &lt;比較&gt; したい";
   assert.deepEqual(parseTaskLaunchMessage(stored), {

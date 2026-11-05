@@ -1,3 +1,6 @@
+// モデル識別子からの表示名の取得を検証する。
+// Tests model label behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

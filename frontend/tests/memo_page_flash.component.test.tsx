@@ -1,3 +1,6 @@
+// メモ画面の一時通知を検証する。
+// Tests memo page flash behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

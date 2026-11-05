@@ -1,3 +1,6 @@
+// 共通エージェントの配置・アニメーションと画面高さを検証する。
+// Tests ai agent style behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

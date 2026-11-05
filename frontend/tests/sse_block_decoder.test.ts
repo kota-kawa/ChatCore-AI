@@ -1,3 +1,6 @@
+// 分割受信したSSEブロックの復元を検証する。
+// Tests sse block decoder behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

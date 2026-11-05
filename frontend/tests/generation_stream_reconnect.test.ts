@@ -1,3 +1,6 @@
+// ストリーム再接続の待機時間と上限を検証する。
+// Tests generation stream reconnect behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

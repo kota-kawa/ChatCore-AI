@@ -1,3 +1,6 @@
+// 停止要求が終わるまでの生成排他保持を検証する。
+// Tests stop generation behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

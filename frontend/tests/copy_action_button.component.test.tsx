@@ -1,3 +1,6 @@
+// コピーの成功・失敗表示と重複操作防止を検証する。
+// Tests copy action button behavior.
+
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

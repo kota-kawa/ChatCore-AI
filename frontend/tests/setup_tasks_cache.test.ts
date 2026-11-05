@@ -1,3 +1,6 @@
+// 認証と言語ごとのタスクキャッシュと旧形式の無視を検証する。
+// Tests setup tasks cache behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

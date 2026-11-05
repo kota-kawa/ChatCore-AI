@@ -1,3 +1,6 @@
+// メモ作成フォームの入力と操作状態を検証する。
+// Tests memo page composer interaction behavior.
+
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import type { KeyedMutator } from "swr";

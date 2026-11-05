@@ -1,3 +1,6 @@
+// ストリームイベントの本文・下書きと状態への反映を検証する。
+// Tests generation stream events behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

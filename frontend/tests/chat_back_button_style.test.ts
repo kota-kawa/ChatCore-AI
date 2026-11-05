@@ -1,3 +1,6 @@
+// チャットの戻るボタンと送信ボタンの配色の整合性を検証する。
+// Tests chat back button style behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

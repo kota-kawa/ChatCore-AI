@@ -1,3 +1,6 @@
+// 認証メッセージの表示とフォーカス移動を検証する。
+// Tests auth message modal behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

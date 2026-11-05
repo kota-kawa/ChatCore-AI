@@ -1,3 +1,6 @@
+// ログイン状態応答の判定と認証エラーを検証する。
+// Tests auth status behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

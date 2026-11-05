@@ -1,3 +1,6 @@
+// 可視領域に収まるモーダル位置と起動ボタンの回避を検証する。
+// Tests draggable modal position behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

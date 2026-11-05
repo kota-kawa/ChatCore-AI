@@ -1,3 +1,6 @@
+// モーダルを開いた投稿画面の操作範囲を検証する。
+// Tests prompt share modal lock style behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

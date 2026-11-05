@@ -1,3 +1,6 @@
+// 投稿詳細を開いたときの閲覧数記録を検証する。
+// Tests prompt view recorder behavior.
+
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useCallback, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";

@@ -1,3 +1,6 @@
+// Markdownの描画と表示用コンポーネントを検証する。
+// Tests markdown content behavior.
+
 import { render, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

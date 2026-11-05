@@ -1,3 +1,6 @@
+// 利用量・リセット時刻とデモ期限の表示を検証する。
+// Tests settings usage behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -14,6 +17,7 @@ test("usage percent never reads 100% before the limit is reached", () => {
 });
 
 test("reset times are shown in Japan time regardless of the viewer's zone", () => {
+  // 日本時間の9月24日0時とUTCの9月23日15時は、同じ瞬間を表す。
   // 2026-09-24T00:00+09:00 is 2026-09-23T15:00Z.
   assert.equal(formatUsageResetTime("2026-09-23T15:00:00+00:00", "ja"), "9月24日(木) 0:00");
   assert.equal(formatUsageResetTime("2026-09-24T00:00:00+09:00", "en"), "Thu, Sep 24, 12:00 AM");
@@ -21,6 +25,7 @@ test("reset times are shown in Japan time regardless of the viewer's zone", () =
 });
 
 test("the demo expiry shows only the date, on the Japan-time boundary", () => {
+  // UTCの11月24日20時は、日本では既に11月25日になる。
   // 2026-11-24T20:00Z is already 11/25 in Japan.
   assert.equal(formatUsageExpiryDate("2026-11-24T20:00:00+00:00", "ja"), "11月25日");
   assert.equal(formatUsageExpiryDate("2026-11-24T20:00:00+00:00", "en"), "Nov 25");

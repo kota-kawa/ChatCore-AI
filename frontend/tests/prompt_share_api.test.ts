@@ -1,3 +1,6 @@
+// 公開投稿API応答の正規化を検証する。
+// Tests prompt share api behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

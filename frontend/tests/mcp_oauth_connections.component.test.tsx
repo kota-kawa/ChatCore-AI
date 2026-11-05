@@ -1,3 +1,6 @@
+// MCP接続の一覧と認可取り消しを検証する。
+// Tests mcp oauth connections behavior.
+
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

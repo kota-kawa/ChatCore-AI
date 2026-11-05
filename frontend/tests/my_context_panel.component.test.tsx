@@ -1,3 +1,6 @@
+// 個人コンテキストの表示と操作を検証する。
+// Tests my context panel behavior.
+
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import { describe, expect, it, vi } from "vitest";

@@ -1,3 +1,6 @@
+// ツール承認カードの一度だけの決定と操作制御を検証する。
+// Tests tool approval card behavior.
+
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

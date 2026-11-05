@@ -1,3 +1,6 @@
+// メモ画面の状態と操作の供給を検証する。
+// Tests memo page controller provider behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { MemoComposeFormState } from "../lib/memo/types";

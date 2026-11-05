@@ -1,3 +1,6 @@
+// サポートエージェントの多言語表示と初期位置を検証する。
+// Tests support agent localization behavior.
+
 import { useState } from "react";
 import type { MiniChatProps } from "../lib/chat_page/mini_chat_runtime";
 import { render, screen, waitFor } from "@testing-library/react";

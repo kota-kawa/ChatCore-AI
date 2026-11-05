@@ -1,3 +1,6 @@
+// メモ編集時の表示位置を検証する。
+// Tests memo edit position behavior.
+
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

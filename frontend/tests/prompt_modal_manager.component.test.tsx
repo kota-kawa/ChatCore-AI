@@ -1,3 +1,6 @@
+// 公開投稿に関するモーダルの管理を検証する。
+// Tests prompt modal manager behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";

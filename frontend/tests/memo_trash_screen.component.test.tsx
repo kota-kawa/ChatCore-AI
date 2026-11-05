@@ -1,3 +1,6 @@
+// メモのゴミ箱表示と操作を検証する。
+// Tests memo trash screen behavior.
+
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

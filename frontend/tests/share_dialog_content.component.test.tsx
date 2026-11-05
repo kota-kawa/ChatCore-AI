@@ -1,3 +1,6 @@
+// 共有URLの準備状態と送信先リンクを検証する。
+// Tests share dialog content behavior.
+
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

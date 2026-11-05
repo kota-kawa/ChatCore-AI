@@ -1,3 +1,6 @@
+// 共有会話の複製とゲスト時の一時ルームを検証する。
+// Tests fork shared chat behavior.
+
 import assert from "node:assert/strict";
 import test, { afterEach, beforeEach } from "node:test";
 

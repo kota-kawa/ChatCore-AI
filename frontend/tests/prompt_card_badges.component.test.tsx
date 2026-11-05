@@ -1,3 +1,6 @@
+// 投稿カードのバッジ表示を検証する。
+// Tests prompt card badges behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

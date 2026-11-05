@@ -1,3 +1,6 @@
+// メモエディターのDOMテスト用代替環境を提供する。
+// Provides DOM test helpers for memo editor harness.
+
 import { act } from "@testing-library/react";
 import { memoEditorViews, type MemoEditorHandle } from "../lib/memo/editor";
 
@@ -18,6 +21,7 @@ export function changeMemoEditor(element: HTMLElement, value: string) {
   });
 }
 
+// jsdomにレイアウトエンジンはないため、実際の寸法はPlaywrightで別に検証する。
 // jsdom has no layout engine. Real geometry is checked separately with Playwright.
 if (!Range.prototype.getClientRects) {
   Range.prototype.getClientRects = () => [] as unknown as DOMRectList;

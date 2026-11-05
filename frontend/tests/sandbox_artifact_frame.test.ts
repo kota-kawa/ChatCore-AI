@@ -1,3 +1,6 @@
+// 生成UIの隔離実行・配信状態とCSPを検証する。
+// Tests sandbox artifact frame behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 import { JSDOM } from "jsdom";

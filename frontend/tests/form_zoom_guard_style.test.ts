@@ -1,3 +1,6 @@
+// タッチ端末での入力時拡大を防ぐ文字サイズを検証する。
+// Tests form zoom guard style behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

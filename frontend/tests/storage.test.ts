@@ -1,3 +1,6 @@
+// 履歴保存の容量制限と新しいメッセージの保持を検証する。
+// Tests storage behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

@@ -1,3 +1,6 @@
+// 中断回答の続きの要求と生成中の操作制御を検証する。
+// Tests continue action button behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

@@ -1,3 +1,6 @@
+// 生成要求の識別と失敗後の本文・キャッシュ復旧を検証する。
+// Tests generation failure recovery behavior.
+
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -676,6 +679,7 @@ describe("regenerate double click", () => {
       "answer-2",
     ]);
 
+    // 裏で走る履歴再取得は失敗させ、検証対象のローカルキャッシュを上書きさせない。
     // regenerateLastResponse also fires an unawaited refreshActivePath() GET after
     // a JSON answer; let it fail harmlessly so it does not overwrite the local
     // cache this assertion checks (its own catch keeps the optimistic state).
@@ -709,6 +713,7 @@ describe("regenerate double click", () => {
     expect(requestedUrls().filter((url) => url.includes("chat_regenerate"))).toHaveLength(1);
   });
 
+  // 編集再生成も切り詰める前に排他を取得することを対称に検証し、2経路のずれを防ぐ。
   // editAndRegenerateMessage received the identical fix (acquire before
   // truncate); verify it symmetrically so the two code paths do not drift.
   it("truncates only once when edit-and-regenerate is triggered twice in the same tick", async () => {
@@ -730,6 +735,7 @@ describe("regenerate double click", () => {
       "answer-2",
     ]);
 
+    // 編集再生成後の非同期履歴取得は失敗させ、楽観的なキャッシュを検証中に書き換えさせない。
     // editAndRegenerateMessage also fires an unawaited refreshActivePath() GET
     // after a JSON answer; let it fail harmlessly so it does not overwrite the
     // local cache this assertion checks (its own catch keeps the optimistic

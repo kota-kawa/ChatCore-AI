@@ -1,3 +1,6 @@
+// メモプレビューの文字組みを検証する。
+// Tests memo preview typography behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

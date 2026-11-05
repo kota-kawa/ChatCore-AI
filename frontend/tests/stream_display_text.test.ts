@@ -1,3 +1,6 @@
+// 検索経過と回答本文の表示速度の分離を検証する。
+// Tests stream display text behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

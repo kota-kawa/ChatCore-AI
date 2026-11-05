@@ -1,3 +1,6 @@
+// 投稿フィードの複合フィルターと件数表示を検証する。
+// Tests prompt share page feed utils behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

@@ -1,3 +1,6 @@
+// 日英の翻訳キーの整合性を検証する。
+// Tests locale catalog parity behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

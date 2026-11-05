@@ -1,3 +1,6 @@
+// コピー用ブロックの表示と操作を検証する。
+// Tests copy block behavior.
+
 import { render } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 

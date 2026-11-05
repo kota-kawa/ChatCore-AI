@@ -1,3 +1,6 @@
+// プロンプト作成補助での投稿種別切り替えを検証する。
+// Tests prompt assist type switch behavior.
+
 import { fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

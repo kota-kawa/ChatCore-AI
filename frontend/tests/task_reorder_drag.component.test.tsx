@@ -1,3 +1,6 @@
+// 長押し後のタスク並べ替えと通常スクロールを検証する。
+// Tests task reorder drag behavior.
+
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";

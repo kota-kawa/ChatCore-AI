@@ -1,3 +1,6 @@
+// メモ編集と表示モード間の操作を検証する。
+// Tests memo editing experience behavior.
+
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { useState } from "react";
 import type { KeyedMutator } from "swr";

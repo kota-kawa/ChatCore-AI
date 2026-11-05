@@ -1,3 +1,6 @@
+// メモ詳細の開閉と取得を検証する。
+// Tests memo page detail behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import type { KeyedMutator } from "swr";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

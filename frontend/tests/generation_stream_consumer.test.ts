@@ -1,3 +1,6 @@
+// 生成IDごとのストリーム状態と再接続を検証する。
+// Tests generation stream consumer behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

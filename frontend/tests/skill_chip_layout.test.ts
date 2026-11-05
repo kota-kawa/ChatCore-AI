@@ -1,3 +1,6 @@
+// 個人Skillのチップサイズとスマートフォン配置を検証する。
+// Tests skill chip layout behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

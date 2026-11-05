@@ -1,3 +1,6 @@
+// カテゴリ別公開ページの内容と取得契約を検証する。
+// Tests prompt category page behavior.
+
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

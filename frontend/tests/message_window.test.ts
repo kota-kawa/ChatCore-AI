@@ -1,3 +1,6 @@
+// 長い会話の描画範囲を検証する。
+// Tests message window behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

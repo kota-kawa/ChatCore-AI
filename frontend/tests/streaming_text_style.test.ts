@@ -1,3 +1,6 @@
+// ストリーム表示のフェードと動きを減らす設定を検証する。
+// Tests streaming text style behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

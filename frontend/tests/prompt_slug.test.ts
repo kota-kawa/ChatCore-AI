@@ -1,3 +1,6 @@
+// 投稿タイトルからのURLスラッグ生成を検証する。
+// Tests prompt slug behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

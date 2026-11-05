@@ -1,3 +1,6 @@
+// Web検索の出典と検索経過のDOM表示を検証する。
+// Tests web search sources dom behavior.
+
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {

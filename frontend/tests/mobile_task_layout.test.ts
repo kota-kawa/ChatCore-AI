@@ -1,3 +1,6 @@
+// スマートフォン幅のタスク配置を検証する。
+// Tests mobile task layout behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

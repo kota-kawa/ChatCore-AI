@@ -1,3 +1,6 @@
+// 公開投稿詳細のモーダル表示を検証する。
+// Tests prompt share detail modal behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";

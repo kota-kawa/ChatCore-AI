@@ -1,3 +1,6 @@
+// 不完全なAPI応答の正規化とページ分割情報を検証する。
+// Tests api contract behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

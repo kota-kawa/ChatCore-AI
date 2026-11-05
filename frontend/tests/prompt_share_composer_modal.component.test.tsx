@@ -1,3 +1,6 @@
+// 公開投稿フォームのモーダル操作を検証する。
+// Tests prompt share composer modal behavior.
+
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useRef, useState, type FormEvent } from "react";

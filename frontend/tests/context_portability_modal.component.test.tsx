@@ -1,3 +1,6 @@
+// コンテキスト入出力の拡張子・容量と事前検証を検証する。
+// Tests context portability modal behavior.
+
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

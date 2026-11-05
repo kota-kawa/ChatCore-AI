@@ -1,3 +1,6 @@
+// コピー後のフィードバックと連続実行防止を検証する。
+// Tests use copy feedback behavior.
+
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

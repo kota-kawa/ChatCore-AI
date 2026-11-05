@@ -1,3 +1,6 @@
+// メモ詳細の閲覧・編集とモーダル操作を検証する。
+// Tests memo detail modal behavior.
+
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

@@ -1,3 +1,6 @@
+// HTML文書のhydration前後の整合性を検証する。
+// Tests document hydration guard behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

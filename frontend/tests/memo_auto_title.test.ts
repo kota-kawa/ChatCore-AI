@@ -1,3 +1,6 @@
+// メモ本文からのタイトル生成を検証する。
+// Tests memo auto title behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

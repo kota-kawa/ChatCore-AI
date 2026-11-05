@@ -1,3 +1,6 @@
+// 複数モーダルのスクロールロックと冪等な解除を検証する。
+// Tests body scroll lock behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

@@ -1,3 +1,6 @@
+// ゲスト投稿のテキスト制約とURL判定を検証する。
+// Tests guest prompt post behavior.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

@@ -1,3 +1,6 @@
+// メモ機能紹介ページを検証する。
+// Tests memo lp behavior.
+
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

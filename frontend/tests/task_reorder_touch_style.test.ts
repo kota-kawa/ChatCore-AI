@@ -1,3 +1,6 @@
+// 並べ替え開始前後のタッチ操作の所有権を検証する。
+// Tests task reorder touch style behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

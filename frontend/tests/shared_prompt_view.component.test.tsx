@@ -1,3 +1,6 @@
+// 共有投稿詳細の閲覧数記録を検証する。
+// Tests shared prompt view behavior.
+
 import { render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

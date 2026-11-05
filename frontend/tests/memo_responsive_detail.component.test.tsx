@@ -1,3 +1,6 @@
+// 画面幅に応じたメモ詳細の表示を検証する。
+// Tests memo responsive detail behavior.
+
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

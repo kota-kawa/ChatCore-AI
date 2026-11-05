@@ -1,3 +1,6 @@
+// 投稿カードの表示記録を検証する。
+// Tests prompt impression tracker behavior.
+
 import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

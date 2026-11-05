@@ -1,3 +1,6 @@
+// 会話コンテナの角丸と影の契約を検証する。
+// Tests chat container surface style behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";

@@ -1,3 +1,6 @@
+// 最近のチャットの並び順と表示件数を検証する。
+// Tests recent chats strip behavior.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

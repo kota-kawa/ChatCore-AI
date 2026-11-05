@@ -1,3 +1,6 @@
+// モーダルを開いた時点での作成補助の初期化を検証する。
+// Tests home page controller prompt assist behavior.
+
 import { act, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

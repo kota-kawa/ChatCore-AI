@@ -1,3 +1,6 @@
+// アカウント一覧・切り替えと旧利用者データの消去を検証する。
+// Tests user icon account switcher behavior.
+
 import { waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

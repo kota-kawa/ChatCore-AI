@@ -1,3 +1,6 @@
+// 公開投稿の一覧・モーダルと追加読み込みの配置を検証する。
+// Tests prompt share layout behavior.
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
