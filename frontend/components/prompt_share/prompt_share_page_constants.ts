@@ -1,3 +1,5 @@
+// プロンプト共有ページで使う定数（ページ件数、カテゴリ・フォーマット・メディアの絞り込み選択肢、投稿フォームのカテゴリ選択肢）。選択肢はレジストリから組み立てる。
+// Constants for the prompt sharing page: page sizes, the category/format/media filter options, and composer category options, all built from the registries.
 import {
   CATEGORY_UNSET,
   PROMPT_CATEGORY_REGISTRY

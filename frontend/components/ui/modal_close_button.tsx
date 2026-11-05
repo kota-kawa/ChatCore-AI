@@ -1,3 +1,5 @@
+// モーダルの右上などに置く、共通の閉じるボタン。
+// Shared close button for modal headers.
 import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
 // モーダル閉じるボタンのprops型定義（buttonのtype属性を除いたHTMLButtonAttributesを継承）

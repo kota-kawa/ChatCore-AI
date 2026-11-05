@@ -1,3 +1,5 @@
+// 認証ゲートウェイ内で共有する型（ステップ・メール認証フロー・パスキー設定元）。
+// Types shared inside the auth gateway: step, email auth flow and passkey setup provider.
 // 認証フローのステップ：メールアドレス入力 / 確認コード入力 / パスキー設定
 // Authentication flow steps: email entry / verification code / passkey setup
 export type AuthStep = "entry" | "code" | "passkey";

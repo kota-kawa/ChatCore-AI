@@ -1,3 +1,5 @@
+// 管理画面のテーブル操作パネル（カラムの追加・削除、テーブルの作成・削除）。入力の送信先 API は呼び出し側 pages/admin/index.tsx が決める。
+// Admin table-operations panel (add/drop columns, create/drop tables); the caller pages/admin/index.tsx owns the submit handler for each endpoint.
 import type { FormEvent } from "react";
 
 import type { ColumnDetail } from "./admin_table_preview";

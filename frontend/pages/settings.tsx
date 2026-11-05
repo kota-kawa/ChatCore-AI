@@ -84,14 +84,14 @@ import {
   normalizePasskeyRecords
 } from "../scripts/user/settings/utils";
 
-// ユーザー設定ページのメインコンポーネント — すべての設定セクションを統括する
-// Main component for the user settings page — orchestrates all settings sections
 // 読み込みの呼び出し方を切り替えるオプション。background 指定時はスケルトンを出さず、
 // 既存の表示を保ったまま裏で差し替える。
 // Options that vary how a load is performed. With background the data is swapped behind
 // the existing view instead of showing skeletons.
 type SettingsLoadOptions = { background?: boolean };
 
+// ユーザー設定ページのメインコンポーネント — すべての設定セクションを統括する
+// Main component for the user settings page — orchestrates all settings sections
 export default function UserSettingsPage() {
   const { locale, setLocale, t } = useTranslation();
   const router = useRouter();
@@ -246,6 +246,8 @@ export default function UserSettingsPage() {
     }
   }, [locale, t]);
 
+  // 保存済みの表示言語をAPIから取得して反映する。成功・失敗にかかわらず完了フラグを立て、Passkeyの初回取得を進められるようにする
+  // Load the saved display language from the API and apply it; the done flag is set on success or failure so the first passkey load can proceed
   const loadLanguagePreference = useCallback(async () => {
     try {
       setLocale(await loadLocalePreference());
@@ -394,6 +396,8 @@ export default function UserSettingsPage() {
     }
   }, [locale]);
 
+  // 連携用認証情報（OAuthクライアント）の一覧とMCPサーバーURLを取得する。リダイレクトURIの入力欄は未入力のときだけ既定値で埋める
+  // Load the integration credentials (OAuth clients) and the MCP server URL; the redirect URI field is prefilled with the default only if still empty
   const loadMcpOAuthClientList = useCallback(async () => {
     setMcpOAuthClientsLoading(true);
     try {
@@ -539,6 +543,9 @@ export default function UserSettingsPage() {
       return;
     }
     if (section === "security") {
+      // Securityへ切り替えた直後の最初の取得は、activeSection を監視するエフェクトに任せる。
+      // すでにSecurityを開いている状態で再度選ばれたときだけここで取得する
+      // （同じ値の setActiveSection ではエフェクトが再実行されないため）。
       // Let the active-section effect perform the first fetch after a transition to
       // Security. Fetch here only when Security is selected again while already open,
       // because setting the same active section does not rerun that effect.
@@ -547,6 +554,7 @@ export default function UserSettingsPage() {
         passkeyLocaleRef.current = locale;
         void loadPasskeys();
       } else if (!initialLocalePreferenceLoaded) {
+        // 言語設定の取得が終わるまで、セクションの読み込み中表示を維持する
         // Keep the section's loading state visible while the locale preference resolves.
         setPasskeysLoading(true);
       }
@@ -1143,6 +1151,8 @@ export default function UserSettingsPage() {
     }
   }, []);
 
+  // AIサービス連携の表示名を更新し、一覧に反映する。失敗時はトースト表示後に再throwして、呼び出し側の編集UIにも失敗を伝える
+  // Update an AI service connection's display name and reflect it in the list; on failure, show a toast and rethrow so the calling edit UI knows too
   const handleUpdateMcpOAuthConnectionDisplayName = useCallback(
     async (connection: McpOAuthConnection, displayName: string) => {
       try {
@@ -1163,6 +1173,8 @@ export default function UserSettingsPage() {
     []
   );
 
+  // 連携用認証情報を発行し、一覧の先頭に追加する。発行直後の資格情報（シークレット含む）は画面に保持してコピーできるようにする
+  // Issue integration credentials and prepend them to the list; the freshly issued credentials (including the secret) are kept on screen so they can be copied
   const handleIssueMcpOAuthClient = useCallback(async () => {
     setMcpOAuthClientIssuing(true);
     try {
@@ -1200,6 +1212,8 @@ export default function UserSettingsPage() {
     }
   }, [mcpOAuthClientLabel, mcpOAuthClientRedirectUri]);
 
+  // 確認ダイアログのあとで連携用認証情報を削除し、一覧と表示中の発行直後の資格情報から取り除く
+  // After a confirmation dialog, delete the integration credentials and remove them from the list and from the just-issued credentials display
   const handleDeleteMcpOAuthClient = useCallback(async (client: McpOAuthClient) => {
     const name = client.label || client.client_id;
     const confirmed = await showConfirmModal(
@@ -1230,6 +1244,8 @@ export default function UserSettingsPage() {
     }
   }, [loadMcpOAuthConnectionList]);
 
+  // 連携用認証情報の名前を更新して一覧に反映する。失敗時はトースト表示後に再throwする
+  // Update an integration credential's name and reflect it in the list; on failure, show a toast and rethrow
   const handleUpdateMcpOAuthClientLabel = useCallback(
     async (client: McpOAuthClient, label: string) => {
       try {

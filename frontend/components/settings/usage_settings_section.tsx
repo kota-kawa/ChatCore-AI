@@ -1,3 +1,5 @@
+// 設定画面の「利用状況」セクション。利用枠（今日・今週・デモ）の使用率を表示する。呼び出し元は pages/settings.tsx。
+// The "Usage" section of the settings page, showing how much of each allowance (today, this week, demo) has been used. Used by pages/settings.tsx.
 import { useCallback, useEffect, useState } from "react";
 
 import { InlineLoading } from "../ui/inline_loading";
@@ -17,6 +19,8 @@ function UsageMeter({ id, label, window, footnote }: { id: string; label: string
   const { t } = useTranslation();
   const labelId = `${id}-label`;
 
+  // 枠が無い（null）ときは、バーを出さず「上限なし」と表示する
+  // When there is no allowance (null), show "unlimited" instead of a bar
   if (!window) {
     return (
       <div className="usage-meter">
@@ -72,9 +76,13 @@ export function UsageSettingsSection({ isActive }: { isActive: boolean }) {
     if (isActive) void reload();
   }, [isActive, reload]);
 
+  // 枠のリセット時刻の注記。枠が無ければ空文字にする
+  // Reset-time note for an allowance; empty when there is no allowance
   const resetNote = (window: { resets_at: string } | null) =>
     window ? t("settings.usageResetsAt", { time: formatUsageResetTime(window.resets_at, locale) }) : "";
 
+  // 状態（失敗・読み込み中・表示）ごとにカードの中身を決める
+  // Choose the card body by state: failed, loading or loaded
   let body;
   if (failed) {
     body = (

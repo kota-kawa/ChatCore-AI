@@ -1,3 +1,5 @@
+// 共有プロンプトの詳細モーダルで、コメントの取得・投稿・削除・報告を扱う hook。呼び出し元は pages/prompt_share/index.tsx。
+// Hook that handles loading, posting, deleting and reporting comments in the shared-prompt detail modal. Used by pages/prompt_share/index.tsx.
 import { useCallback, useRef, useState } from "react";
 
 import { showConfirmModal } from "../../scripts/core/alert_modal";
@@ -34,6 +36,8 @@ export function usePromptComments({
   const [commentActionPendingIds, setCommentActionPendingIds] = useState<Set<string>>(new Set());
   const detailPromptIdRef = useRef("");
 
+  // 詳細モーダルを閉じたときに、コメント関連の状態をすべて初期値へ戻す。ref も空にするので、進行中の取得結果は破棄される
+  // Resets all comment state when the detail modal closes; clearing the ref also makes any in-flight fetch result get discarded
   const resetPromptComments = useCallback(() => {
     detailPromptIdRef.current = "";
     setDetailComments([]);
@@ -108,6 +112,8 @@ export function usePromptComments({
       showToast(t("promptShare.commentRequired"), { variant: "error" });
       return;
     }
+    // サーバー応答を待たずに一時コメントを一覧へ出す。成功すれば応答のコメントに差し替え、失敗すれば取り除いて本文とコメント数を元に戻す
+    // Show a temporary comment before the server responds; swap it for the real one on success, or remove it and restore the draft and count on failure
     const optimisticCommentId = `optimistic-comment-${Date.now()}`;
     const previousCommentCount = Number(detailPrompt?.comment_count || 0);
     const optimisticComment: PromptCommentData = {

@@ -1,3 +1,5 @@
+// チャットに添付する画像の判定・送信前の縮小・吹き出し表示用データへの変換をまとめたユーティリティ。
+// Utilities for chat image attachments: detection, downscaling before upload, and conversion into bubble display data.
 import type { AttachedFile, ChatAttachedImage, ChatHistoryAttachedImage } from "./types";
 
 // 画像入力を受け付けるモデル。services/chat_images.py の IMAGE_INPUT_MODELS と揃える。

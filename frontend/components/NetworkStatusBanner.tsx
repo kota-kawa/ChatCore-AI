@@ -18,9 +18,13 @@ type BannerState =
 
 const RECOVERED_VISIBLE_MS = 2400;
 
+// useNetworkStatus の online / slow から、表示するバナー（オフライン・低速・復帰）を1つ決める。pages/_app.tsx から描画される。
+// Picks the single banner (offline / slow / recovered) to show from useNetworkStatus' online / slow flags; rendered from pages/_app.tsx.
 export function NetworkStatusBanner() {
   const { locale, t } = useTranslation();
   const { online, slow } = useNetworkStatus();
+  // wasOfflineRef は「直前までオフラインだったか」を覚え、復帰時だけ「復帰」バナーを出すために使う
+  // wasOfflineRef remembers whether we were just offline so the "recovered" banner appears only on reconnection
   const [banner, setBanner] = useState<BannerState>(null);
   const wasOfflineRef = useRef(false);
   const recoveredTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

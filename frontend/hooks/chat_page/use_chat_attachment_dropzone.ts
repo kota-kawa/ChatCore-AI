@@ -1,3 +1,5 @@
+// チャット入力欄へのファイルのドラッグ＆ドロップによる添付と、ドラッグ中の表示状態を扱う hook。呼び出し元は components/chat_page/chat_main_section.tsx と setup_section.tsx。
+// Hook for attaching files to the chat composer by drag and drop, including the drag-over state. Used by components/chat_page/chat_main_section.tsx and setup_section.tsx.
 import { useCallback, useRef, useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
 
 import {
@@ -22,6 +24,8 @@ type ChatAttachmentDropzoneOptions = {
   notifyAttachmentError: (message: string) => void;
 };
 
+// ドラッグされているものにファイルが含まれるか（文字列や要素のドラッグは対象外）
+// Whether the drag carries files (text or element drags are ignored)
 function eventHasDraggedFiles(event: DragEvent<HTMLElement>) {
   return Array.from(event.dataTransfer.types).includes("Files");
 }
@@ -35,8 +39,12 @@ export function useChatAttachmentDropzone({
   notifyAttachmentError,
 }: ChatAttachmentDropzoneOptions) {
   const { locale, t } = useTranslation();
+  // 子要素をまたぐたびに dragenter / dragleave が発火するため、出入りの深さを数えて、本当に領域を出たときだけ表示を解除する
+  // dragenter / dragleave fire whenever the pointer crosses child elements, so count the depth and clear the highlight only when truly leaving the area
   const attachmentDragDepthRef = useRef(0);
   const [isAttachmentDropActive, setIsAttachmentDropActive] = useState(false);
+  // 添付が無効でなく、上限（MAX_ATTACHED_FILES）にも達していないときだけ、ドロップを受け付ける
+  // Accept drops only when attachments are enabled and the MAX_ATTACHED_FILES limit is not reached
   const canAttachMoreFiles = !isAttachmentDisabled && attachedFiles.length < MAX_ATTACHED_FILES;
 
   const resetAttachmentDragState = useCallback(() => {
@@ -44,6 +52,8 @@ export function useChatAttachmentDropzone({
     setIsAttachmentDropActive(false);
   }, []);
 
+  // 選択・貼り付け・ドロップされたファイルを検証して添付に加える。isCurrent は、読み込み中に画面やルームが変わったときに結果を捨てるための判定
+  // Validate selected / pasted / dropped files and add them as attachments; isCurrent lets a result be discarded if the screen or room changed while reading
   const attachSelectedFiles = useCallback(
     async (files: File[], isCurrent: () => boolean = () => true) => {
       if (files.length === 0 || !isCurrent()) return;

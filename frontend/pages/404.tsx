@@ -1,3 +1,6 @@
+// 存在しないパスで表示する 404 ページ。検索エンジンにはインデックスさせず、トップページへ戻る導線だけを出す。
+// The 404 page shown for unknown paths; it is kept out of search indexes and only offers a link back to the top page.
+
 import Link from "next/link";
 
 import { SeoHead } from "../components/SeoHead";

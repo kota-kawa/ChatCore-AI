@@ -1,3 +1,5 @@
+// ホーム画面で AI の回答を生成する一連の操作（送信・編集して再生成・再生成・停止・履歴の読み込み・分岐の切り替え・ルーム作成）をまとめた hook。生成の同時実行はガードで 1 つに制限し、SSE の解釈は lib/chat_page/generation_stream_consumer.ts に任せる。use_home_page_controller.ts から使われる。
+// Hook gathering the home page's answer-generation actions: send, edit and regenerate, regenerate, stop, load history, switch branch and create room. A guard limits generation to one at a time, and SSE interpretation is delegated to lib/chat_page/generation_stream_consumer.ts. Used by use_home_page_controller.ts.
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 
 import { CHAT_HISTORY_PAGE_SIZE } from "../../lib/chat_page/constants";
@@ -67,11 +69,14 @@ import { getStoredThemePreference, shouldSendThemePreference } from "../../scrip
 // Error code the server returns when the chat room no longer exists.
 const CHAT_ROOM_NOT_FOUND_CODE = "chat.room_not_found";
 
+// API のエラー応答が「ルームが存在しない」を示すかどうか
+// Whether an API error payload says the chat room does not exist
 function isChatRoomNotFoundPayload(payload: unknown): boolean {
   if (!payload || typeof payload !== "object") return false;
   return (payload as { code?: unknown }).code === CHAT_ROOM_NOT_FOUND_CODE;
 }
 
+// サーバー側の分岐情報（ID・版の位置・版の数・兄弟の ID）を UI のメッセージに写す。分岐ナビ（‹ n/m ›）が版の表示と切り替えに使う。
 // Map server-side branch metadata onto a UI message so the branch navigator
 // (‹ n/m ›) can render and switch between versions of a message.
 function toBranchFields(entry: ChatHistoryMessagePayload): Partial<UiChatMessage> {
@@ -137,6 +142,8 @@ export type HomePageRetrievalSettingsPort = {
   sharedPromptsEnabled: boolean;
 };
 
+// hook が受け取る依存を、用途ごとのポート（メッセージ・生成ストリーム・ルーム・履歴ページング・スクロール・参照設定）にまとめた引数
+// Parameters grouping the hook's dependencies into ports: messages, generation stream, room selection, history paging, scroll restore and retrieval settings
 export type UseHomePageGenerationActionsParams = {
   messageList: HomePageMessageListPort;
   generationStream: HomePageGenerationStreamPort;
@@ -147,6 +154,8 @@ export type UseHomePageGenerationActionsParams = {
   setChatInput: Dispatch<SetStateAction<string>>;
 };
 
+// 回答生成に関する操作を返す。状態は呼び出し元（コントローラー）が持ち、ここは ref と setter を通して更新する
+// Return the answer-generation actions; state is owned by the caller (the controller) and updated here through refs and setters
 export function useHomePageGenerationActions({
   messageList,
   generationStream,
@@ -207,6 +216,8 @@ export function useHomePageGenerationActions({
     [],
   );
 
+  // 生成の取得を試みる。すでに別の生成が進行中なら null を返す。取得できたら中断用の AbortController を保持し、生成中の状態にする
+  // Try to acquire the generation slot, returning null while another is running; on success keep its AbortController and mark generating
   const acquireGeneration = useCallback(
     (roomId: string) => {
       const generation = generationGuardRef.current?.acquire(roomId) ?? null;
@@ -219,10 +230,14 @@ export function useHomePageGenerationActions({
     [],
   );
 
+  // この生成がまだ現在の生成かどうか。古い生成の非同期処理が画面を更新しないための判定に使う
+  // Whether this generation is still the current one; used so stale async work does not update the screen
   const isGenerationActive = useCallback((generation: ActiveGeneration) => {
     return generationGuardRef.current?.isActive(generation) === true;
   }, []);
 
+  // 生成の終了処理。現在の生成のときだけ解放し、「思考中」の表示を消して、ストリーミング中の表示を確定済みに戻す
+  // Finish a generation: release only if it is the current one, remove the thinking placeholder and mark streaming messages as settled
   const releaseGeneration = useCallback((generation: ActiveGeneration) => {
     if (generationGuardRef.current?.release(generation) !== true) return false;
     if (abortControllerRef.current === generation.abortController) {
@@ -242,6 +257,8 @@ export function useHomePageGenerationActions({
     return true;
   }, [removeThinkingMessages]);
 
+  // ブラウザの保存容量不足で状態を保存できないことを、1 セッションに 1 回だけトーストで知らせる
+  // Toast once per session that browser storage is too full to save state
   const notifyLocalStorageWriteFailure = useCallback(() => {
     if (localStorageWarningShownRef.current) return;
     localStorageWarningShownRef.current = true;
@@ -251,6 +268,8 @@ export function useHomePageGenerationActions({
     );
   }, []);
 
+  // 進行中の生成を中断して切り離す。サーバー側の停止は行わず、画面側の接続と表示だけを片づける
+  // Abort and detach the in-flight generation; it only cleans up the client connection and display and does not stop it server-side
   const disconnectActiveGeneration = useCallback(() => {
     const generation = generationGuardRef.current?.abortActive() ?? null;
     const abortController = generation?.abortController ?? abortControllerRef.current;
@@ -279,6 +298,8 @@ export function useHomePageGenerationActions({
     });
   }, [removeThinkingMessages]);
 
+  // 現在のルームを切り替えて保存する。別のルームへ移るときは、進行中の生成とスクロール復元の予約を破棄する
+  // Switch and persist the current room; moving to a different room discards the in-flight generation and any pending scroll restore
   const persistCurrentRoomId = useCallback((roomId: string | null, mode?: ChatRoomMode) => {
     if (currentRoomIdRef.current !== roomId) {
       disconnectActiveGeneration();
@@ -292,6 +313,8 @@ export function useHomePageGenerationActions({
     }
   }, [disconnectActiveGeneration, notifyLocalStorageWriteFailure]);
 
+  // 指定ルームの画面に、エラー文のアシスタントメッセージを追加する（ルームが切り替わっていたら何もしない）
+  // Append an assistant error message to the given room's view (no-op if the room has changed)
   const appendAssistantErrorMessage = useCallback(
     (roomId: string, errorMessage: string) => {
       const id = nextMessageId("assistant-error", messageSeqRef);
@@ -336,6 +359,8 @@ export function useHomePageGenerationActions({
     [removeThinkingMessages, setChatInput],
   );
 
+  // 履歴の端末保存に失敗、または古い分を削除したときだけ、1 セッションに 1 回トーストで知らせる
+  // Toast once per session only when saving history to the device failed or older entries were dropped
   const notifyStoredHistoryWriteIssue = useCallback((result: StoredHistoryWriteResult) => {
     if (result.stored && !result.truncated) return;
     if (result.stored && result.reason === "cache_limit") return;
@@ -356,6 +381,8 @@ export function useHomePageGenerationActions({
     );
   }, []);
 
+  // 画面のメッセージのうちユーザーとアシスタントの発言だけを、端末の履歴キャッシュとして保存する
+  // Save only the user and assistant messages from the screen as the on-device history cache
   const saveUiMessagesToLocalStorage = useCallback((roomId: string, uiMessages: UiChatMessage[], roomMode: ChatRoomMode) => {
     const normalized = uiMessages
       .filter((message) => message.sender === "user" || message.sender === "assistant")
@@ -384,10 +411,14 @@ export function useHomePageGenerationActions({
     );
   }, [setChatRooms]);
 
+  // ルームをサイドバー一覧の先頭へ移す
+  // Move the room to the top of the sidebar list
   const markChatRoomActive = useCallback((roomId: string) => {
     setChatRooms((previous) => moveChatRoomToFront(previous, roomId));
   }, [setChatRooms]);
 
+  // 端末に保存した履歴だけで、メッセージ一覧を先に描画する（サーバーの履歴を待たない）
+  // Render the message list from the on-device history alone, without waiting for the server
   const loadLocalChatHistory = useCallback(
     (roomId: string) => {
       const localEntries = readStoredHistory(roomId);
@@ -408,6 +439,8 @@ export function useHomePageGenerationActions({
     [requestScrollToBottom],
   );
 
+  // 履歴を 1 ページ取得する。beforeId を渡すと、それより古い分を返す
+  // Fetch one page of history; passing beforeId returns the entries older than it
   const fetchChatHistoryPage = useCallback(async (roomId: string, beforeId?: number | null) => {
     const params = new URLSearchParams({
       room_id: roomId,
@@ -545,6 +578,8 @@ export function useHomePageGenerationActions({
     [buildGenerationStreamHost],
   );
 
+  // 最初の送信の応答を受け取れなかったとき、サーバーで始まっている生成のストリームへ待ちを入れながら再接続を試みる。つなげなければ null
+  // When the response to the initial send was lost, retry attaching to the generation the server already started, with backoff; null if it cannot connect
   const recoverInitialGenerationStream = useCallback(
     async (roomId: string, generation: ActiveGeneration): Promise<Response | null> => {
       let reconnectAttempt = 0;
@@ -563,6 +598,7 @@ export function useHomePageGenerationActions({
           );
           if (response.ok) return response;
 
+          // 4xx の応答は、元のリクエストが受理されていない（またはセッションが無効）ことを意味する。POST を安全に作り直すことはできないので再試行しない。
           // A 4xx response means the original request was not accepted (or the
           // session is no longer valid); retries cannot safely recreate a POST.
           if (isUnrecoverableStreamStatus(response.status)) return null;
@@ -576,6 +612,8 @@ export function useHomePageGenerationActions({
     [isGenerationActive, openGenerationStreamRequest],
   );
 
+  // サーバーで進行中（または再生可能）な生成のストリームへ、最後に受け取ったイベントの続きから接続する。ページの再読み込みやルームの切り替え後の復帰に使う
+  // Connect to the stream of a generation that is running (or replayable) on the server, resuming after the last event received; used to recover after a reload or room switch
   const connectToGenerationStream = useCallback(
     async (roomId: string, roomMode: ChatRoomMode, serverGenerationId?: string) => {
       const generation = acquireGeneration(roomId);
@@ -656,6 +694,8 @@ export function useHomePageGenerationActions({
     ],
   );
 
+  // サーバーから履歴を読み込んで表示する。shouldCheckGeneration のときは生成の状態も確認し、最新の発言が回答済みなら保存状態を片づけ、生成中または再生可能ならストリームへ接続する
+  // Load history from the server and render it; with shouldCheckGeneration it also checks generation status: if the latest turn is answered it clears stored progress, and if a generation is running or replayable it connects to the stream
   const loadChatHistory = useCallback(
     async (roomId: string, shouldCheckGeneration = true) => {
       const revision = generationGuardRef.current?.revision();
@@ -717,6 +757,7 @@ export function useHomePageGenerationActions({
             uiMessages = toUiMessages(loadedHistory.messages);
             syncLoadedHistoryState();
           } catch {
+            // 整合性のための再取得に失敗しても、すでに読み込んだ履歴をそのまま使う。
             // Keep the already-loaded history if a consistency refresh fails.
           }
         }
@@ -749,6 +790,8 @@ export function useHomePageGenerationActions({
     [connectToGenerationStream, currentRoomIdRef, fetchChatHistoryPage, generationGuardRef, saveUiMessagesToLocalStorage, requestScrollToBottom],
   );
 
+  // 古い履歴を 1 ページ読み込んで先頭に足す。足す前のスクロール位置を記録しておき、読んでいた位置を保つ
+  // Load one page of older history and prepend it, recording the scroll position beforehand to keep the reader's place
   const loadOlderChatHistory = useCallback(async () => {
     const roomId = currentRoomIdRef.current;
     if (!roomId) return;
@@ -803,6 +846,8 @@ export function useHomePageGenerationActions({
     }
   }, [fetchChatHistoryPage, historyHasMore, historyNextBeforeId, isLoadingOlder, notifyStoredHistoryWriteIssue]);
 
+  // サーバーの履歴データを UI のメッセージ形式に変換する
+  // Convert server history entries into UI messages
   const mapHistoryEntriesToUi = useCallback(
     (entries: ChatHistoryMessagePayload[], idPrefix: string): UiChatMessage[] =>
       entries.map((entry) => ({
@@ -817,6 +862,7 @@ export function useHomePageGenerationActions({
     [messageSeqRef],
   );
 
+  // 編集や再生成のあとに、現在の分岐をサーバーから読み直し、新しくできた分岐が版の表示（‹ n/m ›）に反映されるようにする。
   // Reload the active branch from the server so version indicators (‹ n/m ›)
   // reflect freshly-created branches after an edit or regeneration.
   const refreshActivePath = useCallback(
@@ -837,12 +883,14 @@ export function useHomePageGenerationActions({
         // bring the follow-the-answer behaviour back. Refresh the branch data
         // only and leave the scroll position where the reader put it.
       } catch {
+        // 再取得に失敗したら、楽観的に表示したメッセージをそのまま残す。
         // Keep the optimistic messages if the refresh fails.
       }
     },
     [currentRoomIdRef, fetchChatHistoryPage, generationGuardRef, mapHistoryEntriesToUi, saveUiMessagesToLocalStorage],
   );
 
+  // 指定された兄弟の版へ現在の分岐を切り替え、サーバーが返した会話の流れを表示する。
   // Switch the active branch to the requested sibling version and render the
   // resulting conversation path returned by the server.
   const switchBranch = useCallback(
@@ -877,6 +925,8 @@ export function useHomePageGenerationActions({
     [mapHistoryEntriesToUi, saveUiMessagesToLocalStorage],
   );
 
+  // サーバー上にチャットルームを作成する。project_id があればそのプロジェクトに紐づける
+  // Create a chat room on the server, linking it to a project when project_id is given
   const createNewChatRoom = useCallback(async (
     roomId: string,
     title: string,
@@ -1033,6 +1083,8 @@ export function useHomePageGenerationActions({
     [isGenerationActive, removeThinkingMessages],
   );
 
+  // メッセージを /api/chat へ送る。モデル・参照設定・添付ファイルを同送し、ストリームの応答を長く待てるようタイムアウトは設けない
+  // POST the message to /api/chat with model, retrieval settings and attachments; no timeout is set so a long streamed response can be awaited
   const postChatMessageRequest = useCallback(
     (
       generation: ActiveGeneration,
@@ -1150,6 +1202,7 @@ export function useHomePageGenerationActions({
     ],
   );
 
+  // クライアントが Wi-Fi とモバイル回線の切り替えなどで応答を失っても、POST 自体はサーバーに届いている可能性がある。再送すると同じ発言が二重になりかねないので、再送せず、サーバーがすでに始めた生成へ接続し直す。
   // The POST may have reached the server even when the client loses the
   // response during a Wi-Fi/mobile handoff. Do not resend it (which could
   // create a duplicate turn); attach to the generation the server already
@@ -1174,6 +1227,8 @@ export function useHomePageGenerationActions({
     [consumeStreamingChatResponse, isGenerationActive, recoverInitialGenerationStream],
   );
 
+  // ユーザーの発言を送って回答を生成する中心の処理。発言を先に表示し、404（ルーム消失）なら作り直して再送、SSE ならストリームを消費、JSON ならそのまま表示する。応答を受け取れなかった場合は、サーバー側で始まった生成へ接続し直す
+  // Core send-and-generate flow: show the message first; on 404 (room missing) recreate and resend; consume an SSE stream or render a JSON reply; if the response is lost, reattach to the generation the server started
   const generateResponse = useCallback(
     async (
       message: string,
@@ -1256,6 +1311,8 @@ export function useHomePageGenerationActions({
     ],
   );
 
+  // 生成の停止をサーバーへ依頼してから、画面側の接続を切る。ルームが無ければ画面側だけを切る
+  // Ask the server to stop generation, then disconnect the client; without a room only the client side is disconnected
   const stopGeneration = useCallback(async () => {
     const roomId = currentRoomIdRef.current;
     if (!roomId) {
@@ -1275,6 +1332,7 @@ export function useHomePageGenerationActions({
         disconnectActiveGeneration,
       );
     } catch {
+      // 停止要求の失敗は無視する（できる範囲での停止）。
       // best effort
     }
   }, [disconnectActiveGeneration]);
@@ -1306,6 +1364,8 @@ export function useHomePageGenerationActions({
     [notifyStoredHistoryWriteIssue, removeThinkingMessages],
   );
 
+  // ユーザーの過去の発言を編集して送り直し、それ以降の回答を生成し直す。送信前に画面と端末の履歴から後ろを切り落とす
+  // Edit a past user message and regenerate from there, trimming everything after it from the screen and the device cache before sending
   const editAndRegenerateMessage = useCallback(
     async (newMessage: string, trailingUserCount: number, model: string, roomId: string) => {
       // isGenerating は React state なので同じ tick で連打されると更新前の値のまま
@@ -1489,6 +1549,8 @@ export function useHomePageGenerationActions({
     ],
   );
 
+  // 直前の回答を取り消し、同じ発言に対する回答を生成し直す。新しいユーザー発言は作らない
+  // Drop the last answer and regenerate it for the same user message, without creating a new user message
   const regenerateLastResponse = useCallback(
     async (model: string, roomId: string) => {
       // 上の editAndRegenerateMessage と同じ理由で、取得できたときだけ切り詰める。

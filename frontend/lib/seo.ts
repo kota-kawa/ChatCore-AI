@@ -1,5 +1,12 @@
+// SEO 用の定数（サイト名・既定のタイトル・説明・OG 画像）と、公開 URL・言語別 URL・メタ情報向けのテキストを整える関数。
+// 日本語を既定の URL、英語を /en 配下に置く公開 URL の規則もここにある。
+// SEO constants (site name, default title, description, OG image) and helpers for public and per-locale URLs and meta text.
+// The public URL rule also lives here: Japanese at the default path, English under /en.
+
 import type { Locale } from "./i18n/config";
 
+// 検索結果や SNS のカードに出すサイト名・既定のタイトル・説明。ページごとに指定が無いときの既定値として使う。
+// Site name, default title and description shown in search results and social cards; defaults used when a page specifies none.
 export const SITE_NAME = "Chat Core";
 
 export const DEFAULT_SEO_TITLE = "ChatCore-AI | AIチャット・プロンプト共有・メモ管理";
@@ -7,12 +14,18 @@ export const DEFAULT_SEO_TITLE = "ChatCore-AI | AIチャット・プロンプト
 export const DEFAULT_SEO_DESCRIPTION =
   "ChatCore-AIは、AIチャット、プロンプト共有、メモ保存をひとつにまとめた日本語対応のAIワークスペースです。日々の調査、文章作成、アイデア整理を効率化できます。";
 
+// 既定の OG 画像のパスと、その寸法（ピクセル）。
+// Path of the default OG image and its dimensions in pixels.
 export const DEFAULT_OG_IMAGE_PATH = "/static/Chat-Core-OG-compressed.jpg";
 export const DEFAULT_OG_IMAGE_WIDTH = 2048;
 export const DEFAULT_OG_IMAGE_HEIGHT = 1070;
 
+// X（旧 Twitter）のサイトアカウント。環境変数 NEXT_PUBLIC_TWITTER_SITE で指定し、未設定なら空。
+// The site's X (formerly Twitter) account, set through NEXT_PUBLIC_TWITTER_SITE; empty when unset.
 export const TWITTER_SITE = process.env.NEXT_PUBLIC_TWITTER_SITE || "";
 
+// http(s):// で始まる絶対 URL かの判定に使う。
+// Used to tell whether a string is an absolute http(s) URL.
 const ABSOLUTE_URL_PATTERN = /^https?:\/\//i;
 
 // 検索エンジンへ公開する言語別URLでは、日本語を既定URL、英語を /en 配下に置く。
@@ -113,6 +126,8 @@ export function truncateSeoText(value: string, maxLength = 140) {
  * JSON-LD用スクリプトのコンテンツをエスケープして生成する
  * Generate and escape script content for JSON-LD
  */
+// `<` を < に置き換え、JSON-LD を script タグに埋め込んでも </script> で閉じられてしまわないようにする。
+// Replaces `<` with < so JSON-LD embedded in a script tag cannot be closed early by </script>.
 export function jsonLdScriptContent(data: Record<string, unknown> | Record<string, unknown>[]) {
   return JSON.stringify(data).replace(/</g, "\\u003c");
 }

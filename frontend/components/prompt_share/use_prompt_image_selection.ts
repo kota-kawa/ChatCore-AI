@@ -1,3 +1,5 @@
+// 共有プロンプト投稿フォームで、添付ファイルの選択・検証・プレビュー表示を扱う hook。呼び出し元は pages/prompt_share/index.tsx。
+// Hook for picking, validating and previewing the attachment in the prompt-share post form. Used by pages/prompt_share/index.tsx.
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 
 import { showToast } from "../../scripts/core/toast";
@@ -77,6 +79,8 @@ export function usePromptImageSelection(mediaType: MediaType) {
     [clearPromptImageSelection, updatePromptImagePreview, validateReferenceImageFile]
   );
 
+  // アンマウント時にプレビュー用の Object URL を解放する
+  // Release the preview Object URL on unmount
   useEffect(() => {
     return () => {
       revokePromptImagePreview();

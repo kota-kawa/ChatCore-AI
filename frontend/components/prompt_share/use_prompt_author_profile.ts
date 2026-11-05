@@ -1,3 +1,5 @@
+// 投稿者プロフィールのモーダルに必要な状態（プロフィール、投稿一覧、ページング、読み込み・エラー）を管理するフック。pages/prompt_share/index.tsx から使われる。
+// Hook that manages the state of the author profile modal (profile, post list, paging, loading, and errors); used by pages/prompt_share/index.tsx.
 import { useCallback, useRef, useState } from "react";
 
 import { fetchPromptAuthorProfile, fetchPromptList } from "../../scripts/prompt_share/api";
@@ -6,6 +8,8 @@ import { AUTHOR_PROFILE_PROMPTS_PAGE_SIZE } from "./prompt_share_page_constants"
 import type { PromptRecord } from "./prompt_card";
 import { useTranslation } from "../../contexts/locale_context";
 
+// toPromptRecords: API の PromptData を画面用の PromptRecord に変換する関数（呼び出し側が渡す）。
+// toPromptRecords: converts API PromptData into UI PromptRecords; supplied by the caller.
 type UsePromptAuthorProfileOptions = {
   toPromptRecords: (items: PromptData[]) => PromptRecord[];
 };

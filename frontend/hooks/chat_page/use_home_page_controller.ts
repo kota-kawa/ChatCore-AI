@@ -1,3 +1,5 @@
+// ホーム画面（pages/index.tsx）の状態と操作を束ねるコントローラー hook。UI・タスク・チャット・共有・プロジェクトなどの小さな hook を組み合わせ、認証確認・画面の復元・レイアウト同期の副作用を持つ。戻り値は HomePageContextProvider（contexts/chat_page/home_page_context.tsx）で配られる。
+// Controller hook that ties together the home page (pages/index.tsx) state and actions. It composes the smaller UI / task / chat / share / project hooks and owns the side effects for auth checks, view restoration and layout sync. Its return value is distributed by HomePageContextProvider (contexts/chat_page/home_page_context.tsx).
 import {
   useCallback,
   useEffect,
@@ -76,6 +78,8 @@ const HOME_BOOT_VIEW_ATTRIBUTE = "data-cc-home-boot-view";
 // (max 0.73s = chat-area delay 0.18s + duration 0.55s) before releasing the flag.
 const HOME_BOOT_VIEW_RELEASE_DELAY_MS = 1000;
 
+// 幅が狭く、サイドバーが画面に重なって表示される（オーバーレイ）状態かどうか
+// Whether the viewport is narrow enough that the sidebar is shown as an overlay
 function isOverlaySidebarViewport() {
   return typeof window !== "undefined" && window.matchMedia(CHAT_SIDEBAR_OVERLAY_QUERY).matches;
 }
@@ -97,6 +101,8 @@ async function readCurrentUserIdFromResponse(response: Response): Promise<string
   }
 }
 
+// ルーム一覧 API の URL を作る。cursor があれば、その続きのページを指す
+// Build the chat-rooms API URL; a cursor points at the following page
 const buildChatRoomsPageUrl = (cursor?: string | null): string => {
   const params = new URLSearchParams({
     limit: String(CHAT_ROOMS_PAGE_SIZE),
@@ -107,6 +113,8 @@ const buildChatRoomsPageUrl = (cursor?: string | null): string => {
   return `/api/get_chat_rooms?${params.toString()}`;
 };
 
+// ルーム一覧の 1 ページを取得して正規化する。失敗時は例外にする（SWR のフェッチ関数としても使う）
+// Fetch and normalize one page of chat rooms, throwing on failure (also used as the SWR fetcher)
 const fetchChatRoomsPage = async (url: string): Promise<ChatRoomsPage> => {
   const response = await resilientFetch(url, { credentials: "same-origin" });
   const rawPayload = await readJsonBodySafe(response);
@@ -119,8 +127,12 @@ const fetchChatRoomsPage = async (url: string): Promise<ChatRoomsPage> => {
   return payload;
 };
 
+// ホーム画面の全状態を組み立てて返す。UI 状態、タスク、チャット、共有などの hook を呼び出し、それらをつなぐ処理と副作用をここに置く
+// Assemble and return all home page state: calls the UI, task, chat and share hooks, and holds the glue logic and side effects between them
 export function useHomePageController() {
   const { locale } = useTranslation();
+  // localize は言語を ref から読む。コールバックを作り直さずに、最新の言語で文言を選べる
+  // localize reads the language from a ref, so callbacks pick the latest language without being recreated
   const localeRef = useRef(locale);
   localeRef.current = locale;
   const localize = useCallback((ja: string, en: string) => localeRef.current === "en" ? en : ja, []);
@@ -294,13 +306,22 @@ export function useHomePageController() {
     shareCacheRef,
   });
 
+  // タスクのドラッグ中の位置を、イベント処理の途中でも同期的に読めるようにする ref
+  // Ref to read the dragged task's index synchronously during event handling
   const draggingTaskIndexRef = useRef<number | null>(null);
+  // scheduleTrackedTimeout で登録したタイマー ID。アンマウント時にまとめて解除する
+  // Timer IDs registered via scheduleTrackedTimeout; cleared together on unmount
   const trackedTimeoutIdsRef = useRef<Set<number>>(new Set());
+  // ルーム一覧の追加取得が実行中かどうか。state より先に同期的に判定でき、二重取得を防ぐ
+  // Whether loading more rooms is in flight; unlike state it can be checked synchronously, preventing duplicate fetches
   const loadingMoreChatRoomsRef = useRef(false);
+  // ユーザーがサイドバーの 1 ページ目より先まで読み込んだかを示す。true になったら、1 ページ目のバックグラウンド再検証でページングのカーソルを巻き戻してはいけない（下の cachedChatRoomsPage の effect を参照）。
   // Tracks whether the user has scrolled past the first sidebar page. Once true,
   // background revalidation of the first page must not rewind the pagination
   // cursor (see the cachedChatRoomsPage effect below).
   const hasLoadedMoreChatRoomsRef = useRef(false);
+  // 回答生成を同時に 1 つに限るためのガード。一度だけ作成して保持する
+  // Guard that limits answer generation to one at a time; created once and kept
   const generationGuardRef = useRef<GenerationGuard | null>(null);
   if (!generationGuardRef.current) {
     generationGuardRef.current = createGenerationGuard();
@@ -368,6 +389,8 @@ export function useHomePageController() {
     setChatInput,
   });
   const hasCurrentRoom = Boolean(currentRoomId);
+  // ログイン中だけルーム一覧の 1 ページ目を取得する。フォーカス復帰で再検証し、取得済みの値は再取得中も表示し続ける
+  // Fetch the first page of rooms only while logged in; revalidate on focus and keep showing the previous data during revalidation
   const {
     data: cachedChatRoomsPage,
     isLoading: isLoadingChatRoomsPage,
@@ -384,6 +407,8 @@ export function useHomePageController() {
   const cachedChatRooms = cachedChatRoomsPage?.rooms;
   const isChatRoomsInitialLoading = loggedIn && isLoadingChatRoomsPage && chatRooms.length === 0;
 
+  // サイドバーのルーム一覧を次のページまで読み込み、既存の一覧に重複なく追加する
+  // Load the next page of the sidebar room list and merge it in without duplicates
   const loadMoreChatRooms = useCallback(async () => {
     if (!loggedIn || !chatRoomsHasMore || isLoadingMoreChatRooms || loadingMoreChatRoomsRef.current) return;
     const cursor = chatRoomsNextCursor;
@@ -414,6 +439,8 @@ export function useHomePageController() {
     setIsLoadingMoreChatRooms,
   ]);
 
+  // オーバーレイ表示のとき（幅が狭いとき）だけサイドバーを閉じる
+  // Close the sidebar only in overlay mode (narrow viewports)
   const closeOverlaySidebar = useCallback(() => {
     if (isOverlaySidebarViewport()) {
       // サイドバーを支援技術から隠す前に、内部のフォーカスを開閉ボタンへ戻す。
@@ -436,12 +463,16 @@ export function useHomePageController() {
     }
   }, [setSidebarOpen]);
 
+  // ルーム一覧のページングに関する追加取得の状態を初期化する
+  // Reset the state tracking additional room-list pages
   const resetChatRoomsPaginationWindow = useCallback(() => {
     loadingMoreChatRoomsRef.current = false;
     hasLoadedMoreChatRoomsRef.current = false;
     setIsLoadingMoreChatRooms(false);
   }, [setIsLoadingMoreChatRooms]);
 
+  // 画面の切り替え前に、フォーカス中の要素を外す
+  // Blur the focused element before switching views
   const prepareChatViewTransition = useCallback(() => {
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement) {
@@ -449,6 +480,8 @@ export function useHomePageController() {
     }
   }, []);
 
+  // scheduleTrackedTimeout で登録した未実行のタイマーをすべて解除する
+  // Cancel every timer still pending that was registered through scheduleTrackedTimeout
   const clearTrackedTimeouts = useCallback(() => {
     trackedTimeoutIdsRef.current.forEach((timeoutId) => {
       window.clearTimeout(timeoutId);
@@ -456,6 +489,8 @@ export function useHomePageController() {
     trackedTimeoutIdsRef.current.clear();
   }, []);
 
+  // アンマウント時に解除できるよう、ID を記録しながらタイマーを張る
+  // Set a timer while recording its ID so it can be cancelled on unmount
   const scheduleTrackedTimeout = useCallback((callback: () => void, delayMs: number) => {
     const timeoutId = window.setTimeout(() => {
       trackedTimeoutIdsRef.current.delete(timeoutId);
@@ -479,6 +514,8 @@ export function useHomePageController() {
     setPendingProjectId(null);
   }, []);
 
+  // プロジェクト機能（一覧・詳細・作成など）。次の新規チャットに紐づけるプロジェクトを共有する
+  // Project features (list, detail, create, ...), sharing the project to attach to the next new chat
   const projectActions = useHomePageProjects({
     loggedIn,
     pendingProjectIdRef,
@@ -573,6 +610,8 @@ export function useHomePageController() {
     setMessages((previous) => replaceToolApprovalInMessages(previous, approval));
   }, [setMessages]);
 
+  // 新規タスクモーダルの送信中状態・メッセージ・AI 補助の状態を初期化する
+  // Reset the new-task modal's submitting flag, status message and AI assistance state
   const resetNewPromptComposer = useCallback(() => {
     setIsPromptSubmitting(false);
     setNewPromptStatus({ message: "", variant: "info" });
@@ -592,6 +631,8 @@ export function useHomePageController() {
     });
   }, []);
 
+  // 新規タスクを /api/add_task へ送る。成功したら入力を空にしてタスク一覧を再取得し、少し待ってからモーダルを閉じる。入力例・出力例は guardrailEnabled のときだけ送る
+  // Submit a new task to /api/add_task; on success clear the form, refetch the task list and close the modal after a short delay. Examples are sent only when guardrailEnabled is on
   const handlePromptSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -662,6 +703,8 @@ export function useHomePageController() {
   );
 
   useEffect(() => {
+    // CSRF トークンを先に取得し、ポップアップメニューなどのカスタム要素を読み込む
+    // Prime the CSRF token and load custom elements such as the popup menus
     void import("../../scripts/core/csrf").then(({ primeCsrfToken }) => {
       void primeCsrfToken();
     });
@@ -671,6 +714,8 @@ export function useHomePageController() {
   }, []);
 
   useIsomorphicLayoutEffect(() => {
+    // ホーム画面の間だけ body に chat-page クラスを付け、離れるときに関連クラスと進行中の生成を片づける
+    // Mark the body with chat-page while this screen is mounted, and on leave clear related classes and any in-flight generation
     document.body.classList.add("chat-page");
     return () => {
       clearTrackedTimeouts();
@@ -685,6 +730,8 @@ export function useHomePageController() {
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(CHAT_SIDEBAR_OVERLAY_QUERY);
+    // 広い画面ではサイドバーを常に開き、狭い画面（オーバーレイ表示）では閉じた状態にそろえる
+    // Keep the sidebar open on wide screens and closed on narrow (overlay) ones
     const syncSidebarWithViewport = () => {
       setSidebarOpen(!mediaQuery.matches);
     };
@@ -727,6 +774,8 @@ export function useHomePageController() {
     let rafId: number | null = null;
     let settleTimeout: number | null = null;
 
+    // 表示領域の高さ・上端・ソフトキーボードが隠す量を CSS 変数に書き出す。キーボードが 24px を超えて出ているときは data-chat-keyboard-open を true にする
+    // Write the visible viewport height, top offset and soft-keyboard inset to CSS variables; data-chat-keyboard-open is true when the keyboard exceeds 24px
     const writeViewportVars = () => {
       rafId = null;
       const visualViewport = window.visualViewport;
@@ -783,6 +832,8 @@ export function useHomePageController() {
   }, []);
 
   useEffect(() => {
+    // sidebar-visible クラスは、チャット画面でオーバーレイのサイドバーが開いているときだけ付ける
+    // Apply the sidebar-visible class only while an overlay sidebar is open in the chat view
     if (pageViewState !== "chat" || !sidebarOpen || !isOverlaySidebarViewport()) {
       document.body.classList.remove("sidebar-visible");
       return;
@@ -794,6 +845,8 @@ export function useHomePageController() {
     document.body.classList.toggle("new-prompt-modal-open", isNewPromptModalOpen);
   }, [isNewPromptModalOpen]);
 
+  // 背景のスクロールを止めるべきモーダルが開いているか
+  // Whether a modal that should lock background scrolling is open
   const hasBlockingModalOpen =
     isNewPromptModalOpen || shareModalOpen || taskEditModalOpen || Boolean(taskDetail);
 
@@ -818,6 +871,8 @@ export function useHomePageController() {
     const container = chatMessagesRef.current;
     if (!container) return;
 
+    // メッセージが変わるたびにスクロールを調整する。古い履歴を先頭に足した直後は読んでいた位置を保ち、そうでなければ予約があるときだけ最下部へ送る
+    // Adjust scroll whenever messages change: right after older history is prepended keep the reader's position, otherwise scroll to the bottom only if requested
     const restore = prependScrollRestoreRef.current;
     if (restore) {
       const delta = container.scrollHeight - restore.prevScrollHeight;
@@ -890,12 +945,15 @@ export function useHomePageController() {
   ]);
 
   useEffect(() => {
+    // /api/current_user でログイン状態を確定する。通信失敗など認証エラー以外では、新しいキャッシュがあればその状態を保つ
+    // Confirm the login state via /api/current_user; on failures other than auth errors, keep the state if a fresh cache exists
     const canFallback = isCachedAuthStateFresh() && readCachedAuthState() !== null;
 
     let cancelled = false;
 
     resilientFetch("/api/current_user", { credentials: "same-origin" })
       .then(async (response) => {
+        // readCurrentUserLoggedIn は本文を読み切るため、確認済みのユーザー ID をスコープ判定に使えるよう、複製を別に読む。既存の判定処理には触れない。
         // readCurrentUserLoggedIn consumes the body; read a clone separately so
         // the confirmed user id is available for the scope check below without
         // disturbing that existing parsing.
@@ -943,6 +1001,8 @@ export function useHomePageController() {
   }, [applyResolvedUserScope]);
 
   useEffect(() => {
+    // ログイン状態をアプリ共通の状態へ同期する
+    // Sync the login state into the shared app state
     setLoggedInState(loggedIn);
   }, [loggedIn]);
 
@@ -953,6 +1013,7 @@ export function useHomePageController() {
     setChatRooms((previous) =>
       hasPaginated ? mergeUniqueChatRooms(nextRooms, previous) : nextRooms,
     );
+    // 1 ページ目のバックグラウンド再検証（フォーカス復帰、ルームの変更など）で、ユーザーが追加ページまで読み込んだあとにカーソルを巻き戻してはいけない。巻き戻すと次のスクロールで表示済みのルームを再取得し、一覧が止まって見える。1 ページ目にいる間だけ、そのカーソルを採用する。
     // A background revalidation of the first page (focus, room mutations, etc.)
     // must not rewind the cursor once the user has scrolled to additional pages,
     // otherwise the next scroll re-fetches already-visible rooms and the list
@@ -980,6 +1041,8 @@ export function useHomePageController() {
 
   useEffect(() => {
     if (!authResolved) return;
+    // 認証が確定したらタスクを取得する。未ログインならルーム一覧に関する状態も空に戻す
+    // Fetch tasks once auth is resolved; when logged out, also clear the room-list state
     void refreshTasks(true);
     if (!loggedIn) {
       setChatRooms([]);
@@ -998,6 +1061,8 @@ export function useHomePageController() {
     }
   }, [taskCollapseLimit, tasks.length]);
 
+  // 保存されているビューとアクティブルームを復元する。メッセージ本文は復元せず、チャット履歴はサーバーから読み直す
+  // Restore the stored view and active room; message text is not restored here and chat history is reloaded from the server
   const restoreHomeViewFromStorage = useCallback(() => {
     try {
       // 認証確認（/api/current_user）はこの後に非同期で走る。どれだけ厳しい
@@ -1051,6 +1116,7 @@ export function useHomePageController() {
         setIsLoadingOlder(false);
       }
     } catch {
+      // localStorage の失敗は無視する
       // ignore localStorage failures
     }
   }, [
@@ -1078,6 +1144,8 @@ export function useHomePageController() {
   }, [restoreHomeViewFromStorage]);
 
   useEffect(() => {
+    // bfcache からの復帰や戻る操作でホームに戻ったときも、同じ復元を行う
+    // Run the same restoration when returning to home via bfcache or back navigation
     const restoreIfHomePage = () => {
       if (!["/", "/en", "/en/"].includes(window.location.pathname)) return;
       restoreHomeViewFromStorage();
@@ -1127,6 +1195,8 @@ export function useHomePageController() {
   }, [pageViewState]);
 
   useEffect(() => {
+    // メニューの外をクリックしたときに、モデル選択・ルーム操作メニュー・オーバーレイのサイドバーを閉じる
+    // Close the model menus, room actions menu and overlay sidebar when clicking outside them
     const onOutsideClick = (event: MouseEvent) => {
       if (!(event.target instanceof Element)) return;
       const target = event.target;
@@ -1163,6 +1233,7 @@ export function useHomePageController() {
     let lastWidth = typeof window === "undefined" ? 0 : window.innerWidth;
     const onWindowResize = () => {
       const nextWidth = window.innerWidth;
+      // 幅が変わったときだけ本当のリサイズとみなし、画面キーボードの開閉による高さだけの変化は無視する。
       // Only treat width changes as a real resize; ignore height-only changes
       // caused by the on-screen keyboard opening/closing.
       if (Math.abs(nextWidth - lastWidth) >= 1) {
@@ -1172,6 +1243,7 @@ export function useHomePageController() {
       }
     };
     const onVisualViewportResize = () => {
+      // 表示領域が変わったらセットアップ画面の密度を再計算するが、ソフトキーボードが出るたびにちらつくので、サイドバーは自動では閉じない。
       // Re-run setup density on viewport changes, but never auto-close the
       // sidebar — that would flicker every time the soft keyboard appears.
       scheduleSetupViewportFit();
@@ -1189,6 +1261,8 @@ export function useHomePageController() {
   useEffect(() => {
     if (!isNewPromptModalOpen && !shareModalOpen) return;
 
+    // Escape で新規タスクモーダルまたは共有モーダルを閉じる。タスク送信中は閉じない
+    // Close the new-task or share modal on Escape, except while the task is being submitted
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (isNewPromptModalOpen) {
@@ -1208,6 +1282,8 @@ export function useHomePageController() {
   }, [closeNewPromptModal, closeShareModal, isNewPromptModalOpen, isPromptSubmitting, shareModalOpen]);
 
   useEffect(() => {
+    // AI 補助（prompt assist）を一度だけ初期化する。必要な DOM がそろうまでは何もしない
+    // Initialize AI assistance (prompt assist) exactly once; do nothing until the required DOM elements exist
     if (promptAssistControllerRef.current) return;
     if (!newPromptAssistRootRef.current) return;
     if (!titleInputRef.current || !contentInputRef.current || !inputExampleRef.current || !outputExampleRef.current) {
@@ -1247,6 +1323,8 @@ export function useHomePageController() {
   }, [isNewPromptModalOpen]);
 
   useEffect(() => {
+    // 入力を編集したら、直前のエラー表示を消す
+    // Clear the previous error message once the user edits the inputs
     if (newPromptStatus.variant === "error") {
       setNewPromptStatus({ message: "", variant: "info" });
     }

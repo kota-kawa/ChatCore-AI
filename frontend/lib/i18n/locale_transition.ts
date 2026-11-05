@@ -25,13 +25,19 @@ const SETTLE_MS = 280;
 // Fade-out duration before a reload. Keep in sync with the CSS transition.
 const LEAVE_MS = 150;
 
+// フェードイン終了を待つタイマーの ID。連続して切り替えたとき、前のタイマーを取り消すために保持する。
+// ID of the timer waiting for the fade-in to end; kept so a previous timer can be cancelled on rapid switches.
 let settleTimer: number | null = null;
 
+// 利用者が「視覚効果を減らす」設定にしているか。そうなら演出を省く。
+// Whether the user prefers reduced motion; if so the transition is skipped.
 function prefersReducedMotion() {
   return typeof window.matchMedia === "function"
     && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+// 予約済みのフェードイン終了タイマーを取り消す。
+// Cancels the pending timer that ends the fade-in.
 function clearSettleTimer() {
   if (settleTimer === null) return;
   window.clearTimeout(settleTimer);
@@ -81,7 +87,8 @@ export function reloadWithLocaleTransition() {
     return;
   }
 
-  try { window.sessionStorage.setItem(LOCALE_TRANSITION_SESSION_KEY, "1"); } catch { /* storage can be unavailable */ }
+  try { window.sessionStorage.setItem(LOCALE_TRANSITION_SESSION_KEY, "1"); } catch { /* ブラウザー保存領域が利用できない場合もある。
+    storage can be unavailable */ }
   clearSettleTimer();
   document.documentElement.setAttribute(LOCALE_TRANSITION_ATTRIBUTE, "leave");
   window.setTimeout(() => window.location.reload(), LEAVE_MS);

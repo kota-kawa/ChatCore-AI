@@ -1,3 +1,5 @@
+// メモ画面の左サイドバー。メモ／マイコンテキストの切り替え、並び順、アーカイブ・ゴミ箱・コレクションによる絞り込みを担う。MemoPage から使われる。
+// Left sidebar of the memo screen: switching between memos and my context, sort order, and filtering by archive, trash, and collection; used by MemoPage.
 import { MemoSelect } from "./MemoSelect";
 import { useTranslation } from "../../contexts/locale_context";
 import {

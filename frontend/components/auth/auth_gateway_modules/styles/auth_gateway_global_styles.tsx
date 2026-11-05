@@ -1,7 +1,11 @@
+// 認証ゲートウェイページ専用のグローバル CSS（styled-jsx）。auth_gateway_page.tsx が描画し、見出しフォントだけ props で受け取る。
+// Global CSS (styled-jsx) dedicated to the auth gateway page; rendered by auth_gateway_page.tsx, taking only the heading font via props.
 type AuthGatewayGlobalStylesProps = {
   fontFamily: string;
 };
 
+// 背景・認証カード・各ボタン・メッセージモーダルなど、このページ全体の見た目をまとめて定義する
+// Defines the look of the whole page in one place: background, auth card, buttons and the message modal
 export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesProps) {
   return (
     <style jsx global>{`

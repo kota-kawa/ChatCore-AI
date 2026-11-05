@@ -39,10 +39,14 @@ const PERSIST_ALLOWLIST = [
 type PersistedEntry = { data: unknown; ts: number };
 type PersistedShape = Record<string, PersistedEntry>;
 
+// このキーが永続化の許可リストに載っているか。
+// Whether the key is on the persistence allowlist.
 function canPersistKey(key: string): boolean {
   return PERSIST_ALLOWLIST.some((prefix) => key.startsWith(prefix));
 }
 
+// localStorage から永続化済みのキャッシュを読む。SSR や壊れた値のときは空を返す。
+// Reads the persisted cache from localStorage; returns an empty one during SSR or when the value is corrupt.
 function readStorage(): PersistedShape {
   if (typeof window === "undefined") return {};
   try {
@@ -153,6 +157,7 @@ export function clearPersistentCache(): void {
   try {
     window.localStorage.removeItem(STORAGE_KEY);
   } catch {
+    // 失敗しても無視する
     // ignore
   }
 }

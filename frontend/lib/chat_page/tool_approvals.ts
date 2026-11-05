@@ -21,6 +21,8 @@ export function isToolApprovalDecidable(approval: ToolApprovalApi, nowMs: number
   return approval.status === "pending" && !approval.readonly && !isToolApprovalExpired(approval, nowMs);
 }
 
+// メッセージに含まれる承認カード（tool_approval パーツ）だけを取り出す。
+// Extracts only the approval cards (tool_approval parts) contained in a message.
 function approvalsOf(message: UiChatMessage): ToolApprovalApi[] {
   return (message.parts ?? []).flatMap((part) => (part.type === "tool_approval" ? [part.approval] : []));
 }
@@ -48,6 +50,8 @@ export function replaceToolApprovalInMessages(
   return replaced ? nextMessages : messages;
 }
 
+// 全メッセージを先頭から探し、ID が一致する承認カードを返す。無ければ undefined。
+// Searches all messages from the start and returns the approval card with the matching id, or undefined.
 export function findToolApproval(messages: UiChatMessage[], approvalId: string): ToolApprovalApi | undefined {
   for (const message of messages) {
     const approval = approvalsOf(message).find((candidate) => candidate.id === approvalId);

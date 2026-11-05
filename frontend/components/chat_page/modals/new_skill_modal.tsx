@@ -1,3 +1,5 @@
+// 個人スキルの新規作成モーダル（名前と指示文）。skill_section.tsx から描画され、保存処理は親が持つ。
+// Modal for creating a personal skill (name and instructions); rendered by skill_section.tsx, with the save logic owned by the parent.
 import { type FormEvent } from "react";
 
 import {

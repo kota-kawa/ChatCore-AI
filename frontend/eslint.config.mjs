@@ -1,3 +1,5 @@
+// 日本語: フロントエンド（frontend/）の ESLint 設定。TypeScript 7 との併存、Next.js・React Hooks のルール、`console.log` 禁止などの方針を定める。
+// English: ESLint configuration for the frontend: coexistence with TypeScript 7, the Next.js and React Hooks rules, and policies such as banning `console.log`.
 import { createRequire } from "node:module";
 
 import js from "@eslint/js";

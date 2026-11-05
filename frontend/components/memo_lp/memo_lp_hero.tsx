@@ -1,3 +1,5 @@
+// メモ紹介ページ（/memo/lp）のヒーローセクションと、メモ画面の見本表示。
+// Hero section of the memo landing page (/memo/lp), with a sample rendering of the memo screen.
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 

@@ -1,3 +1,5 @@
+// プロンプト共有の紹介ページ（/prompt_share/lp）の上部ヘッダー。ページ内リンクと一覧・登録への導線を持つ。
+// Top header of the prompt-share introduction page (/prompt_share/lp), with in-page links and entries to the feed and sign-up.
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 

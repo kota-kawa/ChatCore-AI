@@ -1,3 +1,5 @@
+// メモ本文のエディタ。Markdown ソース用の CodeMirror と、リッチ表示用の TipTap を同じ文書として同期させ、sourceMode で表示を切り替える。MemoComposer と MemoDetailModal から使われる。
+// Memo body editor: keeps a CodeMirror Markdown source editor and a TipTap rich editor in sync as one document, switched by sourceMode; used by MemoComposer and MemoDetailModal.
 import { useEffect, useEffectEvent, useRef, type RefObject } from "react";
 import { Compartment, EditorState, Prec, Transaction } from "@codemirror/state";
 import { EditorView, keymap, placeholder as editorPlaceholder } from "@codemirror/view";
@@ -11,6 +13,8 @@ import { continueListOnEnter, indentLines, toggleLineFormat } from "../../lib/me
 import { caretAtSourceOffset, sourceOffsetAtCaret } from "../../lib/memo/markdown_source_positions";
 import { formatRichMemo, memoRichExtensions } from "../../lib/memo/rich_editor";
 
+// value は Markdown 文字列、または JSON 文字列に包まれた Markdown。focusRequest が増えるたびに末尾へカーソルを移す。
+// value is Markdown text or Markdown wrapped in a JSON string; each increase of focusRequest moves the caret to the end.
 type MemoEditorProps = {
   value: string;
   onChange: (value: string) => void;
@@ -23,14 +27,21 @@ type MemoEditorProps = {
   focusRequest?: number;
 };
 
+// 保存値が JSON 文字列として包まれている場合は中身を取り出し、そうでなければ Markdown としてそのまま返す。
+// Unwraps a value stored as a JSON string; otherwise returns it as plain Markdown.
 function editorText(value: string) {
   try {
     const parsed: unknown = JSON.parse(value);
     if (typeof parsed === "string") return parsed;
-  } catch { /* Plain Markdown is the usual representation. */ }
+  } catch { /* 通常の表現にはプレーンなMarkdownを使う。
+    Plain Markdown is the usual representation. */ }
   return value;
 }
 
+// 文書の正は CodeMirror 側が持つ。リッチ側の編集は Markdown に直して CodeMirror の文書へ反映し、
+// CodeMirror の変更はリッチ側へ流し込む。両方向の更新が反響しないよう、syncingRich / fromRich の旗で自分起点の更新を無視する。
+// The document of record lives in CodeMirror: rich edits are serialized to Markdown into it, and its changes are pushed to the rich side;
+// the syncingRich / fromRich flags stop each side from reacting to its own echo.
 export function MemoEditor({ value, onChange, sourceMode, editorRef, label, placeholder, id, agentId, focusRequest = 0 }: MemoEditorProps) {
   const richHostRef = useRef<HTMLDivElement>(null);
   const sourceHostRef = useRef<HTMLDivElement>(null);
@@ -44,9 +55,13 @@ export function MemoEditor({ value, onChange, sourceMode, editorRef, label, plac
   useEffect(() => {
     if (!richHostRef.current || !sourceHostRef.current) return;
     const initial = initialProps();
+    // syncingRich: リッチ側を更新中。fromRich: リッチ側起点で CodeMirror を更新中。どちらも更新の往復（無限ループ）を防ぐ。
+    // syncingRich: the rich editor is being updated; fromRich: CodeMirror is being updated from the rich side. Both prevent update ping-pong.
     let syncingRich = false;
     let fromRich = false;
 
+    // CodeMirror の選択範囲を、リッチ側の同じ位置に対応づけて反映する。
+    // Maps the CodeMirror selection onto the matching position in the rich editor.
     const restoreRichSelection = (view: EditorView) => {
       const rich = richViewRef.current;
       if (!rich || rich.isDestroyed) return;
@@ -60,6 +75,8 @@ export function MemoEditor({ value, onChange, sourceMode, editorRef, label, plac
       rich.commands.setTextSelection({ from: position(from), to: position(to) });
       syncingRich = false;
     };
+    // リッチ側の選択範囲を、Markdown ソース上のオフセットに直して CodeMirror に反映する。
+    // Converts the rich editor selection to Markdown source offsets and applies it to CodeMirror.
     const syncDocumentSelection = (editor: Editor) => {
       if (syncingRich || activeSourceRef.current) return;
       const source = view.state.doc.toString();
@@ -74,6 +91,8 @@ export function MemoEditor({ value, onChange, sourceMode, editorRef, label, plac
       view.dispatch({ selection: { anchor, head } });
       fromRich = false;
     };
+    // Enter でリスト項目を継続する。IME 変換中とコードブロック内では何もしない。
+    // Continues a list item on Enter; does nothing during IME composition or inside code.
     const continueList = (view: EditorView) => {
       if (view.composing) return false;
       const { from, to } = view.state.selection.main;
@@ -130,6 +149,8 @@ export function MemoEditor({ value, onChange, sourceMode, editorRef, label, plac
       },
       onSelectionUpdate: ({ editor }) => syncDocumentSelection(editor),
     });
+    // 外部（ツールバーなど）へ公開する操作窓口。いま表示中の側（ソース／リッチ）に合わせて動作を切り替える。
+    // Handle exposed to outside code such as the toolbar; its behavior follows whichever side (source or rich) is active.
     const handle: MemoEditorHandle = {
       get state() { return view.state; },
       get contentDOM() { return activeSourceRef.current ? view.contentDOM : rich.view.dom; },

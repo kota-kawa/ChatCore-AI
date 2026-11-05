@@ -1,3 +1,5 @@
+// メモ一覧で複数選択したメモへ、ピン留め・アーカイブ・コレクション設定・削除などをまとめて実行するバー。MemoPage から使われる。
+// Bar that runs bulk actions (pin, archive, set collection, delete, and so on) on the memos selected in the list; used by MemoPage.
 import { MemoSelect } from "./MemoSelect";
 import { useTranslation } from "../../contexts/locale_context";
 import {
@@ -5,6 +7,7 @@ import {
   useMemoPageListContext,
 } from "../../contexts/memo_page/memo_page_context";
 
+// 選択中のメモに対する一括操作バー。ゴミ箱表示のときは復元・完全削除だけを出す。
 // Bulk action bar
 export function MemoBulkBar() {
   const { memos, collections, archiveScope } = useMemoPageListContext();

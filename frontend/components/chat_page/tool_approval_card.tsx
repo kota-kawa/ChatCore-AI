@@ -1,3 +1,5 @@
+// AI がメモ・プロンプト・スキル・プロフィールを書き換える前に出す承認カード。内容のプレビューと「承認／拒否」、決定後の状態表示を担う。
+// Approval card shown before the AI writes to memos, prompts, skills or profile settings: preview, approve/deny, and the outcome after the decision.
 import Link from "next/link";
 import { memo, useCallback, useEffect, useId, useState } from "react";
 
@@ -67,6 +69,8 @@ function isPromptsPreview(preview: Preview): preview is PromptsPreview {
     || preview.kind === "my_skill_save";
 }
 
+// プロフィール設定の変更案かどうかを preview.kind で判定する
+// Narrows on preview.kind to detect a profile settings change proposal
 function isProfileSettingsPreview(preview: Preview): preview is ProfileSettingsPreview {
   return preview.kind === "profile_settings_update";
 }
@@ -152,6 +156,8 @@ function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Pro
 
   const readOnly = !onDecide || approval.readonly;
   const expired = isToolApprovalExpired(approval, nowMs);
+  // 期限を過ぎた保留中のカードは、サーバーの状態を待たず画面上で「期限切れ」として扱う
+  // A pending card past its deadline is shown as expired right away, without waiting for the server-side status
   const displayStatus: Status = expired ? "expired" : approval.status;
   const showActions = !readOnly && isToolApprovalDecidable(approval, nowMs);
   const inactive = disabled || submitting !== null;
@@ -165,6 +171,8 @@ function ToolApprovalCardComponent({ approval, onDecide, disabled = false }: Pro
   const acknowledged = acknowledgedApprovalId === approval.id;
   const approvalBlocked = requiresAcknowledgement && !acknowledged;
 
+  // 決定を親へ送る。処理中・操作不可・警告の確認前の承認は、ここでも弾いて二重送信と誤承認を防ぐ（ボタンの disabled と二重に守る）
+  // Sends the decision to the parent. Also rejects in-flight, inactive and unacknowledged approvals here, guarding against double sends and mistaken approval on top of the buttons' disabled state
   const decide = useCallback(
     async (decision: ToolApprovalDecision) => {
       if (inactive || !showActions || !onDecide) return;

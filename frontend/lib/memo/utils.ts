@@ -1,3 +1,6 @@
+// メモ画面の補助関数。保存された本文の解釈、一覧取得 URL の組み立て、操作メニューの位置計算、ドラッグ＆ドロップによる並べ替えの計算を持つ。
+// Helpers for the memo page: decoding the stored body, building the list URL, positioning the action menu, and computing drag-and-drop reordering.
+
 import { type DragEvent } from "react";
 
 import {
@@ -10,6 +13,7 @@ import {
 import type { FrozenRect, MemoActionMenuPosition, MemoDropPosition, MemoSummary } from "./types";
 
 // ---------------------------------------------------------------------------
+// メモ画面の補助関数
 // Memo page utilities
 // ---------------------------------------------------------------------------
 
@@ -110,6 +114,10 @@ export function computeProjectedSectionOrder(
   return next.map((memo) => String(memo.id));
 }
 
+// ドラッグを始めた時点で、すべてのカードの位置と大きさを一度だけ記録する。ドラッグ中の当たり判定は
+// 実際の `getBoundingClientRect()` ではなくこの固定した値を使うので、並べ替えで Masonry（段組み）の
+// 配置が変わっても、次の判定に影響しない。この影響の連鎖がボードの振動の原因だった。
+// 基準を固定すれば、予測位置はポインターの位置だけで決まり、カードが脇へ動くアニメーションの最中でも安定する。
 // Snapshot every card's geometry once, at drag start. Hit-testing during the
 // drag reads these frozen rects instead of live `getBoundingClientRect()`, so a
 // reorder that reflows the masonry columns can't feed back into the next
@@ -145,6 +153,8 @@ export function computeProjectedOrderFromSnapshot(
   const without = section.filter((memo) => String(memo.id) !== draggedId);
   if (without.length === 0) return null;
 
+  // カーソルが直接乗っているカードを優先する。無ければ、固定した中心がいちばん近いカードを選び、
+  // 段の隙間へドラッグしても対象が決まるようにする。
   // Card the cursor is directly over wins; otherwise fall back to the card whose
   // frozen center is closest so dragging into a column gap still resolves a target.
   let directHit: { id: string; rect: FrozenRect } | null = null;
@@ -174,6 +184,8 @@ export function computeProjectedOrderFromSnapshot(
   const chosen = directHit ?? nearest;
   if (!chosen) return null;
 
+  // ポインターが対象カードの上半分にあれば手前、下半分にあれば後ろに置く。
+  // 1 段の配置でも、Masonry の段組みでも自然な動きになる。
   // Drop before the target when the pointer sits in its upper half, after when in
   // the lower half — natural for both single-column and masonry column layouts.
   const cy = (chosen.rect.top + chosen.rect.bottom) / 2;

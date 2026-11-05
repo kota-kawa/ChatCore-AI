@@ -1,3 +1,5 @@
+// タスクの定義（プロンプトテンプレート・回答ルール・出力テンプレート・入出力例）を読む閲覧用モーダル。pages/index.tsx から描画される。
+// Read-only modal for a task's definition (prompt template, response rules, output template, input/output examples); rendered by pages/index.tsx.
 import { memo } from "react";
 
 import type { NormalizedTask } from "../../../lib/chat_page/types";

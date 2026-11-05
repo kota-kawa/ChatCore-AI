@@ -1,3 +1,6 @@
+// アプリ全体の機能と利用開始への導線を紹介する公開ページ。
+// Public landing page presenting application features and entry points.
+
 import { SeoHead } from "../components/SeoHead";
 import { LpFaq, LP_FAQ_ITEMS, LP_FAQ_ITEMS_EN } from "../components/lp/lp_faq";
 import { LpFeatures } from "../components/lp/lp_features";

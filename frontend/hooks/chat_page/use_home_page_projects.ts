@@ -1,3 +1,5 @@
+// ホーム画面のプロジェクト（チャットをまとめる単位）の一覧取得・詳細表示・作成・更新・削除・チャット割り当てを扱うフック。
+// Hook for the home page projects: list, detail, create, update, delete, and assigning chats to a project.
 import {
   useCallback,
   useEffect,
@@ -40,6 +42,8 @@ export function useHomePageProjects({
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isSavingProject, setIsSavingProject] = useState(false);
 
+  // 一覧取得の失敗は画面を止めず、空配列を返してログに残すだけにする。
+  // A list-load failure only logs and returns an empty array so it never blocks the page.
   const loadProjects = useCallback(async (): Promise<Project[]> => {
     if (!loggedIn) {
       setProjects([]);
@@ -75,6 +79,8 @@ export function useHomePageProjects({
     }
   }, [loadProjects, loggedIn]);
 
+  // 詳細は他の操作（更新・チャット追加）の直後にも再取得するため、独立した関数として公開している。
+  // Exposed separately because other actions (update, assign chat) re-fetch the detail right after they succeed.
   const refreshProjectDetail = useCallback(async (projectId: number): Promise<ProjectDetail | null> => {
     setIsProjectDetailLoading(true);
     try {
@@ -165,6 +171,8 @@ export function useHomePageProjects({
     [loadProjects, locale, refreshProjectDetail, t],
   );
 
+  // 削除中のプロジェクトを開いていた場合は、先に詳細オーバーレイを閉じてから一覧を再取得する。
+  // If the deleted project is the one currently open, close its detail overlay before reloading the list.
   const deleteProject = useCallback(
     async (projectId: number, projectName: string): Promise<void> => {
       const confirmed = await showConfirmModal(

@@ -1,3 +1,8 @@
+// 日付・日時を日本語表記の固定フォーマット（Asia/Tokyo）で文字列化する関数と、期限までの残り日数を求める関数。
+// サーバーサイドレンダリングとブラウザで同じ結果になるよう、表示のタイムゾーンと解釈のルールを固定している。
+// Functions that format dates and times in a fixed Japanese format (Asia/Tokyo) and compute the days remaining until a deadline.
+// The display time zone and parsing rules are pinned so server-side rendering and the browser produce the same output.
+
 // 表示に使うタイムゾーン。SSR（サーバーのTZ）とブラウザ（利用者のTZ）で
 // 出力がずれるとハイドレーション不一致（React error #418/#425）になるため、
 // 日本語固定フォーマットに合わせて表示タイムゾーンも固定する。

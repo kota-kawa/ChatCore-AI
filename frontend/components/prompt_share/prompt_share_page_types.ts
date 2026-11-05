@@ -1,3 +1,5 @@
+// プロンプト共有ページの画面状態に使う型（カテゴリ、絞り込み、開いているモーダル、操作のフィードバックなど）。
+// Types for the prompt sharing page's UI state: categories, filters, the open modal, and action feedback.
 import type { ContentFormat, MediaType } from "../../scripts/prompt_share/types";
 
 // プロンプトカテゴリーの型（値・アイコン・表示ラベル）

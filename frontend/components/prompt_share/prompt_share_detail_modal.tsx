@@ -1,3 +1,6 @@
+// 公開投稿の詳細と本文・添付・操作をモーダルで表示する。
+// Displays public post details, content, attachments and actions in a modal.
+
 import React, { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
 import MarkdownContent from "../MarkdownContent";

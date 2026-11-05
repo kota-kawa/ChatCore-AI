@@ -1,3 +1,8 @@
+// マイコンテキスト（個人の文脈を保管する金庫）の API クライアント。事実と AI の提案候補の取得・作成・更新・承認・却下、
+// 自動抽出の設定、金庫の書き出しとインポート（確認してから取り込む）を扱う。
+// API client for My Context (the personal context vault): loading, creating, updating, approving and rejecting facts and AI-suggested candidates,
+// the auto-extraction setting, and exporting and importing the vault (import is previewed before it is confirmed).
+
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { setLoggedInState } from "../../scripts/core/app_state";
 import { writeCachedAuthState } from "../../scripts/core/auth_state_cache";
@@ -26,23 +31,31 @@ import type {
   ContextVaultImportResult,
 } from "./context_types";
 
+// 事実の一覧と、次のページを取るためのカーソル。
+// A page of facts plus the cursor for fetching the next page.
 export type ContextFactListResult = {
   facts: ContextFact[];
   totalActive: number;
   nextCursor: string | null;
 };
 
+// AI の提案候補の一覧と、次のページを取るためのカーソル。
+// A page of AI-suggested candidates plus the cursor for fetching the next page.
 export type ContextCandidateListResult = {
   candidates: ContextFactCandidate[];
   totalPending: number;
   nextCursor: string | null;
 };
 
+// 書き出したファイルの中身と、保存する際のファイル名。
+// The exported file's contents and the filename to save it under.
 export type ContextVaultExportResult = {
   blob: Blob;
   filename: string;
 };
 
+// HTTP ステータスを持つエラーを作る。画面側は status で分岐できる。
+// Creates an error that carries the HTTP status so the UI can branch on it.
 function createContextApiError(message: string, status: number): HttpError {
   const error = new Error(message) as HttpError;
   error.status = status;
@@ -62,6 +75,8 @@ function handleExpiredContextSession(): never {
   );
 }
 
+// Content-Disposition からファイル名を取り出す。UTF-8 指定の filename* を優先し、無ければ通常の filename を使う。
+// Extracts the filename from Content-Disposition, preferring the UTF-8 filename* form over the plain filename.
 function parseAttachmentFilename(headerValue: string | null): string | null {
   if (!headerValue) return null;
   const encodedMatch = headerValue.match(/filename\*=UTF-8''([^;]+)/i);
@@ -69,6 +84,7 @@ function parseAttachmentFilename(headerValue: string | null): string | null {
     try {
       return decodeURIComponent(encodedMatch[1].trim());
     } catch {
+      // 復号に失敗したら、通常の filename の取り出しへ進む。
       // Fall through to the plain filename parameter.
     }
   }
@@ -76,6 +92,8 @@ function parseAttachmentFilename(headerValue: string | null): string | null {
   return plainMatch?.[1]?.trim() || null;
 }
 
+// 失敗レスポンスから表示用のメッセージを組み立てて throw する。401 は認証切れとして扱う。
+// Builds a user-facing message from a failed response and throws; a 401 is treated as an expired session.
 async function throwContextResponseError(response: Response, defaultMessage: string): Promise<never> {
   if (response.status === 401) handleExpiredContextSession();
   const payload = (await response.json().catch(() => ({}))) as { error?: unknown; message?: unknown };

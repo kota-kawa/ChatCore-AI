@@ -1,3 +1,5 @@
+// 認証ゲートウェイで使う待機時間・アニメーション時間の定数（ミリ秒）。
+// Timing constants (milliseconds) for the auth gateway: redirect delay and modal timings.
 // 認証後リダイレクトまでの待機時間（ミリ秒）
 // Delay in milliseconds before redirecting after authentication
 export const REDIRECT_DELAY_MS = 1200;

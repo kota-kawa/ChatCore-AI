@@ -1,3 +1,5 @@
+// メモ詳細モーダルの開閉・編集・自動保存・閉じるアニメーション・メモエージェント表示を扱うフック。
+// Hook for the memo detail modal: open/close, editing, autosave, the close animation, and showing the memo agent.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyedMutator } from "swr";
 
@@ -36,6 +38,7 @@ function isConnectionFailure(error: unknown) {
 export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPageDetailParams) {
   const { t } = useTranslation();
 
+  // 詳細モーダルの状態。
   // Detail modal
   const [selectedMemo, setSelectedMemo] = useState<MemoDetail | null>(null);
   const [isMemoDetailClosing, setIsMemoDetailClosing] = useState(false);
@@ -208,6 +211,8 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     }
   }, [cancelMemoDetailCloseAnimation, showFlash]);
 
+  // 編集内容をサーバーへ保存する。保存の世代番号（detailSaveSequenceRef）を進め、古い保存の応答が新しい保存の結果表示を上書きしないようにする。
+  // Saves the edits to the server. It bumps a save sequence number so a late response from an older save cannot overwrite the status of a newer one.
   const sendDetailEdit = useCallback(async (
     memoId: string | number,
     snapshot: { title: string; collectionId: number | null; aiResponse: string; backgroundColor: string | null },
@@ -239,6 +244,9 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
       const updatedMemo = await updateMemo(memoId, body, t("memo.memoUpdateFailed"), options);
       if (requestId === detailSaveSequenceRef.current) {
         if (updatedMemo) {
+          // ユーザーが送信した本文をそのまま保存済みの基準として残し、サーバーが整形した応答では置き換えない。
+          // 自動保存が、ユーザーが今まさに編集している内容（たとえば追加したばかりの先頭の空行）を書き換えるのを防ぎ、
+          // エディタがユーザー自身の入力にだけ反応して変わるようにする。
           // Keep the exact text the user submitted as the saved baseline
           // instead of the server's normalized response. This prevents the
           // autosave from rewriting what the user is actively editing (for
@@ -270,6 +278,8 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     }
   }, [collections.length, mutate]);
 
+  // 未保存の変更があるときだけ保存する。本文が空なら保存せずエラー表示にし、同じ内容の保存が進行中なら重ねて送らずその結果を返す。
+  // Saves only when there are unsaved changes. An empty body is rejected with an error status, and a save of identical content already in flight is reused instead of being sent again.
   const saveDetailEdit = useCallback(async (options: { keepalive?: boolean } = {}) => {
     if (!selectedMemo?.id || !detailHasUnsavedChanges) return true;
     if (!detailEditAiResponse.trim()) {
@@ -306,6 +316,8 @@ export function useMemoPageDetail({ collections, mutate, showFlash }: UseMemoPag
     sendDetailEdit,
   ]);
 
+  // 詳細を閉じる。未保存の変更があれば先に保存し、保存できなければ破棄してよいか確認する。閉じるアニメーション中は何もしない。
+  // Closes the detail. Unsaved changes are saved first; if that fails, the user is asked whether to discard them. Does nothing while the close animation is running.
   const closeMemoDetail = useCallback(async () => {
     if (memoDetailCloseTimerRef.current) return;
     clearDetailAutoSaveTimer();

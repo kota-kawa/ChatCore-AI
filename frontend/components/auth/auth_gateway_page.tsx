@@ -1,3 +1,5 @@
+// ログイン・新規登録の入口ページ（パスキー / Google / メールコード / デモコード）。pages/login.tsx と pages/register.tsx が描画する。
+// Entry page for sign-in and registration (passkey / Google / emailed code / demo code); rendered by pages/login.tsx and pages/register.tsx.
 import localFont from "next/font/local";
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
 
@@ -200,6 +202,8 @@ export default function AuthGatewayPage() {
       }
     };
 
+    // 初回描画の直後に確認を始めるため、マクロタスクへ回す（アンマウント時は clearTimeout で取り消せる）
+    // Defer the check to a macrotask right after the first render; unmounting cancels it with clearTimeout
     const checkTimerId = window.setTimeout(() => {
       void checkLoginState();
     }, 0);
@@ -236,6 +240,8 @@ export default function AuthGatewayPage() {
         resilientFetch
       );
 
+      // 成功時は次のステップへ進み、失敗時はサーバーのエラー文言（なければ既定文言）を表示する
+      // On success move to the next step; otherwise show the server's error message (or a default one)
       if (data.status === "success") {
         setStep("code");
         showModalMessage(t("auth.codeSent"));

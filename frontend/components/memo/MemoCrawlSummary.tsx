@@ -1,3 +1,5 @@
+// メモ機能の概要（保存・整理・書き出し・共有）をテキストで説明するセクション。MemoPage と pages/memo.tsx から使われる。
+// Section that describes the memo features (save, organize, export, share) as plain text; used by MemoPage and pages/memo.tsx.
 import React from "react";
 import { useTranslation } from "../../contexts/locale_context";
 

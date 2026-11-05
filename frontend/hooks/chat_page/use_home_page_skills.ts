@@ -1,3 +1,5 @@
+// ホーム画面の Skill 一覧の取得と、追加・有効/無効の切り替え・削除を扱うフック。
+// Hook for the home page Skill list: fetching it, and adding, toggling, and deleting Skills.
 import { useCallback, useMemo, useState, type FormEvent } from "react";
 import useSWR from "swr";
 
@@ -16,6 +18,8 @@ type UseHomePageSkillsOptions = {
   loggedIn: boolean;
 };
 
+// 一覧は SWR で取得し、更新系の操作は楽観的更新（先に画面を変え、失敗したら元に戻す）で反映する。
+// The list is fetched with SWR, and write operations use optimistic updates (change the UI first, roll back on failure).
 export function useHomePageSkills({ loggedIn }: UseHomePageSkillsOptions) {
   const { locale } = useTranslation();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -27,6 +31,7 @@ export function useHomePageSkills({ loggedIn }: UseHomePageSkillsOptions) {
   const { data: skills = [], error, isLoading, mutate } = useSWR<UserSkill[]>(
     loggedIn ? ["/api/skills", locale] : null,
     ([, requestLocale]) => fetchUserSkills().then((items) => {
+      // キーにロケールを含めているのは、言語切り替え時に同じアカウントのデータを再取得し、古いエラー状態を残さないため。
       // The locale is part of the key so a language switch always revalidates
       // the same account data without retaining an old error state.
       void requestLocale;
@@ -66,6 +71,8 @@ export function useHomePageSkills({ loggedIn }: UseHomePageSkillsOptions) {
     }
   }, [isSaving, mutate, skillInstructions, skillName]);
 
+  // 保留中の操作が1件でもあれば二重実行を避けて何もしない。
+  // While any operation is pending, do nothing so toggles cannot overlap.
   const handleToggle = useCallback(async (skill: UserSkill) => {
     if (pendingSkillId !== null) return;
 

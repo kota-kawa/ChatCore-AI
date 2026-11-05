@@ -1,3 +1,5 @@
+// メモ一覧の検索・並び替え・絞り込みの状態と、一覧の取得（SWR）・もっと読み込む・楽観的更新を扱うフック。
+// Hook for the memo list: search/sort/filter state, fetching with SWR, "load more", and optimistic updates.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 
@@ -9,6 +11,7 @@ import { buildMemoListUrl } from "../../lib/memo/utils";
 // メモ一覧の検索・並び替え・絞り込み状態と、一覧データの取得・楽観更新
 // Search / sort / filter state for the memo list plus the list fetch and optimistic updates
 export function useMemoPageList() {
+  // 絞り込み・並び替えの状態。
   // Filter/sort state
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -61,6 +64,8 @@ export function useMemoPageList() {
   // keepPreviousData keeps the previous list on screen while fetching, so the button shows a busy state
   const isLoadingMoreMemos = memoListLoading && memos.length > 0;
 
+  // 操作後のメモが、いま表示中の絞り込み条件（アーカイブ範囲・コレクション）にまだ合うか。合わなければ楽観更新で一覧から外す。
+  // Whether a memo still matches the current filters (archive scope, collection) after an update; if not, the optimistic update drops it from the list.
   const shouldKeepMemoInCurrentList = useCallback((memo: MemoSummary) => {
     if (archiveScope === "active" && memo.is_archived) return false;
     if (archiveScope === "archived" && !memo.is_archived) return false;
@@ -68,6 +73,8 @@ export function useMemoPageList() {
     return true;
   }, [activeCollectionId, archiveScope]);
 
+  // 対象メモに updater を適用して SWR のキャッシュだけを先に書き換える（再検証はしない）。updater が null を返したメモと、条件から外れたメモは一覧から取り除き、total も合わせる。
+  // Applies the updater to the target memos in the SWR cache only (no revalidation). Memos for which it returns null, or that no longer match the filters, are removed and total is adjusted.
   const updateMemoListOptimistically = useCallback(
     async (updater: (memo: MemoSummary) => MemoSummary | null, targetIds: Iterable<string | number>) => {
       const targets = new Set(Array.from(targetIds, String));

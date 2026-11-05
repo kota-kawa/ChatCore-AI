@@ -1,3 +1,5 @@
+// メモ画面の「メモ」と「マイコンテキスト」を切り替えるナビゲーション。MemoPage から使われる。
+// Navigation that switches the memo screen between "memos" and "my context"; used by MemoPage.
 import type { Dispatch, SetStateAction } from "react";
 import { useTranslation } from "../../contexts/locale_context";
 import type { MemoView } from "../../lib/memo/types";

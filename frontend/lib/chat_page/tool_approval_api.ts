@@ -1,3 +1,9 @@
+// チャットの承認カード（tool_approval）に対する決定を、サーバーの承認 API へ送るクライアント。
+// 失敗は ToolApprovalDecisionError にまとめ、画面がエラーコードで分岐できるようにする。
+// Client that sends a decision for a chat approval card (tool_approval) to the server's approval API.
+// Failures are wrapped in ToolApprovalDecisionError so the UI can branch on its error code.
+// Used by hooks/chat_page/use_chat_tool_approvals.ts.
+
 import {
   ToolApprovalDecisionResponseSchema,
   type ToolApprovalApi,
@@ -8,6 +14,8 @@ import { extractApiErrorMessage, fetchJson, isRecord } from "../../scripts/core/
 import { normalizeLocale, type Locale } from "../i18n/config";
 import { normalizeToolApproval } from "./api_contract";
 
+// fetch の差し替え口。既定は resilientFetch で、テストでは別の実装を渡せる。
+// Injection point for fetch: resilientFetch by default, replaceable in tests.
 type FetchImpl = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export type ToolApprovalDecision = ToolApprovalDecisionRequest["decision"];

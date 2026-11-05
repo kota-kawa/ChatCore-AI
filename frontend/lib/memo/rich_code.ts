@@ -1,3 +1,9 @@
+// リッチエディタ（TipTap）のコードブロックの表示と、highlight.js による構文ハイライト。
+// 言語名のラベルつきのコードブロックを描画し、本文が変わったときだけ色分けをかけ直す。
+// Code block rendering and highlight.js syntax highlighting for the rich editor (TipTap).
+// Renders code blocks with a language label and re-highlights only when the document changes.
+// Used by lib/memo/rich_editor.ts.
+
 import { Extension } from "@tiptap/core";
 import CodeBlock from "@tiptap/extension-code-block";
 import { Plugin } from "@tiptap/pm/state";
@@ -7,6 +13,8 @@ import hljs from "highlight.js";
 
 import { renderSanitizedHTML } from "../../scripts/chat/message_utils";
 
+// ハイライト済みのコードブロック 1 つ分。同じ言語と本文なら前回の結果を使い回すために保持する。
+// One highlighted code block, kept so the previous result can be reused for the same language and text.
 type HighlightedCodeBlock = {
   text: string;
   language: string | null;
@@ -19,11 +27,15 @@ type HighlightedCodeSpan = {
   className: string;
 };
 
+// プラグインの状態。エディタに適用する装飾（decorations）と、ブロックごとのハイライト結果。
+// Plugin state: the decorations applied to the editor and the highlight result per block.
 type MemoCodeHighlightState = {
   decorations: DecorationSet;
   blocks: HighlightedCodeBlock[];
 };
 
+// コードブロックの表示を差し替える。言語名を示す編集不可のラベルと、本文を入力する pre/code を並べる。
+// Replaces the code block view: a non-editable label showing the language, followed by the editable pre/code.
 export const MemoCodeBlock = CodeBlock.extend({
   addNodeView() {
     return ({ node }) => {
@@ -49,6 +61,8 @@ export const MemoCodeBlock = CodeBlock.extend({
   },
 });
 
+// コードブロックの本文を highlight.js で色分けし、文字位置ごとの CSS クラスの一覧にする。言語が分からなければ自動判定する。
+// Highlights the block's text with highlight.js and returns CSS classes per character range; the language is auto-detected when unknown.
 function highlightCodeBlock(node: DocumentNode): HighlightedCodeSpan[] {
   const spans: HighlightedCodeSpan[] = [];
   if (!node.textContent) return spans;
@@ -82,6 +96,8 @@ function createBlockState(text: string, language: string | null, spans: Highligh
   return { text, language, spans };
 }
 
+// 文書内の全コードブロックの装飾を作る。言語と本文が前回と同じブロックは、再計算せず前回の結果を使い回す。
+// Builds decorations for every code block in the document; blocks with the same language and text as before reuse the previous result instead of re-highlighting.
 function highlightDocument(doc: DocumentNode, previousBlocks: HighlightedCodeBlock[] = []): MemoCodeHighlightState {
   const decorations: Decoration[] = [];
   const blocks: HighlightedCodeBlock[] = [];
@@ -107,6 +123,8 @@ function highlightDocument(doc: DocumentNode, previousBlocks: HighlightedCodeBlo
   return { decorations: DecorationSet.create(doc, decorations), blocks };
 }
 
+// コードブロックの色分けを ProseMirror のプラグインとして組み込む拡張。文書が変更されたトランザクションのときだけ計算し直す。
+// Extension that wires code highlighting in as a ProseMirror plugin, recomputing only on transactions that change the document.
 export const MemoCodeHighlight = Extension.create({
   name: "memoCodeHighlight",
   addProseMirrorPlugins() {

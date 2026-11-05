@@ -1,3 +1,5 @@
+// 検索語に一致した部分を強調表示するコンポーネント。MemoHistoryPanel から使われ、一致判定は lib/memo/search_highlight に任せる。
+// Component that highlights parts of a text matching the search terms; used by MemoHistoryPanel, with matching delegated to lib/memo/search_highlight.
 import { useMemo } from "react";
 
 import { buildHighlightPattern, HIGHLIGHT_CLASS, splitByPattern } from "../../lib/memo/search_highlight";

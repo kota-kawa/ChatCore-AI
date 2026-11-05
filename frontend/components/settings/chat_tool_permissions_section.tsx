@@ -1,3 +1,5 @@
+// 設定画面の「チャットの権限」セクション。チャットで「常に承認」にした書き込みツールの一覧表示と取り消しを行う。呼び出し元は pages/settings.tsx。
+// The "Chat permissions" section of the settings page: lists and revokes the write tools set to "always approve" in chat. Used by pages/settings.tsx.
 import { useCallback, useEffect, useState } from "react";
 
 import { InlineLoading } from "../ui/inline_loading";
@@ -8,6 +10,8 @@ import { loadToolAutoApprovals, revokeToolAutoApproval } from "../../scripts/use
 import { showToast } from "../../scripts/core/toast";
 import type { ToolAutoApprovalApi } from "../../types/generated/api_schemas";
 
+// ツール名から表示ラベル（i18n キー）への対応表。Record 型なので、API 側にツールが増えると型エラーで気づける
+// Map from tool name to its display label (i18n key); as a Record, a new tool added on the API side surfaces as a type error
 const TOOL_LABEL_KEYS: Record<ToolAutoApprovalApi["tool_name"], MessageKey> = {
   memo_create: "settings.chatPermissionsTool.memo_create",
   memo_append: "settings.chatPermissionsTool.memo_append",
@@ -28,6 +32,8 @@ export function ChatToolPermissionsSection({ isActive }: { isActive: boolean }) 
   const [failed, setFailed] = useState(false);
   const [revokingTool, setRevokingTool] = useState<string | null>(null);
 
+  // 付与済みの一覧を取得し直す。失敗時は failed を立てて再試行ボタンを出す
+  // Reload the granted list; on failure set failed so a retry button is shown
   const reload = useCallback(async () => {
     setFailed(false);
     try {
@@ -41,6 +47,8 @@ export function ChatToolPermissionsSection({ isActive }: { isActive: boolean }) 
     if (isActive) void reload();
   }, [isActive, reload]);
 
+  // 指定ツールの「常に承認」を取り消し、成功したら一覧から外す。取り消し中は別の取り消しを受け付けない
+  // Revoke "always approve" for a tool and drop it from the list on success; further revokes are ignored while one is in flight
   const revoke = useCallback(
     async (toolName: ToolAutoApprovalApi["tool_name"]) => {
       if (revokingTool) return;
@@ -58,6 +66,8 @@ export function ChatToolPermissionsSection({ isActive }: { isActive: boolean }) 
     [revokingTool, t],
   );
 
+  // 状態（失敗・読み込み中・空・一覧）ごとにカードの中身を決める
+  // Choose the card body by state: failed, loading, empty or list
   let body;
   if (failed) {
     body = (

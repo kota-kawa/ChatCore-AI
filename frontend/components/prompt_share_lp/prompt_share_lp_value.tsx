@@ -1,3 +1,5 @@
+// プロンプト共有の紹介ページ（/prompt_share/lp）の「できること」セクション。探す・使う・出すの3項目を示す。
+// "What you can do" section of the prompt-share introduction page (/prompt_share/lp): the find / use / publish items.
 import { useTranslation } from "../../contexts/locale_context";
 
 // 「探す・使う・出す」の3つに絞って、画面上で実際にできる操作だけを並べる
@@ -79,6 +81,8 @@ const VALUE_ITEMS_EN: ValueItem[] = [
   }
 ];
 
+// 現在のロケールの3項目をカードとして並べる
+// Lay out the three items for the current locale as cards
 export function PromptShareLpValue() {
   const { locale } = useTranslation();
   const isEn = locale === "en";

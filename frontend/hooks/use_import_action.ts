@@ -1,3 +1,5 @@
+// 共有コンテンツを取り込む操作の状態（待機中・成功・失敗）と二重実行の防止を提供するフック。
+// Hooks providing the state (pending, success, error) and double-run guard for actions that import shared content.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type ImportActionState = "idle" | "pending" | "success" | "error";
@@ -17,9 +19,14 @@ export type UseKeyedImportActionStateResult = {
   run: (key: string, task: () => Promise<void> | void) => Promise<boolean>;
 };
 
+// 成功・失敗の表示を元の状態（idle）へ戻すまでの時間（ミリ秒）。
+// Time (ms) before the success/error feedback returns to idle.
 const IMPORT_ACTION_FEEDBACK_RESET_MS = 1800;
 
 /**
+ * 共有コンテンツを取り込む操作の状態と再入防止（実行中は再実行しない）。
+ * 失敗は再スローするので、各画面が自分のローカライズ済み文言で表示できる。
+ *
  * Shared state and re-entry guard for actions that import shared content.
  * Errors are re-thrown so each surface can keep its existing localized copy.
  */
@@ -50,6 +57,8 @@ export function useImportActionState(): UseImportActionStateResult {
     };
   }, []);
 
+  // 待機中に再度呼ばれたら何もしない。stateRef を併用するのは、再レンダー前の連続呼び出しでも state の古い値で素通りさせないため。失敗は再スローして、各画面が自分の文言で表示できるようにする。
+  // Does nothing when called again while pending. stateRef is used so a second call before the next render cannot slip past on a stale state value. Errors are re-thrown so each screen can show its own message.
   const run = useCallback<ImportActionRunner>(async (task) => {
     if (stateRef.current === "pending") return false;
 
@@ -77,7 +86,11 @@ export function useImportActionState(): UseImportActionStateResult {
   };
 }
 
-/** Keyed variant for lists of cards where each shared item needs its own guard. */
+/**
+ * カード一覧向けのキー付き版。共有アイテムごとに別々の再入防止と状態を持つ。
+ *
+ * Keyed variant for lists of cards where each shared item needs its own guard.
+ */
 export function useKeyedImportActionState(): UseKeyedImportActionStateResult {
   const [states, setStates] = useState<Map<string, ImportActionState>>(new Map());
   const statesRef = useRef<Map<string, ImportActionState>>(new Map());

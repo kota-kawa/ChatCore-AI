@@ -1,3 +1,5 @@
+// 生成UIを作っている間に出す待機アニメーション（ミニブラウザの中で部品が組み上がる）。chat_message_list.tsx から使われる。
+// Waiting animation shown while a generated UI is being produced (parts assemble inside a mini browser); used by chat_message_list.tsx.
 import { memo, useEffect, useState } from "react";
 import { useTranslation } from "../../contexts/locale_context";
 

@@ -1,9 +1,17 @@
+// チャット画面のタスク（定型プロンプト）を、API の形から画面用の NormalizedTask へ整える処理。
+// 取得できないときの既定タスク、並べ替えやキャッシュで使う安定キー、タスク起動メッセージの解析も持つ。
+// Normalizes tasks (reusable prompt templates) from the API shape into the UI's NormalizedTask.
+// Also provides the default tasks used as a fallback, stable keys for reordering/caching, and the task-launch message parser.
+// Used by hooks/chat_page/use_home_page_task_actions.ts, use_task_reorder_drag.ts and components/chat_page/chat_message_list.tsx.
+
 import defaultTasks from "../../data/default_tasks.json";
 import englishDefaultTasks from "../../data/default_tasks.en.json";
 import type { Locale } from "../i18n/config";
 import type { TaskItem } from "../../scripts/setup/setup_types";
 import type { NormalizedTask } from "./types";
 
+// API やキャッシュから来たタスクを型と値を確かめながら NormalizedTask に変換する。壊れた項目は空値や既定値で補う。
+// Converts a task from the API or cache into a NormalizedTask, checking types and filling broken fields with empty or default values.
 export function normalizeTask(task: TaskItem | null | undefined): NormalizedTask {
   if (!task) {
     return {
@@ -40,16 +48,22 @@ export function normalizeTask(task: TaskItem | null | undefined): NormalizedTask
   };
 }
 
+// タスクを取得できないときに使う、ロケール別の同梱の既定タスク。
+// Bundled default tasks per locale, used when tasks cannot be fetched.
 export function getFallbackTasks(locale: Locale = "ja"): NormalizedTask[] {
   const catalog = locale === "en" ? englishDefaultTasks : defaultTasks;
   return (catalog as TaskItem[]).map((task) => normalizeTask(task));
 }
 
+// 配列でない入力は既定タスクで置き換え、配列なら各要素を正規化する。
+// Falls back to the default tasks for non-array input; otherwise normalizes each element.
 export function normalizeTaskList(rawTasks: TaskItem[] | undefined | null, locale: Locale = "ja"): NormalizedTask[] {
   if (!Array.isArray(rawTasks)) return getFallbackTasks(locale);
   return rawTasks.map((task) => normalizeTask(task));
 }
 
+// 並べ替えなどで項目を識別するキー。DB のタスクは task_id、同梱の既定タスクは system_task_key から作り、どちらも無ければ null。
+// Key that identifies a task (for reordering and the like): from task_id for stored tasks, system_task_key for bundled ones, otherwise null.
 export function getStableTaskKey(task: NormalizedTask): string | null {
   if (task.task_id !== null) return `task-id-${task.task_id}`;
   if (task.system_task_key) return `task-system-${task.system_task_key}`;

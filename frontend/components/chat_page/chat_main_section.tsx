@@ -1,3 +1,5 @@
+// チャット画面の中央ペイン一式。サイドバー（ルーム一覧・検索・プロジェクト）、メッセージ一覧、入力欄（添付・URL チップ・送信）を組み立てる。pages/index.tsx から描画される。
+// The whole chat-screen center pane: sidebar (room list, search, projects), message list and composer (attachments, URL chips, send); rendered by pages/index.tsx.
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentProps, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ChatMessageList } from "./chat_message_list";
 import { ChatRoomCard } from "./chat_room_card";

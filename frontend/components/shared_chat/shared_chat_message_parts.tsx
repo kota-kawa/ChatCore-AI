@@ -1,3 +1,5 @@
+// 共有チャットのアシスタント発言を、種類ごとの部品（本文・アーティファクト・ボタン・承認カードなど）として描画する。呼び出し元は shared_chat_message_list.tsx。
+// Renders a shared chat's assistant message as typed parts (text, artifact, buttons, approval card, etc.). Used by shared_chat_message_list.tsx.
 import { memo } from "react";
 
 import type { ChatMessagePart } from "../../lib/chat_page/types";
@@ -19,6 +21,8 @@ type SharedChatMessagePartsProps = {
   parts?: ChatMessagePart[];
 };
 
+// parts の type ごとに対応するレンダラーを選ぶ。未知の type は何も描画しない
+// Pick the renderer for each part type; an unknown type renders nothing
 function SharedChatMessagePartsComponent({ fallbackText, parts }: SharedChatMessagePartsProps) {
   // partsが空の場合はフォールバックテキストをテキストパーツとして使用する
   // Use fallback text as a text part when parts is empty

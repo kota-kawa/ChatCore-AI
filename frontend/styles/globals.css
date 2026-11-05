@@ -1,10 +1,16 @@
+/* 全ページ共通のグローバルスタイル。Tailwind の読み込み、共有モーダル・ツールチップ・トースト・エラー画面・ボタン・AIエージェント（Chaco）のモーダル・スケルトンやネットワークバナーなどの共有UIを定義する。 */
+/* Global styles shared by every page: loads Tailwind and defines shared UI such as the share modal, tooltip, toast, error screen, buttons, the AI agent (Chaco) modal, skeletons and the network banner. */
 @config "../tailwind.config.ts";
 @import "tailwindcss";
 
+/* ブラウザ標準のUI部品（スクロールバーやフォーム部品など）をライト・ダークの両方に対応させる */
+/* Let browser-native UI such as scrollbars and form controls follow both light and dark schemes */
 :root {
   color-scheme: light dark;
 }
 
+/* 背景色と文字色の既定値。デザイントークンが未定義でも読めるようフォールバック値を持つ */
+/* Default background and text colors, with fallbacks so the page stays legible even if the design tokens are undefined */
 html,
 body {
   background: var(--surface-primary, #ffffff);
@@ -25,6 +31,8 @@ body {
   border: 0;
 }
 
+/* ページ表示時に下からふわっと浮き上がる入場アニメーション（メモ・プロンプト共有ページのルート要素に付く） */
+/* Entrance animation that lifts the page up gently on load (applied to the root of the memo and prompt-share pages) */
 .cc-page-rise {
   animation: ccPageRiseIn 560ms cubic-bezier(0.16, 1, 0.3, 1);
   transform-origin: center bottom;
@@ -207,6 +215,8 @@ body {
   box-shadow: var(--modal-focus-ring);
 }
 
+/* ツールチップ（scripts/core/tooltip.ts が生成し、位置は left/top と data-placement をJSで設定する）。矢印位置はCSS変数で受け取る */
+/* Tooltip created by scripts/core/tooltip.ts, which sets left/top and data-placement in JS; the arrow position is passed through CSS variables */
 .cc-tooltip {
   position: fixed;
   top: 0;
@@ -286,6 +296,8 @@ body {
   border-top: none;
 }
 
+/* トースト通知（scripts/core/toast.ts が生成する）。表示領域自体は pointer-events: none にして背面の操作を妨げず、個々のトーストだけ操作可能にする */
+/* Toast notifications (created by scripts/core/toast.ts); the viewport ignores pointer events so it never blocks the page behind, while each toast stays interactive */
 .cc-toast-viewport {
   position: fixed;
   top: max(16px, env(safe-area-inset-top));
@@ -321,6 +333,8 @@ body {
   border-color: rgba(220, 38, 38, 0.42);
 }
 
+/* 全画面のエラー表示（pages/_app.tsx のエラーバウンダリと 404 ページで共用する） */
+/* Full-screen error display shared by the error boundary in pages/_app.tsx and the 404 page */
 .global-error-boundary {
   min-height: 100dvh;
   display: grid;
@@ -354,6 +368,8 @@ body {
   line-height: 1.7;
 }
 
+/* ダークテーマでのトースト・エラー画面の配色 */
+/* Dark-theme colors for toasts and the error screen */
 [data-theme="dark"] .cc-toast {
   border-color: rgba(148, 163, 184, 0.3);
   background: rgba(15, 23, 42, 0.96);
@@ -381,6 +397,8 @@ body {
   color: #cbd5e1;
 }
 
+/* 読み込み中のインライン表示（スピナー付き）。Tailwindのユーティリティを@applyで束ねる */
+/* Inline loading indicator with a spinner; bundles Tailwind utilities via @apply */
 @layer components {
   .cc-inline-loading {
     @apply inline-flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3 text-sm font-medium text-slate-600 shadow-sm backdrop-blur;
@@ -401,6 +419,8 @@ body {
   color: #34d399;
 }
 
+/* テクスチャ付きボタン（cc-texture-btn）。ベース色は変数で持ち、modifier（--indigo など）が色変数を差し替える */
+/* Textured button (cc-texture-btn): base colors live in variables and modifiers such as --indigo swap those variables */
 .global-error-boundary__card .cc-texture-btn {
   justify-self: start;
 }
@@ -466,6 +486,7 @@ a.cc-texture-btn {
   border-color: rgba(129, 140, 248, 0.34);
 }
 
+/* すべてのボタン系コントロールから影とフィルターを消す（ホバー・フォーカス・押下時も含む）。!important で他のスタイルより優先させる */
 /* Remove shadows from all button controls */
 button,
 input[type="button"],
@@ -530,6 +551,8 @@ a.cc-texture-btn:active {
   filter: none !important;
 }
 
+/* 全ページの左下に固定表示する、AIエージェントの起動ボタン（GlobalAiAgent コンポーネントが描画する） */
+/* Fixed launcher button for the AI agent shown on every page, rendered by the GlobalAiAgent component */
 .global-ai-agent-button {
   position: fixed;
   left: max(40px, env(safe-area-inset-left));
@@ -632,6 +655,8 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
   filter: drop-shadow(0 0 8px rgba(236, 254, 255, 0.7));
 }
 
+/* AIエージェント（Chaco）のミニチャットモーダルの基本スタイル。重ねがけしたクラスで詳細度を上げ、後半のChaco用の上書きブロックもこの基本スタイルの上に載る */
+/* Base styles for the AI agent (Chaco) mini-chat modal; the doubled class raises specificity, and the Chaco override block later in this file layers on top of it */
 .global-ai-agent-modal.global-ai-agent-modal {
   /* 画面上キーボードが出ると表示領域は縮むが 100vh は縮まない。DraggableModal が実測した
      表示領域の高さを --draggable-modal-viewport-height で渡してくるので、高さの上限も
@@ -1214,6 +1239,8 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
   animation: miniChatProgressPulse 1.2s ease-in-out infinite;
 }
 
+/* AIエージェントのモーダル内の状態表示・進捗、起動ボタンの出現/消去を動かすアニメーション定義 */
+/* Animation definitions for the AI agent modal's status/progress indicators and the launcher's appear/dismiss effects */
 @keyframes miniChatStatusFade {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -1768,6 +1795,8 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
   cursor: not-allowed;
 }
 
+/* AIエージェントの起動ボタンと基本スタイルのモーダルに対するダークテーマ用の上書き（Chaco配色のダーク対応は後半の別ブロック） */
+/* Dark-theme overrides for the AI agent launcher button and the base-style modal (the Chaco palette's dark variant is a separate block further below) */
 [data-theme="dark"] .global-ai-agent-modal .mini-chat-action-plan {
   border-color: rgba(96, 165, 250, 0.24);
   background: rgba(96, 165, 250, 0.05);
@@ -1989,6 +2018,8 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
   border-top-color: rgba(148, 163, 184, 0.24);
 }
 
+/* 狭い画面では、AIエージェントのモーダルと起動ボタンの位置・大きさを調整する */
+/* On narrow screens, adjust the position and size of the AI agent modal and launcher button */
 @media (max-width: 640px) {
   .global-ai-agent-button {
     width: 60px;
@@ -2486,6 +2517,7 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
   to { opacity: 0; transform: translate3d(0, 8px, 0) scale(0.97); }
 }
 
+/* ダークテーマでもChacoのパステル調のアクセントを保ちつつ、コントラストを確保する */
 /* Dark mode keeps Chaco's pastel accents while preserving contrast. */
 [data-theme="dark"] .global-ai-agent-modal.global-ai-agent-modal {
   --chaco-ink: #fff7e8;
@@ -2670,6 +2702,8 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
   color: #ffffff;
 }
 
+/* 視覚効果を減らす設定のユーザー向けに、AIエージェントの起動ボタン・モーダル、ページ入場アニメーションの動きを止める */
+/* For users who prefer reduced motion, stop the motion of the AI agent button and modal and of the page-rise entrance animation */
 @media (prefers-reduced-motion: reduce) {
   .global-ai-agent-button,
   .global-ai-agent-button::before,

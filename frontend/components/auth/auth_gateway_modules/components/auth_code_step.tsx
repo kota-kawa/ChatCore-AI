@@ -1,3 +1,5 @@
+// 認証ゲートウェイの「メールで届いた確認コードを入力する」ステップの表示部品。親の auth_gateway_page.tsx が状態と送信処理を持つ。
+// Presentational step of the auth gateway where the user types the emailed verification code; state and submit logic live in auth_gateway_page.tsx.
 // メール認証コード入力ステップのprops型定義
 // Props type definition for the email authentication code input step
 type AuthCodeStepProps = {

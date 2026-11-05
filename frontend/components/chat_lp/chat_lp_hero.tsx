@@ -1,3 +1,5 @@
+// AIチャット紹介ページ（/chat/lp）の最初のセクション。キャッチコピーと、実際の画面を模した見本を並べる。pages/chat/lp.tsx から使われる。
+// Top section of the AI chat landing page (/chat/lp): the headline plus a mock of the real chat screen; used by pages/chat/lp.tsx.
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 

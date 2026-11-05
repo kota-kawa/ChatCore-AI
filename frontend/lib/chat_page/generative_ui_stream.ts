@@ -1,6 +1,10 @@
+// ストリーミング中の本文から、生成 UI のフェンスや選択ボタンのタグ（ユーザーに見せてはいけない生のコード/JSON）を取り除き、生成 UI の作成中かどうかを判定する関数群。
+// Functions that strip generative-UI fences and choice-button tags (raw code/JSON that must not be shown to users) from streaming text, and detect whether a generative UI is still being produced.
 import type { ChatMessagePart } from "./types";
 import { normalizeMessagePartsForDisplay } from "./message_parts_display";
 
+// このフェンスの名前だけが、生成 UI の読み込み表示を始められる。古い別名のフェンスも、崩れたモデル出力の生のペイロードが
+// 見えないようストリーミング中の本文からは隠すが、生成中の UI としては扱わない。
 // Only this exact fence can start the generative-UI loading state. Legacy aliases
 // are still hidden from streamed prose below so malformed model output does not
 // expose its raw payload, but they are never treated as a UI being generated.
@@ -45,6 +49,8 @@ function isEscaped(source: string, index: number): boolean {
   return backslashes % 2 === 1;
 }
 
+// text の position がマークダウンのコード（フェンス付きコードブロックまたはインラインコード）の内側か。コードの例として書かれたフェンスやタグを、隠す対象から外すために使う。
+// Whether position in text lies inside markdown code (a fenced code block or inline code). Used so fences and tags shown as code examples are not hidden.
 function isInsideMarkdownCode(text: string, position: number): boolean {
   if (position < 0 || position >= text.length) return false;
 
@@ -190,6 +196,8 @@ function findMalformedChoiceClose(text: string, start: number): number {
   return -1;
 }
 
+// <chatcore_buttons> タグとその中の JSON を本文から取り除く。閉じタグが無いなど崩れた出力でも、JSON の断片が本文に残らないようにする。
+// Removes <chatcore_buttons> tags and the JSON inside from the text, so even malformed output (such as a missing closing tag) leaves no JSON fragments in the prose.
 function stripChoiceTagsForStreaming(text: string): string {
   let stripped = "";
   let cursor = 0;
@@ -271,6 +279,8 @@ function findLastChoiceTagStartIndex(text: string): number {
   return lastIndex;
 }
 
+// ストリーミング中の本文から、完成した生成 UI / 選択ボタンのブロックと、まだ閉じていない途中のブロックを取り除く。コード内に書かれたものは残す。
+// Removes complete generative-UI / choice-button blocks and still-open partial ones from streaming text, keeping any that appear inside code.
 export function stripGenerativeUiFencesForStreaming(text: string) {
   const normalized = String(text || "").replace(/\r\n?/g, "\n");
   const withoutCompleteFences = normalized.replace(COMPLETE_HIDDEN_FENCE_RE, (match, offset: number) =>
@@ -298,6 +308,8 @@ export function getStreamingGenerativeUiDisplayText(text: string) {
   return stripGenerativeUiFencesForStreaming(text);
 }
 
+// メッセージのパーツを、代替の本文と同じ除去済みの状態にそろえる。テキストパーツは累積して走査するので、
+// 隠すべきブロックが隣り合うパーツにまたがって分かれていても、画像などテキスト以外のパーツのあとに末尾が漏れない。
 // Keep the message parts in the same sanitized state as the fallback prose. Text
 // parts are scanned cumulatively so a hidden block split across adjacent parts
 // cannot leak its tail after an image or another non-text part.
@@ -316,6 +328,7 @@ export function sanitizeTextPartsForStreaming(parts: ChatMessagePart[] | undefin
     if (nextVisibleText.startsWith(visibleText)) {
       sanitized[index] = { type: "text", text: nextVisibleText.slice(visibleText.length) };
     } else {
+      // 後のパーツが未完のブロックを閉じると、除去の判断が変わることがある。その場合は、累積した安全な結果をこの位置で 1 回だけ残す。
       // A sanitizer decision can change when a later part closes an unfinished
       // block. In that case keep the safe cumulative result once, at this point.
       for (const previousIndex of textPartIndices) {
@@ -375,6 +388,8 @@ function findCommittedTextEnd(text: string, committedSegments: string[]): number
   return cursor;
 }
 
+// ストリーム中の全文に合わせてパーツ内のテキストを更新する。画像で区切られた前半のテキストは確定済みとして残し、最後のテキストだけを全文の残りに差し替える。
+// Updates the text parts to match the streaming full text. Text before an image stays committed and only the final text part is replaced with the remainder.
 export function updateStreamingTextPart(
   parts: ChatMessagePart[] | undefined,
   text: string,

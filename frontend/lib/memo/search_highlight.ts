@@ -23,6 +23,8 @@ const MAX_SEARCH_TERMS = 8;
 // marks); ヷヸヹヺ and the prolonged-sound mark ー have no hiragana form and are left alone
 const KANA_OFFSET = 0x60;
 
+// ひらがなをカタカナに、またはカタカナをひらがなに変換する。対応のない文字はそのまま残す。
+// Converts hiragana to katakana, or katakana to hiragana; characters without a counterpart are left unchanged.
 function convertKana(term: string, toKatakana: boolean): string {
   return Array.from(term, (char) => {
     const code = char.codePointAt(0) ?? 0;

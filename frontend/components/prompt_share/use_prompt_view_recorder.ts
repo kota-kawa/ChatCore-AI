@@ -1,3 +1,5 @@
+// 共有プロンプトの詳細を開いたときの閲覧を記録する hook。呼び出し元は pages/prompt_share/index.tsx。
+// Hook that records a view when a shared prompt's detail is opened. Used by pages/prompt_share/index.tsx.
 import { useCallback } from "react";
 
 import { recordPromptView } from "../../scripts/prompt_share/api";

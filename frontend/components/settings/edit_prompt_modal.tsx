@@ -1,3 +1,5 @@
+// プロンプト編集用のモーダル。設定画面と、プロンプト共有ページ（pages/prompt_share/index.tsx）の双方から使う。
+// Modal for editing a prompt, used by both the settings page and the prompt-share page (pages/prompt_share/index.tsx).
 import type { ChangeEvent, FormEvent, MutableRefObject } from "react";
 
 import type { EditPromptFormState } from "../../scripts/user/settings/page_types";
@@ -32,6 +34,8 @@ export function EditPromptModal({
 }) {
   const { t, locale } = useTranslation();
   const isSkill = formState.contentFormat === "skill";
+  // 入力例・出力例の欄は、Skill ではないテキスト投稿のときだけ出す
+  // Show the input / output example fields only for non-Skill text posts
   const showExamples = !isSkill && formState.mediaType === "text";
   return (
     <ModalShell

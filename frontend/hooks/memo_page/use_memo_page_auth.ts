@@ -1,3 +1,5 @@
+// メモ画面のログイン状態を取得するフック。キャッシュで即座に描画し、/api/current_user で確定する。
+// Hook resolving the memo page login state: renders immediately from the cache, then confirms via /api/current_user.
 import { useEffect, useLayoutEffect, useState } from "react";
 
 import { setLoggedInState } from "../../scripts/core/app_state";

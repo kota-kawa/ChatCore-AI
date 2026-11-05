@@ -32,6 +32,8 @@ export type SignedInAccounts = {
   others: KnownAccount[];
 };
 
+// localStorage やサーバー応答の任意の値を KnownAccount へ正規化する。userId が整数でなければ null（キャメル/スネーク両方の表記を受け付ける）。
+// Normalizes an arbitrary value (from localStorage or a server response) into a KnownAccount; null unless userId is an integer. Both camelCase and snake_case keys are accepted.
 function toKnownAccount(value: unknown): KnownAccount | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
@@ -88,6 +90,8 @@ export function listSwitchableAccounts(signedIn: SignedInAccounts, known: KnownA
   ];
 }
 
+// サーバーから「このブラウザでログイン中のアカウント一覧」を取得し、現在のアカウントとそれ以外に分ける。取得できなければ null。
+// Fetches the accounts signed in on this browser from the server, split into the current account and the others; null on failure.
 export async function fetchSignedInAccounts(): Promise<SignedInAccounts | null> {
   try {
     const response = await resilientFetch("/api/auth/accounts", { credentials: "same-origin" });

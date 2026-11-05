@@ -1,3 +1,5 @@
+// 共有プロンプトページのログイン状態とユーザー ID を扱う hook。呼び出し元は pages/prompt_share/index.tsx。
+// Hook for the login state and user ID on the prompt-share page. Used by pages/prompt_share/index.tsx.
 import { useEffect, useState } from "react";
 
 import { setLoggedInState } from "../../scripts/core/app_state";
@@ -14,6 +16,8 @@ export function usePromptShareAuth() {
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [authUiReady, setAuthUiReady] = useState(false);
 
+  // キャッシュがあれば先に反映して表示を速くし、その後 /api/current_user で確定させる。アンマウント後の応答は cancelled で無視する
+  // Apply the cached state first for a fast render, then confirm with /api/current_user; responses after unmount are ignored via cancelled
   useEffect(() => {
     const cachedAuthState = readCachedAuthState();
     if (cachedAuthState !== null) {
@@ -23,7 +27,7 @@ export function usePromptShareAuth() {
     }
 
     let cancelled = false;
-    // タイムアウト0でAPI呼び出しをマイクロタスクキューに遅延させ、キャッシュが先にレンダリングされるようにする
+    // タイムアウト0でAPI呼び出しを次のタスクまで遅延させ、キャッシュが先にレンダリングされるようにする
     // Defers the API call to the next tick so the cached state renders first
     const timerId = window.setTimeout(() => {
       void resilientFetch("/api/current_user", { credentials: "same-origin" })

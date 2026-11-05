@@ -1,3 +1,5 @@
+// 承認カード内の、メモの作成・追記・編集の実行前プレビュー。tool_approval_card.tsx から使われる。
+// Pre-execution preview of a memo create, append or edit inside the approval card; used by tool_approval_card.tsx.
 import { Fragment, memo } from "react";
 
 import { useTranslation } from "../../../contexts/locale_context";
@@ -38,6 +40,8 @@ function MemoApprovalPreviewComponent({ preview }: { preview: MemoPreview }) {
     );
   }
 
+  // ここに来るのは memo_edit。部分置換（edits）なら変更前後を並べ、全文書き換え（content）なら最後に全文を出す
+  // Only memo_edit reaches this point: partial edits list before/after pairs, while a full rewrite (content) ends with the full text
   const edits = preview.mode === "edits" ? (preview.edits ?? []) : [];
   const numbered = edits.length > 1;
   return (

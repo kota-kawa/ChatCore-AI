@@ -1,3 +1,5 @@
+// 共有メモの閲覧ページ（/shared/memo/[token]）。トークンでバックエンドからメモを取得し、本文をMarkdownで読み取り専用に表示する。
+// Shared memo viewing page (/shared/memo/[token]); fetches the memo by token from the backend and shows its body as read-only Markdown.
 import type { GetServerSideProps } from "next";
 import MarkdownContent from "../../../components/MarkdownContent";
 import { SeoHead } from "../../../components/SeoHead";
@@ -57,8 +59,8 @@ function buildMetaDescription(payload: SharedMemoPayload, english = false) {
   return truncateSeoText(normalized || (english ? "A read-only memo shared from Chat Core." : "Chat Coreで共有されたメモの閲覧ページです。"));
 }
 
-// URLトークンでメモを取得してSSRで返す（トークンが無効な場合は404）
-// Fetch memo by URL token for SSR (returns 404 if the token is invalid)
+// URLトークンでメモを取得してSSRで返す（トークンが無い場合は404、バックエンドがエラーを返した場合はそのステータスをページの応答に引き継ぐ）
+// Fetch memo by URL token for SSR (404 when the token is missing; a backend error status is carried over to the page response)
 export const getServerSideProps: GetServerSideProps<SharedMemoPageProps> = async (context) => {
   const rawToken = context.params?.token;
   const token = Array.isArray(rawToken) ? rawToken[0] : rawToken;

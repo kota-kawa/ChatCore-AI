@@ -1,3 +1,5 @@
+// 「マイコンテキスト」（AI が回答に使うユーザーの事実・好み・方針）を一覧し、追加・編集・無効化・書き出し/取り込みを行うパネル。AI の提案候補パネルも内包する。MemoPage から使われる。
+// Panel for "my context" (facts, preferences, and decisions the AI may use in answers): list, add, edit, deprecate, and export/import, with the AI suggestion panel embedded. Used by MemoPage.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 
@@ -32,6 +34,8 @@ import {
 import { useTranslation } from "../../contexts/locale_context";
 import type { MessageKey } from "../../lib/i18n/catalogs/ja";
 
+// 通信関数の束。テストでは props で差し替えられる。
+// Bundle of API functions, overridable through props in tests.
 type ContextApi = {
   load: typeof defaultLoad;
   create: typeof defaultCreate;
@@ -45,6 +49,8 @@ type MyContextPanelProps = {
   portabilityApi?: Partial<ContextPortabilityApi>;
 };
 
+// 追加・編集モーダルの入力状態。importanceDirty は、編集時に重要度を触ったときだけ送るための印。
+// Input state of the add/edit modal; importanceDirty marks that importance was touched, so edits send it only then.
 type EditorState = {
   mode: "create" | "edit";
   factId: number | null;
@@ -67,6 +73,8 @@ const EMPTY_EDITOR: EditorState = {
   content: "",
 };
 
+// 事実の一覧（状態・種類で絞り込み、カーソルで続きを読み込む）と、追加・編集モーダル、提案候補パネルを束ねる。
+// Combines the fact list (filtered by status and type, with cursor-based "load more"), the add/edit modal, and the candidate panel.
 export function MyContextPanel({
   isLoggedIn,
   api,
@@ -100,6 +108,8 @@ export function MyContextPanel({
   const activeFilterKeyRef = useRef<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
 
+  // 絞り込み条件ごとの取得キー。未ログインのときは null にして取得しない。
+  // Fetch key per filter combination; null when logged out so nothing is fetched.
   const swrKey = isLoggedIn ? `context-facts|${statusFilter}|${typeFilter}` : null;
   activeFilterKeyRef.current = swrKey;
   const { data, error, isLoading, mutate } = useSWR(
@@ -123,6 +133,8 @@ export function MyContextPanel({
     setErrorText(null);
   }, [swrKey]);
 
+  // 先頭ページと追加ページを結合し、id の重複を除く。
+  // Merge the first page and the extra pages, dropping duplicate ids.
   const facts = useMemo(() => {
     const uniqueFacts = new Map<number, ContextFact>();
     for (const fact of [...(data?.facts ?? []), ...additionalFacts]) {
@@ -172,6 +184,8 @@ export function MyContextPanel({
   // ModalShell owns the focus trap and Escape; only the scroll lock lives here.
   useBodyScrollLock(editor !== null);
 
+  // 追加または編集を保存する。編集では取得時の revision を添え、重要度は変更したときだけ送る。
+  // Saves an add or an edit; an edit sends the revision seen at load time and sends importance only if it was changed.
   const handleSubmit = async () => {
     if (!editor) return;
     if (!editor.title.trim() || !editor.content.trim()) {
@@ -205,6 +219,8 @@ export function MyContextPanel({
     }
   };
 
+  // 事実の有効（active）と無効（deprecated）を切り替える。
+  // Toggles a fact between active and deprecated.
   const handleToggleStatus = async (fact: ContextFact) => {
     setBusyFactId(fact.id);
     setErrorText(null);
@@ -221,6 +237,8 @@ export function MyContextPanel({
     }
   };
 
+  // 次のページを読み込む。多重実行を避け、絞り込み条件が変わった後に届いた古い結果は反映しない。
+  // Loads the next page, avoiding concurrent runs and ignoring a result that arrives after the filter changed.
   const handleLoadMore = async () => {
     if (!nextCursor || loadingMore || activeLoadMoreRef.current) return;
 

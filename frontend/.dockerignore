@@ -1,3 +1,5 @@
+# フロントエンドの Docker ビルドコンテキストから外すもの（ビルド成果物・依存・ログ）。
+# Files excluded from the frontend Docker build context (build output, dependencies, logs).
 .next
 node_modules
 npm-debug.log*

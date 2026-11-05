@@ -1,3 +1,5 @@
+// 承認カード内の、公開プロンプトの投稿・自分用プロンプトの保存・個人スキルの保存の実行前プレビュー。tool_approval_card.tsx から使われる。
+// Pre-execution preview of publishing a prompt, saving a personal prompt or saving a personal skill inside the approval card; used by tool_approval_card.tsx.
 import { memo } from "react";
 
 import { useTranslation } from "../../../contexts/locale_context";
@@ -17,6 +19,8 @@ const CLEAR_FIELD_KEYS: Record<ClearedField, MessageKey> = {
   output_examples: "chat.toolApproval.preview.outputExamples",
 };
 
+// 非公開の内容と重なった箇所の抜粋を警告欄で見せる。重なりが無ければ何も描画しない
+// Shows excerpts that overlap private content in a warning field; renders nothing when there is no overlap
 function PrivateOverlapExcerpts({ excerpts }: { excerpts: string[] }) {
   const { t } = useTranslation();
   if (excerpts.length === 0) return null;

@@ -1,3 +1,5 @@
+// ランディングページ系のページが共有するヘッダー。ロゴ・セクションへのリンク・ログイン/新規登録のボタンを持つ。
+// Header shared by the landing-style pages: logo, section links, and login/sign-up buttons.
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 

@@ -1,3 +1,5 @@
+// 共有 URL から SNS 共有リンク（X・LINE・Facebook）を作り、ブラウザが Web Share API に対応しているかを返すフック。チャットとメモの共有モーダルが使う。
+// Hook that builds social share links (X, LINE, Facebook) from a share URL and reports Web Share API support; used by the chat and memo share modals.
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -16,7 +18,11 @@ export type UseShareLinksResult = {
   supportsNativeShare: boolean;
 };
 
-/** Keep social URL derivation and Web Share capability checks consistent. */
+/**
+ * SNS 共有 URL の組み立てと Web Share 対応の判定を 1 か所にまとめ、画面間でずれないようにする。
+ *
+ * Keep social URL derivation and Web Share capability checks consistent.
+ */
 export function useShareLinks({ shareUrl, text = "" }: UseShareLinksOptions): UseShareLinksResult {
   const socialLinks = useMemo(
     () => buildSocialShareLinks(shareUrl, text),

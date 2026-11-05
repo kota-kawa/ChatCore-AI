@@ -1,3 +1,5 @@
+// プロンプト共有のフィード画面（/prompt_share）。SSRで初期の一覧を受け取り、検索・カテゴリ/形式/メディアの絞り込み、無限読み込み、投稿・編集・共有・コメント・投稿者プロフィールの各モーダルを管理する。
+// Prompt library feed page (/prompt_share); receives the initial list from SSR and manages search, category/format/media filters, incremental loading, and the post, edit, share, comment and author-profile modals.
 import {
   useCallback,
   useEffect,
@@ -93,8 +95,12 @@ import {
   type PromptSharePageProps
 } from "../../components/prompt_share/prompt_share_page_data";
 
+// SSRで初期の一覧とカテゴリを取得する処理は共通モジュールに委ねる
+// SSR pre-fetching of the initial list and category is delegated to the shared data module
 export const getServerSideProps = getPromptShareServerSideProps;
 
+// URLのクエリ文字列からカテゴリを読み取る。正規のカテゴリキーでなければ "all"（全件）に落とす
+// Read the category from the URL query string; anything that is not a canonical category key falls back to "all"
 function resolveCategoryFromSearch(search: string) {
   const requestedCategory = new URLSearchParams(search).get("category") || "";
   const normalizedCategory = normalizeCategory(requestedCategory.toLowerCase());
@@ -103,6 +109,8 @@ function resolveCategoryFromSearch(search: string) {
     : "all";
 }
 
+// 選択したカテゴリをURLの ?category= に反映する（履歴に追加する）。URLがすでに同じ状態なら何もしない
+// Reflect the selected category in the URL's ?category= param (pushed onto history); does nothing if the URL already matches
 function syncCategoryUrl(category: string) {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
@@ -130,8 +138,8 @@ export default function PromptSharePage({
   const initialCategoryValue = initialCategory && (
     initialCategory === "all" || Boolean(getCategoryLabel(initialCategory, locale))
   ) ? initialCategory : "all";
-  // SSRで受け取った初期プロンプトをクライアント用レコード形式に変換する（マウント時のみ実行）
-  // Transforms SSR-provided prompts into client records on mount only, avoiding unnecessary recomputation
+  // SSRで受け取った初期プロンプトをクライアント用レコード形式に変換する（initialPrompts が変わらない限り再計算しない）
+  // Transforms SSR-provided prompts into client records, recomputing only when initialPrompts changes
   const initialPromptRecords = useMemo<PromptRecord[]>(() => {
     return buildInitialPromptRecords(initialPrompts);
   }, [initialPrompts]);
@@ -216,6 +224,8 @@ export default function PromptSharePage({
   const selectedCategoryRef = useRef(initialCategoryValue);
   const selectedContentFormatFilterRef = useRef<ContentFormatFilter>("all");
   const selectedMediaTypeFilterRef = useRef<MediaTypeFilter>("all");
+  // 一覧・検索の取得リクエストの通し番号。応答が返った時点で番号が進んでいれば古い応答として捨て、新しい結果を上書きさせない
+  // Sequence number for list/search requests; a response whose number is no longer current is discarded so it cannot overwrite newer results
   const promptListRequestSequenceRef = useRef(0);
   // モーダルのDOM要素への参照。フォーカス管理とアクセシビリティのために使用する
   // Refs to modal DOM elements for focus management and accessibility
@@ -474,6 +484,8 @@ export default function PromptSharePage({
     [loadAuthorProfile, openModal]
   );
 
+  // ページ固有のbodyクラス・カスタム要素の読み込み・Web Share対応の判定を行い、アンマウント時にスクロールロック等を元に戻す
+  // Sets up page-specific body classes, custom element loading and Web Share detection, and undoes scroll lock etc. on unmount
   const supportsNativeShare = usePromptSharePageSetup({
     hasModalLockRef,
     postCloseTimerRef
@@ -503,6 +515,8 @@ export default function PromptSharePage({
     [closeModal, saveEditedPrompt]
   );
 
+  // 詳細を開いたときの閲覧数を記録する関数と、一覧のカード表示（インプレッション）を記録する関数
+  // Functions that record a view when a detail opens and card impressions in the feed
   const recordOpenedPromptView = usePromptViewRecorder({ updatePromptRecord });
   const recordPromptImpression = usePromptImpressionTracker();
 
@@ -780,6 +794,8 @@ export default function PromptSharePage({
     }
   }, [buildPromptCountMeta, feedPagination, toPromptRecords]);
 
+  // 検索中は検索結果の、そうでなければ通常フィードの次ページを読み込む
+  // Load the next page of search results while a search is active, otherwise of the regular feed
   const loadMoreResults = useCallback(() => {
     if (activeSearchQuery.trim()) {
       return loadMoreSearchResults();
@@ -787,6 +803,8 @@ export default function PromptSharePage({
     return loadMoreFeedResults();
   }, [activeSearchQuery, loadMoreFeedResults, loadMoreSearchResults]);
 
+  // 「もっと見る」ボタン用。Promiseを返さないイベントハンドラ形式に包む
+  // Wrapper for the "load more" button that discards the returned Promise to fit an event-handler signature
   const handleLoadMoreResults = useCallback(() => {
     void loadMoreResults();
   }, [loadMoreResults]);
@@ -845,6 +863,8 @@ export default function PromptSharePage({
     setOpenDropdownPromptId((current) => (current === promptId ? null : promptId));
   }, []);
 
+  // 開いているカードのドロップダウンをすべて閉じる
+  // Close whichever card dropdown is currently open
   const closePromptDropdown = useCallback(() => {
     setOpenDropdownPromptId(null);
   }, []);

@@ -1,3 +1,5 @@
+// サイドバーのチャットルーム一覧を絞り込む検索欄。状態は持たず、値と変更通知は chat_main_section.tsx が管理する。
+// Search box that filters the sidebar chat room list; stateless, with the value and change handling owned by chat_main_section.tsx.
 import { memo, type ChangeEvent } from "react";
 import { useTranslation } from "../../contexts/locale_context";
 

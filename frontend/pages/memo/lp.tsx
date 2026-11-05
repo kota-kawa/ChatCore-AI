@@ -1,3 +1,6 @@
+// メモ機能の特徴と利用開始への導線を紹介する公開ページ。
+// Public landing page introducing memo features and entry points.
+
 import { SeoHead } from "../../components/SeoHead";
 import { LpFooter } from "../../components/lp/lp_footer";
 import { MemoLpFinalCta } from "../../components/memo_lp/memo_lp_cta";

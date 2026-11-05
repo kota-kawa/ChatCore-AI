@@ -1,3 +1,5 @@
+// プロンプト共有の紹介ページ（/prompt_share/lp）の「対応範囲」セクション。形式と生成対象の2軸、カテゴリ一覧、投稿前の注意点を示す。
+// "What it covers" section of the prompt-share introduction page (/prompt_share/lp): the format and output-type axes, the category list, and caveats before posting.
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 import { getPromptCategoryPath } from "../prompt_share/prompt_category_seo";
@@ -24,6 +26,8 @@ const LIMITS_EN = [
   "“Use in chat” runs the prompt inside ChatCore-AI. To use it elsewhere, copy the body instead."
 ];
 
+// カテゴリのチップは、各カテゴリページへのリンクとして描画する
+// Category chips are rendered as links to each category page
 export function PromptShareLpScope() {
   const { locale } = useTranslation();
   const isEn = locale === "en";

@@ -1,3 +1,6 @@
+// Skillに同梱する名前付きテキストリソースの追加・編集・削除を提供する。
+// Edits, adds and removes named text resources bundled with a Skill.
+
 import type { PromptResource, PromptResourceRole } from "../../scripts/prompt_share/types";
 import {
   inferSkillResourceLanguage,

@@ -1,3 +1,5 @@
+// 認証処理の結果メッセージを出す共通モーダル。auth_gateway_page.tsx が use_modal_message フックの状態を渡して使う。
+// Shared modal that shows authentication result messages; auth_gateway_page.tsx feeds it the state from the use_modal_message hook.
 import { ModalShell } from "../../../ui/modal_shell";
 import { useTranslation } from "../../../../contexts/locale_context";
 

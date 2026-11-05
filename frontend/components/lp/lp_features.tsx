@@ -32,6 +32,8 @@ const LP_FEATURES = [
     linkLabel: "メモを見る"
   }
 ] as const;
+// 英語版の機能紹介。日本語版 LP_FEATURES と同じ id・遷移先で保つ。
+// English feature data; keep the same ids and link targets as the Japanese LP_FEATURES.
 const LP_FEATURES_EN = [
   { id: "chat", icon: "bi-chat-dots", name: "AI Chat", title: "Ask naturally and get answers fast", description: "Switch between models such as Groq and Claude for research, summaries, and writing. Share a conversation with one click.", href: "/", linkLabel: "Open chat" },
   { id: "prompts", icon: "bi-people", name: "Prompt Library", title: "Reuse the prompts that work", description: "Publish effective prompts and learn from examples shared by others, complete with sample inputs and outputs.", href: "/prompt_share", linkLabel: "Browse prompts" },

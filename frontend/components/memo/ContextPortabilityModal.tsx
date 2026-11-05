@@ -1,3 +1,5 @@
+// マイコンテキストの書き出し（JSON / Markdown のダウンロード）と取り込み（プレビュー → 確認 → 登録）を行うモーダル。MyContextPanel から使われる。
+// Modal for exporting my context (JSON / Markdown download) and importing it (preview, confirm, register); used by MyContextPanel.
 import {
   useCallback,
   useEffect,
@@ -47,6 +49,8 @@ type ImportFileValidation =
   | { valid: true; format: ContextVaultExportFormat }
   | { valid: false; message: string };
 
+// 取り込みファイルを拡張子（.json / .md / .markdown）・空ファイル・サイズで検証し、形式を判定する。
+// Validates an import file by extension (.json / .md / .markdown), emptiness, and size, and detects its format.
 export function validateContextImportFile(
   file: Pick<File, "name" | "size">,
   translate: (key: MessageKey) => string = (key) => jaMessages[key],
@@ -69,6 +73,8 @@ export function validateContextImportFile(
   return { valid: true, format };
 }
 
+// Blob を一時的な <a download> 経由でブラウザにダウンロードさせる。
+// Triggers a browser download of a Blob through a temporary <a download>.
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -107,6 +113,8 @@ export function ContextPortabilityModal({
   const initialFocusRef = useRef<HTMLButtonElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // 取り込みの選択・プレビュー・結果・確認チェックをすべて初期状態に戻す。
+  // Resets the import selection, preview, result, and confirmation checkbox to their initial state.
   const resetImport = useCallback(() => {
     setSelectedImport(null);
     setPreview(null);
@@ -153,6 +161,8 @@ export function ContextPortabilityModal({
     }
   };
 
+  // ファイル選択時に検証して内容を読み込む。まだ送信はせず、プレビューは別操作で行う。
+  // Validates and reads the chosen file; nothing is sent yet, the preview is a separate step.
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     setPreview(null);
@@ -199,10 +209,14 @@ export function ContextPortabilityModal({
     }
   };
 
+  // 取り込みの確定は、プレビュー済み・確認チェック済み・取り込める行がある場合だけ可能。
+  // Import can be confirmed only after a preview, with the confirmation checked and at least one importable item.
   const canConfirmImport = Boolean(
     selectedImport && preview && confirmed && preview.can_import && preview.importable_count > 0,
   );
 
+  // preview_token を添えて取り込みを確定する。確定後に親の再読み込みが失敗しても、取り込み結果は保持して通知だけ出す。
+  // Confirms the import with the preview_token; if the parent refresh fails afterwards, the result is kept and only a notice is shown.
   const handleConfirmImport = async () => {
     if (!selectedImport || !preview || !canConfirmImport) return;
     setBusy(true);

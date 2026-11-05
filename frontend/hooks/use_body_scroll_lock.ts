@@ -1,3 +1,5 @@
+// モーダル表示中などに <body> のスクロールを止めるフック（実処理は scripts/core/body_scroll_lock）。
+// Hook that locks <body> scrolling, e.g. while a modal is open (the actual locking lives in scripts/core/body_scroll_lock).
 import { useEffect } from "react";
 
 import { acquireBodyScrollLock } from "../scripts/core/body_scroll_lock";

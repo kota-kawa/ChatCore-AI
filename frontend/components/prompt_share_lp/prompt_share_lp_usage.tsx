@@ -1,3 +1,5 @@
+// プロンプト共有の紹介ページ（/prompt_share/lp）の「使い方」セクション。利用の3ステップ、運用上の仕組み、料金と前提条件を示す。
+// "How it works" section of the prompt-share introduction page (/prompt_share/lp): the three usage steps, how the feed is kept usable, and pricing / prerequisites.
 import { useTranslation } from "../../contexts/locale_context";
 
 // 3ステップの利用フロー。どこからアカウントが必要になるかも明記する
@@ -40,6 +42,8 @@ const STEPS_EN: Step[] = [
   }
 ];
 
+// 荒れないための仕組み（運用面の説明）。「荒れないための仕組み」パネルに表示する
+// Notes on how the feed is kept usable (operations), shown in the "How it is kept usable" panel
 const OPERATION_JA: Step[] = [
   {
     title: "コメントは荒らしにくくしてあります",
@@ -72,6 +76,8 @@ const OPERATION_EN: Step[] = [
   }
 ];
 
+// 料金と前提条件。アカウント不要の範囲と必要な範囲を分けて示す
+// Pricing and prerequisites, separating what works without an account from what needs one
 const PRICING_JA: Step[] = [
   { title: "料金", description: "無料です。クレジットカードの登録はありません。" },
   { title: "アカウントなしでできること", description: "公開プロンプトとSKILLの閲覧・検索、リンクからの参照。" },
@@ -90,6 +96,8 @@ const PRICING_EN: Step[] = [
   }
 ];
 
+// 3つの表示ブロック（ステップ・運用・料金）を、現在のロケールのデータで描画する
+// Render the three blocks (steps, operation, pricing) from the data for the current locale
 export function PromptShareLpUsage() {
   const { locale } = useTranslation();
   const isEn = locale === "en";

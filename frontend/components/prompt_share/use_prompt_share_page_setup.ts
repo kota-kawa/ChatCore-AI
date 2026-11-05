@@ -1,3 +1,5 @@
+// 共有プロンプトページの初期化を行う hook。body クラスの付与、Web Components の読み込み、Web Share 対応の判定、アンマウント時の後始末を担う。呼び出し元は pages/prompt_share/index.tsx。
+// Hook that sets up the prompt-share page: body class, Web Components loading, Web Share support detection and unmount cleanup. Used by pages/prompt_share/index.tsx.
 import { useEffect, useState, type MutableRefObject } from "react";
 import { isNativeShareSupported } from "../../lib/share";
 
@@ -18,6 +20,8 @@ export function usePromptSharePageSetup({
     document.body.classList.add("prompt-share-page");
     setSupportsNativeShare(isNativeShareSupported());
 
+    // popup_menu と user_icon のカスタム要素は、このページを開いたときに初めて読み込む
+    // The popup_menu and user_icon custom elements are loaded only when this page is opened
     const importCustomElements = async () => {
       await Promise.all([
         import("../../scripts/components/popup_menu"),

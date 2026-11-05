@@ -42,6 +42,8 @@ type TextNodeEntry = {
   start: number;
 };
 
+// アニメーションの経過時間の基準となる現在時刻（ミリ秒）。performance が無い環境では Date.now() で代用する。
+// Current time in ms used as the animation clock; falls back to Date.now() when performance is unavailable.
 function nowMs() {
   if (typeof performance !== "undefined" && typeof performance.now === "function") {
     return performance.now();

@@ -1,3 +1,5 @@
+// 中央寄せモーダルの共通の外殻。document.body へのポータル、ARIA 属性、フォーカストラップ、背景クリック・Escape での閉じる操作をまとめる。
+// Common shell for centered modals: body portal, ARIA attributes, focus trap, and backdrop-click / Escape closing.
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
@@ -37,6 +39,8 @@ type ModalShellProps = {
   children: ReactNode;
 };
 
+// dismissDisabled の間は、背景クリックと Escape のどちらでも閉じない（送信中などに誤って閉じないため）
+// While dismissDisabled is set, neither backdrop click nor Escape closes the modal (e.g. to avoid closing mid-submit)
 export function ModalShell({
   isOpen,
   onClose,

@@ -1,3 +1,5 @@
+// タスク起動メッセージの下に出す、裏側のタスクプロンプトを読める折りたたみ。chat_message_list.tsx から使われる。
+// Collapsible under a task-launch message that lets the user read the underlying task prompt; used by chat_message_list.tsx.
 import { memo } from "react";
 
 import type { NormalizedTask } from "../../lib/chat_page/types";

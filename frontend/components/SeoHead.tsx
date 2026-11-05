@@ -1,3 +1,5 @@
+// 各ページの <head>（title・description・canonical・OGP・Twitter Card・JSON-LD・robots）をまとめて出力する共通コンポーネント。
+// Shared component that emits a page's <head>: title, description, canonical, OGP, Twitter Card, JSON-LD and robots.
 import Head from "next/head";
 
 import {
@@ -61,6 +63,8 @@ export function SeoHead({
     ? "noindex,nofollow,noarchive"
     : "index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1";
 
+  // 言語別の alternate リンクは noindex のページには出さない（索引に載せないページの別言語版を知らせる意味がないため）
+  // The per-language alternate links are omitted on noindex pages, since there is no point advertising language variants of pages kept out of the index
   return (
     <Head>
       <meta charSet="UTF-8" />

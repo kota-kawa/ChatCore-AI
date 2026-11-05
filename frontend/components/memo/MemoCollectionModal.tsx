@@ -1,3 +1,5 @@
+// メモのコレクション（分類用の色付きタグ）を新規作成・名前と色の編集・削除するモーダル。MemoPage から使われる。
+// Modal for creating, renaming/recoloring, and deleting memo collections (colored categories); used by MemoPage.
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
 import { useTranslation } from "../../contexts/locale_context";
@@ -88,7 +90,8 @@ export function MemoCollectionModal() {
         </header>
 
         <div className="cc-modal__body memo-collection-modal__body">
-          {/* Create new */}
+          {/* 新規作成
+              Create new */}
           <section className="cc-modal__section memo-collection-create">
             <div className="cc-modal__section-head">
               <h3 className="cc-modal__section-title">{t("memo.create")}</h3>
@@ -127,7 +130,8 @@ export function MemoCollectionModal() {
             </details>
           </section>
 
-          {/* Collection list */}
+          {/* 既存コレクションの一覧（行ごとに表示と編集を切り替える）
+              Collection list (each row switches between display and edit) */}
           <section className="cc-modal__section memo-collection-modal__list-section">
             <div className="cc-modal__section-head">
               <h3 className="cc-modal__section-title">{t("memo.collections")}</h3>

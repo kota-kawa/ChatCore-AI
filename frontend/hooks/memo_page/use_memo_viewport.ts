@@ -1,5 +1,9 @@
+// メモ画面の可視領域（ソフトキーボードで縮むビューポート）を CSS 変数として算出するフックと、スマホ幅判定のフックを提供する。
+// Provides a hook that computes the memo page visible area (the viewport shrinking under the soft keyboard) as CSS variables, and a hook for the phone-width check.
 import { useEffect, useState, type CSSProperties } from "react";
 
+// フォーカスが外れたあと、キーボードの開閉が落ち着くまで待ってから再計測する時間（ミリ秒）。
+// Time (ms) to wait after focus leaves, letting the keyboard transition settle before measuring again.
 const FOCUS_SETTLE_MS = 250;
 const MEMO_MOBILE_QUERY = "(max-width: 768px)";
 
@@ -23,6 +27,8 @@ function finiteOr(value: number, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
+// 現在の表示領域を読み取る。ピンチズーム中（scale が 1 を超える）や visualViewport が無い環境では、レイアウトビューポートを使う。
+// Reads the current visible area. Pinch-zoomed (scale above 1) or without visualViewport, it falls back to the layout viewport.
 function readViewport(): ViewportSnapshot {
   const layoutHeight = Math.max(0, finiteOr(window.innerHeight, 0));
   const visualViewport = window.visualViewport;
@@ -57,6 +63,8 @@ function sameSnapshot(left: ViewportSnapshot | undefined, right: ViewportSnapsho
     && left.surfaceHeight === right.surfaceHeight;
 }
 
+// enabled の間だけ表示領域を計測し、CSS 変数のスタイルを返す。preserveEditingHeight が真のときは、編集中にキーボードで縮んだ高さを面の高さへ反映しない。
+// While enabled, measures the visible area and returns a CSS-variable style. With preserveEditingHeight, a height shrunk by the keyboard while editing is not applied to the surface height.
 export function useMemoViewport(enabled: boolean, preserveEditingHeight = false): CSSProperties | undefined {
   const [snapshot, setSnapshot] = useState<ViewportSnapshot>();
 
@@ -119,6 +127,8 @@ export function useMemoViewport(enabled: boolean, preserveEditingHeight = false)
   return enabled && snapshot ? toViewportStyle(snapshot) : undefined;
 }
 
+// メモ画面をスマホ幅（768px 以下）のレイアウトで表示するかどうか。
+// Whether the memo page should use the phone-width (768px and below) layout.
 export function useMemoMobileLayout(): boolean {
   const [isMobile, setIsMobile] = useState(false);
 

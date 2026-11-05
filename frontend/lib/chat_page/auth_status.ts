@@ -1,3 +1,5 @@
+// /api/current_user の応答からログイン状態を読み取る補助。認証エラー（401/403）は専用の例外にして、一時的な失敗と区別する。
+// Helper that reads the login state from a /api/current_user response; auth errors (401/403) throw a dedicated error so they can be told apart from transient failures.
 export class CurrentUserAuthError extends Error {
   readonly status: number;
 

@@ -1,3 +1,6 @@
+// ホーム画面で使うタスクの識別・更新・並び順の変換を共通化する。
+// Shares task identity, updates and ordering conversions for the home controller.
+
 import { CHAT_ROOMS_PAGE_SIZE } from "./constants";
 import type { ChatRoom, NormalizedTask, UiChatMessage } from "./types";
 

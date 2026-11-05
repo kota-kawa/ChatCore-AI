@@ -1,3 +1,5 @@
+// AIチャット紹介ページの「できること」セクション。タスクボタン・生成UI・会話まわりの操作を3グループで紹介する。pages/chat/lp.tsx から使われる。
+// "What you can do" section of the AI chat landing page, in three groups: task buttons, generated UI and conversation tools; used by pages/chat/lp.tsx.
 import { useTranslation } from "../../contexts/locale_context";
 
 // 「タスクボタン・生成UI・会話まわりの操作」の3つに絞り、画面上で実際にできる操作だけを並べる
@@ -93,6 +95,8 @@ const VALUE_ITEMS_EN: ValueItem[] = [
   }
 ];
 
+// VALUE_ITEMS_JA / VALUE_ITEMS_EN は同じ構成で対になっていて、locale に合う方を選んで表示する
+// VALUE_ITEMS_JA / VALUE_ITEMS_EN mirror each other; the one matching the locale is rendered
 export function ChatLpValue() {
   const { locale } = useTranslation();
   const isEn = locale === "en";

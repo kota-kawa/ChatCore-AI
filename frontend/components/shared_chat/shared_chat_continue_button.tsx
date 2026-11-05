@@ -1,3 +1,5 @@
+// 共有チャットページ（pages/shared/[token].tsx）の「このチャットを続ける」ボタン。共有された会話を自分のルームへ複製して通常のチャット画面へ移る。
+// "Continue this chat" button on the shared chat page (pages/shared/[token].tsx): copies the shared conversation into the viewer's own room and opens the regular chat view.
 import { useCallback, useEffect, useState } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
@@ -11,7 +13,10 @@ import { resilientFetch } from "../../scripts/core/resilient_fetch";
 
 type SharedChatContinueButtonProps = {
   token: string;
-  /** Share-page header and footer can use one guard so only one fork request runs. */
+  /**
+   * 共有ページのヘッダーとフッターが同じ状態を共有し、複製リクエストが 1 つだけ走るようにする。
+   * Share-page header and footer can use one guard so only one fork request runs.
+   */
   actionState?: UseImportActionStateResult;
 };
 
@@ -29,6 +34,8 @@ export function SharedChatContinueButton({ token, actionState }: SharedChatConti
   // null means the auth state is still being resolved; no hint is shown until it is known.
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
 
+  // ログイン状態を確認する。未ログインの場合だけ、複製が保存されない旨を表示するために使う
+  // Check the login state; it is used only to show the note that a guest's copy is not saved
   useEffect(() => {
     let cancelled = false;
     resilientFetch("/api/current_user", { credentials: "same-origin" })
@@ -48,6 +55,8 @@ export function SharedChatContinueButton({ token, actionState }: SharedChatConti
     };
   }, []);
 
+  // 共有チャットを複製し、作成したルームを記憶してから "/" へ遷移する。実行中の重複クリックは無視し、失敗時はエラー文を表示する
+  // Fork the shared chat, remember the created room and navigate to "/"; repeated clicks while pending are ignored and failures show an error message
   const handleContinue = useCallback(async () => {
     if (isForking) return;
     setErrorMessage("");

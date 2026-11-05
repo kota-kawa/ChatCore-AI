@@ -1,3 +1,5 @@
+// メモ画面の一時的な通知（成功・エラー、「元に戻す」付き）の表示と、?saved=1 クエリによる保存完了通知を扱うフック。
+// Hook for the memo page transient notices (success/error, optionally with an undo action) and the ?saved=1 saved-notice handling.
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useRef, useState } from "react";
 

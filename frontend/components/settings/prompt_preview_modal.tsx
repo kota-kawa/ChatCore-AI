@@ -1,3 +1,5 @@
+// 設定画面のプロンプトカードから開く、閲覧専用のプロンプト詳細モーダル。呼び出し元は pages/settings.tsx。
+// Read-only prompt detail modal opened from the settings page's prompt cards. Used by pages/settings.tsx.
 import MarkdownContent from "../MarkdownContent";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import { getPromptReferenceImageUrl } from "../../scripts/prompt_share/formatters";

@@ -1,3 +1,5 @@
+// メモカード 1 件への操作（ピン、アーカイブ、ゴミ箱、復元、完全削除、チェック切り替え、全文コピー）とゴミ箱を空にする操作を扱うフック。
+// Hook for single memo card actions (pin, archive, trash, restore, delete for good, checkbox toggle, copy full text) and emptying the trash.
 import { useCallback, useState } from "react";
 import type { KeyedMutator } from "swr";
 
@@ -43,6 +45,8 @@ export function useMemoPageItemActions({
   const [copyingMemoId, setCopyingMemoId] = useState<string>("");
   const [emptyingTrash, setEmptyingTrash] = useState(false);
 
+  // 操作中のメモ id を actionLoadingId に入れ、完了するまでそのカードを操作中として扱うための共通ラッパー。
+  // Shared wrapper that marks one memo as busy (actionLoadingId) until its action settles.
   const withActionLoading = useCallback(async (memoId: string | number, action: () => Promise<void>) => {
     const id = String(memoId);
     setActionLoadingId(id);

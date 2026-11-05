@@ -1,7 +1,11 @@
+// アクションメニューから行けるページを先読みして、メニュー遷移を速くするフック。
+// Hook that prefetches the pages reachable from the action menu so navigation from the menu feels faster.
 import { useEffect } from "react";
 import { preinit } from "react-dom";
 import type { NextRouter } from "next/router";
 
+// バックグラウンド先読みを始める前に、入力や読み込みが落ち着くまで待つ時間（ミリ秒）。
+// Time (ms) of quiet (no loading or input) to wait before background prefetching starts.
 const BACKGROUND_QUIET_PERIOD_MS = 800;
 
 // 初期ロードと入力が落ち着いた時間に一つずつ準備し、メニューを使う時はすぐ先読みする。
@@ -35,6 +39,7 @@ export function useMenuNavigationPrefetch(
       try {
         await router.prefetch(path);
       } catch {
+        // 先読みに失敗しても遷移自体は先読みに依存しないので、次にメニューを操作したときに再試行できるよう記録を消す。
         // A later menu interaction can retry; navigation does not depend on warming.
         requested.delete(path);
       }

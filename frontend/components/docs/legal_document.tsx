@@ -1,3 +1,5 @@
+// プライバシーポリシーと利用規約のページ（pages/privacy.tsx、pages/terms.tsx）が共有する法的文書レイアウト。
+// Legal document layout shared by the privacy policy and terms pages (pages/privacy.tsx, pages/terms.tsx).
 import type { ReactNode } from "react";
 
 import { LpFooter } from "../lp/lp_footer";
@@ -19,6 +21,8 @@ export type LegalSection = {
   body: ReactNode;
 };
 
+// 文書レイアウトのprops型。文言と条文は呼び出し側のページが渡す。
+// Props for the document layout; the calling page supplies the copy and sections.
 type LegalDocumentProps = {
   kicker: string;
   eyebrow: string;

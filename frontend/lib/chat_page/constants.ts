@@ -1,3 +1,5 @@
+// チャット画面で共有する定数（文字数上限、既定モデル、ページサイズ、スクロール閾値、思考中アニメーションの星座、モデル選択肢）。
+// Constants shared by the chat page: length limits, the default model, page sizes, scroll thresholds, the thinking-animation constellations, and the model options.
 import type { ModelOption } from "./types";
 import chatContract from "../../data/chat_contract.json";
 
@@ -7,6 +9,8 @@ function toPositiveInteger(value: unknown, fallback: number) {
   return parsed > 0 ? parsed : fallback;
 }
 
+// 履歴の既定ページサイズは API 契約（data/chat_contract.json）から読み、値が不正なら 50 にする。
+// The default history page size is read from the API contract (data/chat_contract.json), falling back to 50 when the value is invalid.
 const chatHistoryContract = (chatContract as { chat_history?: { page_size_default?: number } }).chat_history;
 const chatHistoryPageSizeDefault = chatHistoryContract?.page_size_default;
 
@@ -16,6 +20,8 @@ export const MAX_RENDERED_CHAT_MESSAGES = 1000;
 export const DEFAULT_MODEL = "gpt-6-luna";
 export const CHAT_ROOMS_PAGE_SIZE = 20;
 export const CHAT_HISTORY_PAGE_SIZE = toPositiveInteger(chatHistoryPageSizeDefault, 50);
+// 末尾からこの距離（px）以内なら「最下部にいる」とみなし、新しい出力に合わせて自動スクロールを続ける。
+// Within this distance (px) of the bottom the view counts as "at the bottom" and keeps auto-scrolling with new output.
 export const STICKY_SCROLL_BOTTOM_THRESHOLD_PX = 72;
 export const THINKING_CONSTELLATION_BASE_WIDTH = 208;
 export const THINKING_CONSTELLATION_BASE_HEIGHT = 86;
@@ -236,6 +242,8 @@ export const THINKING_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
   },
 ];
 
+// 画面に出すモデルの選択肢。value が API に渡すモデル ID で、descriptionKey は説明文の翻訳キー。
+// Model choices shown in the UI: value is the model id sent to the API, and descriptionKey is the translation key of its description.
 export const MODEL_OPTIONS: ModelOption[] = [
   {
     value: "openai/gpt-oss-120b",

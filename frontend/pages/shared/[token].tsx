@@ -1,3 +1,5 @@
+// 共有チャットの閲覧ページ（/shared/[token]）。トークンでバックエンドから会話を取得し、読み取り専用で表示して「このチャットを続ける」を提供する。
+// Shared chat viewing page (/shared/[token]); fetches the conversation by token from the backend, shows it read-only and offers "continue this chat".
 import type { GetServerSideProps } from "next";
 import { useEffect } from "react";
 import { SharedChatContinueButton } from "../../components/shared_chat/shared_chat_continue_button";
@@ -107,6 +109,8 @@ export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async
     if (!res.ok) {
       context.res.statusCode = res.status;
     }
+    // JSONが壊れている場合などでも、オブジェクトとして扱えるよう空のpayloadに揃える
+    // Fall back to an empty payload so a malformed body is still handled as an object
     payload = data && typeof data === "object" ? data : {};
     if (!res.ok && !payload.error) {
       payload.error = `共有チャットの取得に失敗しました (${res.status})`;
@@ -131,6 +135,8 @@ export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async
 export default function SharedChatPage({ payload, pageUrl, ogImageUrl, token }: SharedChatPageProps) {
   const { locale } = useTranslation();
   const english = locale === "en";
+  // ヘッダーとフッターの2つの「続ける」ボタンに同じ実行状態を渡す
+  // Pass the same action state to both the header and footer "continue" buttons
   const continueActionState = useImportActionState();
   // 他ページと共通の右下アクションメニューをクライアント側で登録する
   // Register the shared bottom-right action menu on the client.

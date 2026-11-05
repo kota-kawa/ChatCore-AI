@@ -1,3 +1,5 @@
+// プロンプト詳細モーダルに出す作例画像。クリックで拡大表示（ビューア）に切り替え、Esc とフォーカスの扱いを拡大側で完結させる。prompt_share_detail_modal.tsx から使われる。
+// Example image shown in the prompt detail modal; clicking opens an expanded viewer that handles Esc and focus on its own. Used by prompt_share_detail_modal.tsx.
 import React, { useEffect, useRef, useState } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";

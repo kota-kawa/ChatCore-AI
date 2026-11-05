@@ -1,3 +1,5 @@
+// プロジェクト詳細モーダル。名前・カスタム指示の編集、所属チャットの一覧、新規チャット開始、削除を行う。pages/index.tsx から描画される。
+// Project detail modal: edit the name and custom instructions, list member chats, start a new chat, or delete; rendered by pages/index.tsx.
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -62,6 +64,8 @@ function ProjectSectionComponent() {
   if (!isOpen) return null;
 
   const detail = activeProjectDetail;
+  // 読み込み済みの詳細と入力中の値を比べ、変更があるときだけ「保存」を押せるようにする
+  // Compare the loaded detail with the current inputs so Save is enabled only when something changed
   const hasUnsavedChanges =
     detail !== null && (name !== detail.name || instructions !== detail.instructions);
 

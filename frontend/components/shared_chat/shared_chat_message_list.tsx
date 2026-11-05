@@ -1,3 +1,5 @@
+// 共有チャットの会話を、ユーザーとアシスタントの発言ごとに読み取り専用で並べる一覧。呼び出し元は pages/shared/[token].tsx。
+// Read-only list of a shared chat's user and assistant messages. Used by pages/shared/[token].tsx.
 import { memo } from "react";
 
 import { decodeStoredMessage, normalizeSharedSender } from "../../lib/shared_chat/message_text";
@@ -27,6 +29,8 @@ function SharedChatMessageListComponent({ emptyLabel, messages }: SharedChatMess
       {messages.map((message, index) => {
         const sender = normalizeSharedSender(message.sender);
         const decoded = decodeStoredMessage(message.message || "");
+        // メッセージに固有の ID が無いため、送信者・位置・時刻を組み合わせてキーにする
+        // Messages carry no unique ID here, so the key combines sender, position and timestamp
         const rowKey = `${sender}-${index}-${message.timestamp || ""}`;
 
         if (sender === "user") {

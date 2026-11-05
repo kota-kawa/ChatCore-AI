@@ -1,3 +1,6 @@
+// 日本語入力（IME）の変換確定の Enter かを判定する。送信などの Enter 操作と取り違えないために使う。
+// Detects an Enter key press that confirms an IME conversion, so it is not mistaken for a send/submit action.
+
 // 日本語変換の確定の Enter か。Safari は確定の keydown を変換終了の後に送るため isComposing が
 // false になるが、keyCode は 229 のままなので、それも確定として扱う。
 // Whether this Enter confirms an IME conversion. Safari sends that keydown after the composition

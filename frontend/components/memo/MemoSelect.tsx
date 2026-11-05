@@ -1,9 +1,12 @@
+// メモ画面用の自前ドロップダウン（select の代替）。WAI-ARIA の listbox 操作に対応し、メニューは body にポータルして位置を計算する。メモ画面の各所から使われる。
+// Custom dropdown (select replacement) for the memo screens, following the WAI-ARIA listbox keyboard pattern; the menu is portaled to body with a computed position. Used across the memo UI.
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 
 import type { SelectOption } from "../../lib/memo/types";
 
 // ---------------------------------------------------------------------------
+// MemoSelect – 見た目を独自に作ったドロップダウン
 // MemoSelect – custom styled dropdown
 // ---------------------------------------------------------------------------
 
@@ -43,6 +46,10 @@ export function MemoSelect({
   // Open the menu and seed the highlighted candidate with the currently selected option
   const openMenu = () => {
     if (disabled || !triggerRef.current) return;
+    // メニューの位置と高さを決める。モバイルのキーボード表示時も崩れないよう visualViewport を基準にし、
+    // 下に収まらず上のほうが広いときは上向きに開く。幅は 180px 以上で、画面からはみ出さないよう収める。
+    // Computes the menu's position and height. It uses visualViewport so it holds up when the mobile keyboard is shown,
+    // opens upward when it does not fit below and there is more room above, and keeps the width at least 180px but within the screen.
     const rect = triggerRef.current.getBoundingClientRect();
     const viewport = window.visualViewport;
     const viewportTop = viewport?.offsetTop ?? 0;

@@ -1,3 +1,5 @@
+// 設定画面（pages/settings.tsx）の各セクション（言語・プロフィール・外観・投稿/いいねプロンプト・通知・セキュリティ）の表示コンポーネント。状態と API 呼び出しは親ページが持ち、ここは props で受けて描画する。
+// Display components for the sections of the settings page (pages/settings.tsx): language, profile, appearance, authored / liked prompts, notifications and security. The parent page owns state and API calls; these render from props.
 import { useState } from "react";
 import type {
   ChangeEvent,
@@ -66,6 +68,8 @@ function PromptsCount({ label, value }: { label: string; value: string }) {
   );
 }
 
+// 言語の選択セクション。選択結果は onLocaleSelect で親に返す
+// Language selection section; the choice is reported to the parent through onLocaleSelect
 export function LanguageSettingsSection({
   isActive,
   locale,
@@ -136,6 +140,8 @@ export function LanguageSettingsSection({
   );
 }
 
+// プロフィール編集セクション。入力値と保存結果は親が持ち、取得中はスケルトンを出す。メールアドレスは読み取り専用
+// Profile editing section; the parent owns the form values and save result, a skeleton shows while loading, and the email is read-only
 export function ProfileSettingsSection({
   isActive,
   profileSaveEffectActive,
@@ -314,6 +320,8 @@ export function ProfileSettingsSection({
   );
 }
 
+// テーマ（ライト・ダーク・システム設定に合わせる）の選択セクション
+// Theme selection section (light, dark, or follow the system)
 export function AppearanceSettingsSection({
   isActive,
   themePreference,
@@ -389,6 +397,8 @@ function PromptsEmptyState({
   );
 }
 
+// 自分が投稿したプロンプトの一覧セクション。カード自体は親から渡される
+// Section listing the prompts the user has posted; the cards themselves are passed in by the parent
 export function AuthoredPromptsSection({
   isActive,
   loading,
@@ -444,6 +454,8 @@ export function AuthoredPromptsSection({
   );
 }
 
+// いいねしたプロンプトの一覧セクション。表示の分岐は投稿一覧と同じ（初回読み込みはスケルトン、再読み込みは小さなインジケータ）
+// Section listing liked prompts; it branches like the authored list (skeleton on first load, a small indicator on reload)
 export function LikedPromptsSection({
   isActive,
   loading,
@@ -498,6 +510,8 @@ export function LikedPromptsSection({
   );
 }
 
+// 通知セクション。現時点では準備中の案内だけを表示する
+// Notifications section; currently shows only a coming-soon notice
 export function NotificationsSettingsSection({ isActive }: { isActive: boolean }) {
   const { t } = useTranslation();
   return (
@@ -513,6 +527,8 @@ export function NotificationsSettingsSection({ isActive }: { isActive: boolean }
   );
 }
 
+// 読み取り専用の値（URL・ID・シークレット）を、コピーボタン付きで表示する欄
+// Read-only field (URL, ID or secret) with a copy button
 function SecurityCredentialField({
   id,
   label,
@@ -554,6 +570,8 @@ function SecurityCredentialField({
   );
 }
 
+// 表示名・ラベルをその場で編集できる欄。保存の成否は親（onSave）が扱い、失敗時は編集状態のまま残す
+// Inline-editable name / label; the parent's onSave handles the result, and the field stays in edit mode on failure
 function EditableSecurityName({
   value,
   fallbackValue,
@@ -580,6 +598,7 @@ function EditableSecurityName({
       await onSave(draftValue);
       setEditing(false);
     } catch {
+      // 親が API エラーをトーストで表示するので、ここでは編集欄を開いたままにして修正できるようにする
       // The parent presents the API error as a toast; keep the field open for correction.
     } finally {
       setSaving(false);
@@ -633,6 +652,8 @@ function EditableSecurityName({
   );
 }
 
+// セキュリティセクション。メールアドレス変更、Passkey、外部AI連携（MCP OAuth）、アカウント削除を扱う。状態と操作はすべて親から受け取る
+// Security section: email change, passkeys, external AI connections (MCP OAuth) and account deletion; all state and actions come from the parent
 export function SecuritySettingsSection({
   isActive,
   profileEmail,
@@ -729,6 +750,8 @@ export function SecuritySettingsSection({
   onDeleteAccount: () => void;
 }) {
   const { t, locale, formatDate } = useTranslation();
+  // 日時を表示用に整形する。値が空のときは「未使用」と表示する
+  // Format a timestamp for display; an empty value is shown as "never used"
   const formatSecurityDate = (value: string) => value
     ? formatDate(value, { dateStyle: "medium", timeStyle: "short" })
     : t("settings.neverUsed");

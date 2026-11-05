@@ -1,3 +1,5 @@
+// メモの書き出し（ダウンロード）モーダル。形式（EXPORT_FORMATS）・範囲（すべて／選択したメモ）・対象メモを選んで書き出す。MemoPage から使われる。
+// Memo export (download) modal: choose the format (EXPORT_FORMATS), the scope (all or selected memos), and the target memos; used by MemoPage.
 import { EXPORT_FORMATS } from "../../lib/memo/constants";
 import { formatDateTime } from "../../lib/datetime";
 import { ModalCloseButton } from "../ui/modal_close_button";
@@ -8,6 +10,7 @@ import {
   useMemoPageModalsContext,
 } from "../../contexts/memo_page/memo_page_context";
 
+// ── 書き出しモーダル ──
 // ── Export modal ──
 // 共通モーダル面（cc-modal）に、形式・範囲・対象メモの選択を節ごとに並べる。
 // Shared modal surface (cc-modal) listing the format, scope and memo selection as sections.

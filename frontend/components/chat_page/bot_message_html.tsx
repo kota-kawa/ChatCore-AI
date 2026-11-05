@@ -1,3 +1,5 @@
+// AI 回答の本文（Markdown 由来のテキスト）をサニタイズ済み HTML として描画する。生成中は末尾の語をフェードインさせる。
+// Renders the AI answer body as sanitized HTML, fading in the trailing words while it is still streaming.
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { formatLLMOutput } from "../../scripts/chat/chat_ui";
@@ -67,6 +69,8 @@ function BotMessageHtmlComponent({ text, streaming = false }: BotMessageHtmlProp
     // 差分適用の前に単語spanを畳み、実DOMをHTMLと同じ形に戻す。
     // Fold away the reveal spans first so the live DOM matches the incoming HTML.
     clearStreamingWordReveal(container);
+    // innerHTML を丸ごと置き換えず差分だけ反映するので、ストリーミング中も既存のノード（選択範囲やコピーボタンなど）が保たれる
+    // Apply only the diff instead of replacing innerHTML, so existing nodes (selection, copy buttons, etc.) survive while streaming
     patchSanitizedHTML(container, formatted);
     // 生成が終わった描画ではspanを付けないため、完成後のDOMに残骸は残らない
     // The finished render adds no spans, so completed messages keep a clean DOM

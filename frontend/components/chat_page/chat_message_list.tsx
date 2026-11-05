@@ -1,3 +1,5 @@
+// チャットのメッセージ一覧。react-window の仮想スクロールで、ユーザー発言・AI 回答・思考中表示・「もっと読む」を行として描き、各メッセージの操作ボタンも持つ。chat_main_section.tsx から使われる。
+// The chat message list: renders user messages, AI answers, the thinking indicator and "load more" as rows in a react-window virtual list, with per-message actions; used by chat_main_section.tsx.
 import {
   memo,
   useCallback,
@@ -641,6 +643,7 @@ function ChatMessageListComponent({
         listApi.scrollToRow({ index: rows.length - 1, align: "end", behavior: "instant" });
         return;
       } catch {
+        // 仮想リストが再描画の合間で使えない場合は、下の DOM 直接スクロールにフォールバックする。
         // Fall through to direct DOM scrolling if the virtual list is between renders.
       }
     }

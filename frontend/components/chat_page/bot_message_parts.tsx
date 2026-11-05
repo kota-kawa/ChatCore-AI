@@ -1,3 +1,5 @@
+// AI メッセージを構成するパーツ（本文・生成UI・選択ボタン・承認カード・検索画像など）を順に描画する。chat_message_list.tsx から使われる。
+// Renders the parts of an AI message in order (text, generated UI, choice buttons, approval cards, search images, ...); used by chat_message_list.tsx.
 import { memo } from "react";
 
 import type { ToolApprovalDecision } from "../../lib/chat_page/tool_approval_api";
@@ -54,6 +56,8 @@ function BotMessagePartsComponent({
   return (
     <div className="bot-message-parts">
       {renderParts.map((part, index) => {
+        // パーツの種類ごとに専用コンポーネントへ振り分ける。未知の種類は何も描画しない（最後の return null）
+        // Dispatch each part type to its own component; unknown types render nothing (the final return null)
         if (part.type === "text") {
           return part.text ? (
             <div key={`text-${index}`} className="bot-message-part bot-message-part--text">

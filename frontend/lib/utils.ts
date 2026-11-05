@@ -1,3 +1,7 @@
+// 型の不確かな値（API やストレージから来る値）を安全に扱う小さなユーティリティと、sessionStorage の JSON 読み書き。
+// Small utilities for safely handling values of uncertain type (from APIs or storage), plus JSON read/write helpers for sessionStorage.
+// Used by components/ui/DraggableModal.tsx, components/chat_page/MiniChat.tsx and others.
+
 /**
  * 値がRecord型（オブジェクト）かどうかを判定する
  * Check if the value is a Record (object)

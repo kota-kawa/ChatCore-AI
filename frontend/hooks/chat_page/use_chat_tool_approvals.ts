@@ -1,3 +1,5 @@
+// チャットの承認カード（書き込みツールの実行前確認）の「承認／拒否」を API へ送り、結果でメッセージ内のカードを更新する hook。呼び出し元は components/chat_page/chat_main_section.tsx。
+// Hook that sends approve / reject decisions for chat approval cards (confirmation before write tools run) to the API and updates the card in the message. Used by components/chat_page/chat_main_section.tsx.
 import { useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 
@@ -36,10 +38,14 @@ export function useChatToolApprovals({ messages, applyToolApproval }: UseChatToo
     messagesRef.current = messages;
   }, [messages]);
 
+  // 承認 ID に対する決定を送る。送信中の同じ ID への再送は無視し、失敗時は期限切れ・決定済みのカードを最新の状態にそろえてからエラーを表示する
+  // Send a decision for an approval ID; repeated sends for an in-flight ID are ignored, and on failure expired / already-decided cards are synced to their latest state before the error is shown
   const handleToolApprovalDecide = useCallback(
     async (approvalId: string, decision: ToolApprovalDecision, acknowledgeWarnings = false) => {
       if (inFlightRef.current.has(approvalId)) return;
       inFlightRef.current.add(approvalId);
+      // プロフィール設定の更新が成功したカードでは、言語とテーマの変更をこの画面にもすぐ反映する
+      // For a successful profile-settings card, apply the language and theme change to this screen immediately
       const syncProfilePreferences = (
         approval: ToolApprovalApi,
         currentPreferredLocale: Locale | null,

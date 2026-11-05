@@ -1,3 +1,5 @@
+// チャットに添付するファイル（テキスト・文書・画像）の対応形式の判定、読み取り、件数・サイズ・文字数の検証を行う。
+// Handles chat file attachments (text, documents, images): supported-type checks, reading, and validation of count, size, and length.
 import {
   CHAT_IMAGE_ACCEPT,
   downscaleChatImage,
@@ -147,6 +149,8 @@ async function readChatAttachmentFile(file: File): Promise<AttachedFile> {
   };
 }
 
+// 同名のファイルは追加せず、最大件数に達したらそこで打ち切って、既存の添付に新しい添付を足した配列を返す。
+// Appends new attachments to the existing ones, skipping duplicate names and stopping at the maximum count.
 export function mergeChatAttachments(previous: AttachedFile[], additions: AttachedFile[]): AttachedFile[] {
   if (additions.length === 0) return previous;
   const next = [...previous];
@@ -182,6 +186,8 @@ async function readImageAttachment(
   };
 }
 
+// 選んだファイルを1件ずつ検証して読み込み、添付に使えるものだけを返す。件数超過・ファイル名の長さ・サイズ・形式・文字数の違反は notifyError で伝えてそのファイルを除外する。画像は、画像を読めるモデルのときだけ縮小して受け付ける。
+// Validates and reads each selected file in turn, returning only those usable as attachments. Violations of count, name length, size, type, or text length are reported through notifyError and that file is skipped. Images are accepted (downscaled) only when the selected model can read images.
 export async function readSelectedChatAttachments(
   files: File[],
   existingFiles: AttachedFile[],

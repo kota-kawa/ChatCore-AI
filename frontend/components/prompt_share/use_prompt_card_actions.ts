@@ -1,3 +1,5 @@
+// 共有プロンプトカードのいいね・メモ保存・チャット利用（Skill追加）操作を扱う hook。楽観的更新と二重送信防止を担う。呼び出し元は pages/prompt_share/index.tsx。
+// Hook for the share-feed prompt card actions (like, save as memo, use in chat / add as Skill), with optimistic updates and duplicate-submit guards. Used by pages/prompt_share/index.tsx.
 import { useCallback, useRef, useState } from "react";
 
 import { useKeyedImportActionState } from "../../hooks/use_import_action";

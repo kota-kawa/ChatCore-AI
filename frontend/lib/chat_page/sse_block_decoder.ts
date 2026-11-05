@@ -19,6 +19,8 @@ export type SseBlockDecoder = {
 
 const SSE_BLOCK_SEPARATOR = /\r?\n\r?\n/;
 
+// バイト列を TextDecoder で文字列にし、空行区切りのブロックへ切り分ける。最後の未完成部分は次回へ持ち越す。
+// Decodes bytes to text and splits it into blank-line separated blocks, carrying the unfinished tail over to the next call.
 export function createSseBlockDecoder(textDecoder: SseTextDecoder = new TextDecoder()): SseBlockDecoder {
   let buffer = "";
 

@@ -22,6 +22,8 @@ const ENTRY_POINTS_JA: ScopeItem[] = [
   }
 ];
 
+// 英語版。日本語版 ENTRY_POINTS_JA と同じ順序・同じ項目で保つ（以下の *_EN も同様）。
+// English version; keep the same order and items as ENTRY_POINTS_JA (the other *_EN arrays below follow the same rule).
 const ENTRY_POINTS_EN: ScopeItem[] = [
   {
     label: "From a chat answer",
@@ -122,6 +124,8 @@ const LIMITS_EN = [
   "Writes over MCP are capped at 20,000 characters per body and 60 writes per hour."
 ];
 
+// 対応範囲セクション。保存の入口・整理の単位・並び順と書き出し形式・共有の公開範囲・制限を、ロケールに応じた文言で並べる。
+// Scope section listing where memos come from, how they are organized, sort/export options, what sharing exposes, and limits, in the locale's wording.
 export function MemoLpScope() {
   const { locale } = useTranslation();
   const isEn = locale === "en";

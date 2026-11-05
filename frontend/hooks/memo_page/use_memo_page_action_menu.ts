@@ -1,3 +1,5 @@
+// メモカードのアクションメニュー（開閉状態と表示位置）を管理するフック。
+// Hook managing the memo card action menu (open state and position).
 import { useCallback, useEffect, useState } from "react";
 
 import type { MemoActionMenuPosition } from "../../lib/memo/types";
@@ -6,6 +8,7 @@ import { getMemoActionMenuPosition } from "../../lib/memo/utils";
 // メモカードのアクションメニュー（開いているメモ・表示位置・外側クリックで閉じる）
 // The per-memo action dropdown (which memo is open, where it renders, outside-click dismissal)
 export function useMemoPageActionMenu() {
+  // メモカードのドロップダウンメニューの状態。
   // Memo item dropdown menu
   const [openMenuMemoId, setOpenMenuMemoId] = useState<string>("");
   const [menuPosition, setMenuPosition] = useState<MemoActionMenuPosition | null>(null);

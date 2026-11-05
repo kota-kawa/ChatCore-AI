@@ -1,3 +1,5 @@
+// 新規プロンプトを作成・投稿するモーダル（タイトル・内容・任意の入出力例・AI補助）。状態と送信処理は親が持つ。pages/index.tsx から描画される。
+// Modal for creating and posting a new prompt (title, content, optional input/output examples, AI assist); state and submit live in the parent; rendered by pages/index.tsx.
 import { memo, useCallback, type FormEvent, type MutableRefObject } from "react";
 
 import type { PromptStatus } from "../../../lib/chat_page/types";

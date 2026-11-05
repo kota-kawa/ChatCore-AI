@@ -1,3 +1,5 @@
+// 管理画面のデモ用アクセスコード欄。発行フォーム、発行直後のコード表示、一覧、停止確認ダイアログを持つ。pages/admin/index.tsx から使われる。
+// Demo-access-code card of the admin console: issue form, just-issued code display, list and revoke confirmation; used by pages/admin/index.tsx.
 import { useEffect, useState, type FormEvent } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
@@ -26,6 +28,8 @@ export function DemoCodesPanel({ onUnauthorized }: { onUnauthorized: () => void 
   const [revokeTarget, setRevokeTarget] = useState<DemoAccessCodeApi | null>(null);
   const [revokeError, setRevokeError] = useState("");
 
+  // 一覧の取得が 401 で失敗したら、管理者ログインへ戻す
+  // If loading the list fails with 401, send the admin back to the login
   useEffect(() => {
     if (loadError instanceof DemoCodesUnauthorizedError) onUnauthorized();
   }, [loadError, onUnauthorized]);
@@ -84,6 +88,8 @@ export function DemoCodesPanel({ onUnauthorized }: { onUnauthorized: () => void 
     list = <DemoCodeList codes={codes} revokingId={revokingId} onRevoke={setRevokeTarget} />;
   }
 
+  // 先頭の <link rel="stylesheet"> はこのカード専用の CSS。React が precedence 付きの link を管理するため、カードを描画するときだけ読み込まれる
+  // The leading <link rel="stylesheet"> is this card's own CSS; React manages precedence-tagged links, so it loads only when the card renders
   return (
     <section className="admin-panel" aria-labelledby="demoCodesTitle">
       <link rel="stylesheet" href="/static/css/pages/admin/demo_codes.css" precedence="demo-codes" />

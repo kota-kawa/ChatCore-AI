@@ -1,3 +1,5 @@
+// AI の応答待ち中に出す「星座」アニメーション。生成フェーズ（準備・Web検索・生成）ごとに星座の形と切り替え間隔を変える。chat_message_list.tsx から使われる。
+// Constellation animation shown while waiting for the AI; shape and cadence change per generation phase (preparing, web search, generating); used by chat_message_list.tsx.
 import { useEffect, useRef, useState } from "react";
 import {
   THINKING_CONSTELLATION_BASE_HEIGHT,
@@ -221,6 +223,8 @@ export function ThinkingConstellation({ phase = "preparing" }: { phase?: ChatGen
 
   const baseNodeSize = Math.max(4, THINKING_CONSTELLATION_BASE_WIDTH * 0.03);
 
+  // リンクとノードは常に定数で決めた個数だけ描画し、現在の星座で使わない分は不可視にする。要素の増減がないので、星座が切り替わるとき CSS の遷移で形が変わる
+  // Links and nodes are always rendered up to a fixed count, hiding the ones the current constellation does not use; elements are never added or removed, so CSS transitions morph one shape into the next
   const links = Array.from({ length: THINKING_CONSTELLATION_LINK_COUNT }).map((_, index) => {
     const link = currentConstellation.links[index];
     const fromNode = link ? currentConstellation.nodes[link[0]] : undefined;

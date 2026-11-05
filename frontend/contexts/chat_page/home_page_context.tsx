@@ -1,10 +1,18 @@
+// ホーム画面（pages/index.tsx）のコントローラー（useHomePageController）の戻り値を、用途別の Context に分けて配る。必要な値が変わった部分だけが再描画されるようにする。
+// Distributes the home page controller (useHomePageController) state through purpose-specific contexts, so only the parts whose values changed re-render.
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, type Context, type ReactNode } from "react";
 
+// SSR では useEffect、ブラウザでは useLayoutEffect を使う（SSR 時の警告を避けるため）
+// useEffect on the server and useLayoutEffect in the browser (avoids the SSR warning)
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
+// コントローラー hook の戻り値の型。各 Context の値の型はここから Pick で切り出す
+// Return type of the controller hook; each context value type is a Pick over it
 type HomePageControllerState =
   ReturnType<typeof import("../../hooks/chat_page/use_home_page_controller").useHomePageController>;
 
+// セットアップ画面・モデル選択・各種モードなど、画面全体の UI 状態
+// Page-wide UI state: setup screen, model selection and mode toggles
 type HomePageUiContextValue = Pick<
   HomePageControllerState,
   | "loggedIn"
@@ -34,6 +42,8 @@ type HomePageUiContextValue = Pick<
   | "showSetupForm"
 >;
 
+// タスクカードの一覧・並べ替え・起動と、AI エージェントのモーダル
+// Task cards (list, reordering, launch) and the AI agent modal
 type HomePageTaskContextValue = Pick<
   HomePageControllerState,
   | "tasks"
@@ -62,6 +72,8 @@ type HomePageTaskContextValue = Pick<
   | "toggleAiAgentModal"
 >;
 
+// チャット画面の中央ペイン（chat_main_section.tsx）が読む UI 状態。UI 用 Context の一部だけを切り出し、無関係な変更で再描画されないようにする
+// UI state read by the chat center pane (chat_main_section.tsx); a subset of the UI context so unrelated changes do not re-render it
 type HomePageChatUiContextValue = Pick<
   HomePageUiContextValue,
   | "pageViewState"
@@ -81,6 +93,8 @@ type HomePageChatUiContextValue = Pick<
   | "setSelectedModel"
 >;
 
+// ルーム一覧・メッセージ・入力欄・送信など、チャット本体の状態と操作
+// Chat core state and actions: rooms, messages, input and sending
 type HomePageChatContextValue = Pick<
   HomePageControllerState,
   | "handleAccessChat"
@@ -129,6 +143,8 @@ type HomePageChatContextValue = Pick<
   | "applyToolApproval"
 >;
 
+// セットアップ画面から最初のメッセージを送るために必要な、チャット側の値
+// The chat-side values the setup screen needs to send the first message
 type HomePageSetupChatContextValue = Pick<
   HomePageControllerState,
   | "chatRooms"
@@ -139,6 +155,8 @@ type HomePageSetupChatContextValue = Pick<
   | "setAttachedFiles"
 >;
 
+// プロジェクトの一覧・詳細・作成・更新・削除
+// Projects: list, detail, create, update and delete
 type HomePageProjectContextValue = Pick<
   HomePageControllerState,
   | "projects"
@@ -164,6 +182,8 @@ type HomePageProjectContextValue = Pick<
 
 const HomePageUiContext = createContext<HomePageUiContextValue | null>(null);
 const HomePageChatUiContext = createContext<HomePageChatUiContextValue | null>(null);
+// チャット起動中にだけ、セットアップ時に入力された内容（setupInfo）を配る。それ以外は null
+// Carries the setup input (setupInfo) only while a chat is launching; null otherwise
 const HomePageLaunchPreviewContext = createContext<string | null>(null);
 const HomePageTaskContext = createContext<HomePageTaskContextValue | null>(null);
 const HomePageChatContext = createContext<HomePageChatContextValue | null>(null);
@@ -175,6 +195,8 @@ type HomePageContextProviderProps = {
   children: ReactNode;
 };
 
+// コントローラーの値を各 Context の値にまとめ直して配る。値ごとに useMemo で参照を保ち、依存する値が変わらない限り子を再描画させない
+// Regroup the controller's values into each context value; each is memoized so consumers do not re-render unless the values they depend on change
 export function HomePageContextProvider({ controller, children }: HomePageContextProviderProps) {
   // setupInfo に依存する操作の参照を安定させ、確定した描画の controller へ渡す。
   // 中断された描画の操作を既存 UI へ混ぜないよう、参照の更新は commit 後に行う。
@@ -186,6 +208,8 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
     [],
   );
 
+  // setupInfo に依存する handleSetupSendMessage も、ref 経由の安定した関数として配る
+  // handleSetupSendMessage, which also depends on setupInfo, is likewise exposed as a stable function through a ref
   const handleSetupSendMessageRef = useRef(controller.handleSetupSendMessage);
   useIsomorphicLayoutEffect(() => {
     handleTaskCardLaunchRef.current = controller.handleTaskCardLaunch;
@@ -291,6 +315,8 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
     ],
   );
 
+  // 起動中だけ setupInfo を渡す。購読するのは起動プレビューだけなので、セットアップ中の入力変更が非表示のチャットへ広がらない
+  // Pass setupInfo only while launching; only the launch preview subscribes, so setup edits do not spread to the hidden chat
   const launchPreviewSetupInfo = controller.isChatLaunching ? controller.setupInfo : null;
 
   const taskValue = useMemo<HomePageTaskContextValue>(
@@ -524,6 +550,8 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
   );
 }
 
+// Provider の外で使われたら、原因が分かるエラーを投げる
+// Throw a descriptive error when used outside the provider
 function useRequiredContext<T>(context: Context<T | null>, contextName: string): T {
   const value = useContext(context);
   if (!value) {
@@ -540,6 +568,8 @@ export function useHomePageChatUiContext() {
   return useRequiredContext(HomePageChatUiContext, "HomePageChatUiContext");
 }
 
+// この Context だけは null が正常値（起動中でない状態）なので、必須チェックをしない
+// Unlike the others, null is a valid value here (not launching), so no required check is applied
 export function useHomePageLaunchPreviewContext() {
   return useContext(HomePageLaunchPreviewContext);
 }

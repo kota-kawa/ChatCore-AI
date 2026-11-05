@@ -1,3 +1,5 @@
+// ホーム画面のタスク一覧の取得・並び替え保存・削除・編集保存を扱うフック。
+// Hook for the home page task list: loading, saving reorder, deleting, and saving edits.
 import { useCallback, useMemo, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 
 import {
@@ -48,7 +50,11 @@ export function useHomePageTaskActions({
 }: UseHomePageTaskActionsParams) {
   const { locale, t } = useTranslation();
   const fallbackTasks = useMemo(() => getFallbackTasks(locale), [locale]);
+  // refreshTasks の呼び出しごとに増やす世代番号。古い応答や、その間に行った削除・編集の結果を新しい一覧で上書きしないために使う。
+  // Generation counter bumped on every refreshTasks call (and on delete/edit). A stale response is discarded so it cannot overwrite newer list state.
   const refreshGenerationRef = useRef(0);
+  // キャッシュがあればそれを使い、未ログインなら取得前に既定タスクを表示しておく。通信に失敗した場合も未ログインでは既定タスクに戻す。
+  // Uses the cache when present, and shows the fallback tasks first for logged-out users. On failure, logged-out users also fall back to those tasks.
   const refreshTasks = useCallback(
     async (forceRefresh = false) => {
       const generation = ++refreshGenerationRef.current;
@@ -87,6 +93,8 @@ export function useHomePageTaskActions({
     [fallbackTasks, locale, loggedIn, setTasks, t],
   );
 
+  // 保存に失敗したら一覧をサーバーの状態へ強制再取得して、画面とのずれを残さない。
+  // If saving fails, force-reload the list from the server so the UI does not stay out of sync.
   const saveTaskOrder = useCallback(async (nextTasks: NormalizedTask[]) => {
     const order = buildTaskOrderForPersistence(nextTasks);
 
@@ -133,6 +141,8 @@ export function useHomePageTaskActions({
     [isTaskOrderEditing],
   );
 
+  // ここでは画面上の並びだけを入れ替える。サーバーへの保存は並び替えモードを閉じるとき（toggleTaskOrderEditing）に行う。
+  // This only reorders the list on screen; persisting to the server happens when reorder mode is closed (toggleTaskOrderEditing).
   const handleTaskDragEnd = useCallback((dragIndex: number, dropTargetIndex: number) => {
     draggingTaskIndexRef.current = null;
     setDraggingTaskIndex(null);

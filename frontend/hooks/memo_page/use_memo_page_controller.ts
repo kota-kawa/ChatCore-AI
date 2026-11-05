@@ -1,3 +1,5 @@
+// メモ画面の機能別フックをまとめるコントローラー。メモ画面のコンポーネントはこれ 1 つを呼ぶ。
+// Controller that assembles the memo page feature hooks; the memo page component calls just this one.
 import { useMemoPageActionMenu } from "./use_memo_page_action_menu";
 import { useMemoDetailRoute } from "./use_memo_detail_route";
 import { useMemoPageAuth } from "./use_memo_page_auth";

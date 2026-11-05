@@ -1,3 +1,5 @@
+// AIチャット紹介ページの「対応範囲」セクション。答えの形・渡せる入力・選べるモデル・制限事項を示す。pages/chat/lp.tsx から使われる。
+// "Scope" section of the AI chat landing page: answer shapes, accepted inputs, selectable models and limitations; used by pages/chat/lp.tsx.
 import { MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import { formatModelOptionLabel } from "../../lib/chat_page/model_label";
 import { useTranslation } from "../../contexts/locale_context";
@@ -79,6 +81,8 @@ const INPUTS_EN: ScopeItem[] = [
   }
 ];
 
+// 各 *_JA / *_EN の配列は同じ構成で対になっていて、locale に合う方を選んで表示する
+// Each *_JA / *_EN array pair has the same structure; the one matching the locale is rendered
 export function ChatLpScope() {
   const { locale, t } = useTranslation();
   const isEn = locale === "en";

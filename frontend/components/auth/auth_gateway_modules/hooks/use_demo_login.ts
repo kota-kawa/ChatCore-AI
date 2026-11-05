@@ -1,3 +1,5 @@
+// デモコードによるログイン処理（入力値・通信中・エラー）を管理するフック。/api/auth/demo-login を呼ぶ。
+// Hook that manages demo-code sign-in state (input, pending, error) by calling /api/auth/demo-login.
 import { useState } from "react";
 
 import { useTranslation } from "../../../../contexts/locale_context";
@@ -33,12 +35,16 @@ export function useDemoLogin(onSuccess: () => void) {
         },
         { fetchImpl: resilientFetch, defaultMessage: t("auth.demoFailed") }
       );
+      // 成功レスポンスの形が想定と違う場合はログイン成功として扱わない
+      // Do not treat the login as successful when the response shape is not what we expect
       if (!DemoLoginResponseSchema.safeParse(payload).success) {
         throw new Error(t("auth.demoFailed"));
       }
       onSuccess();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("auth.demoFailed"));
+      // 失敗時だけ pending を戻す。成功時は true のままにして、遷移が終わるまで再送信できないようにする
+      // Reset pending only on failure; on success it stays true so the form cannot be resubmitted before the navigation finishes
       setPending(false);
     }
   };

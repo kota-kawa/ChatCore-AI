@@ -25,6 +25,8 @@ export type HelpCategory = {
   items: HelpQa[];
 };
 
+// 日本語版ヘルプの全カテゴリ。pages/help.tsx が表示と FAQPage 構造化データの生成に使う。
+// All Japanese help categories; pages/help.tsx uses them for rendering and to build FAQPage structured data.
 export const HELP_CATEGORIES: HelpCategory[] = [
   {
     id: "getting-started",

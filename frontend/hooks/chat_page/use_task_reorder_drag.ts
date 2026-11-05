@@ -1,3 +1,5 @@
+// ホーム画面のタスクカードをポインター操作（マウス・ペン・タッチ）で並び替えるドラッグ制御のフック。ドラッグ中の見た目は DOM の transform を直接更新して実現する。
+// Hook controlling pointer-based (mouse, pen, touch) drag reordering of home page task cards; the drag visuals are produced by writing DOM transforms directly.
 import {
   useCallback,
   useEffect,
@@ -120,6 +122,7 @@ export function useTaskReorderDrag({
   onDragStart,
   onDragEnd,
 }: UseTaskReorderDragOptions) {
+  // カード要素（DOM）への参照。
   // DOM refs
   const taskWrapperRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -128,6 +131,7 @@ export function useTaskReorderDrag({
   const taskObjectKeyMapRef = useRef<WeakMap<object, string>>(new WeakMap());
   const taskObjectSequenceRef = useRef(0);
 
+  // ドラッグ状態を保持する ref。ポインターイベントのたびに更新するため state にはしない。
   // Drag state refs
   const activePointerIdRef = useRef<number | null>(null);
   const activePointerTypeRef = useRef<string | null>(null);
@@ -147,6 +151,7 @@ export function useTaskReorderDrag({
   const scrollContainerRef = useRef<HTMLElement | null>(null);
   const blockTouchScrollHandlerRef = useRef<((event: TouchEvent) => void) | null>(null);
 
+  // ドロップ直後のアニメーション（useLayoutEffect）用の ref。
   // Drop completion refs (for useLayoutEffect animation)
   const justDroppedDomKeyRef = useRef<string | null>(null);
   const isDropCompletingRef = useRef(false);
@@ -212,6 +217,7 @@ export function useTaskReorderDrag({
     blockTouchScrollHandlerRef.current = null;
   }, []);
 
+  // ドラッグ中でないカードに transform を当てて、ドラッグ中のカードが着地する位置を視覚的に示す。
   // Apply transforms to non-dragged items to visually show where the dragged card will land
   const applyDragTransforms = useCallback(() => {
     const dragIndex = draggingTaskIndexRef.current;
@@ -225,15 +231,18 @@ export function useTaskReorderDrag({
       const domKey = getTaskDomKey(task);
       const wrapper = taskWrapperRefs.current.get(domKey);
       if (!wrapper) return;
-      if (originalIndex === dragIndex) return; // dragged card handled separately
+      if (originalIndex === dragIndex) return; // ドラッグ中のカードは別に処理する。
+      // dragged card handled separately
 
       // ドロップ先に応じて各カードがずれるスロットを計算する
       // Determine which slot this item shifts to based on drag and drop positions
       let shiftedIndex = originalIndex;
       if (dropTarget > dragIndex && originalIndex > dragIndex && originalIndex <= dropTarget) {
-        shiftedIndex = originalIndex - 1; // shift back
+        shiftedIndex = originalIndex - 1; // 後方へずらす。
+        // shift back
       } else if (dropTarget < dragIndex && originalIndex >= dropTarget && originalIndex < dragIndex) {
-        shiftedIndex = originalIndex + 1; // shift forward
+        shiftedIndex = originalIndex + 1; // 前方へずらす。
+        // shift forward
       }
 
       if (shiftedIndex === originalIndex) {
@@ -241,6 +250,7 @@ export function useTaskReorderDrag({
         return;
       }
 
+      // ドラッグ開始時に記録した矩形を使って、移動先スロットまでの差分を求める。
       // Calculate the transform using captured start rects
       const targetTask = currentTasks[shiftedIndex];
       if (!targetTask) return;
@@ -406,6 +416,7 @@ export function useTaskReorderDrag({
             draggingTaskWrapper.releasePointerCapture(activePointerId);
           }
         } catch {
+          // 既に解放されている。
           // already released
         }
       }
@@ -415,6 +426,7 @@ export function useTaskReorderDrag({
       const wasPointerDragActive = isPointerDragActiveRef.current;
 
       if (wasPointerDragActive) {
+        // useLayoutEffectでドロップ完了のアニメーションを始める。
         // Signal useLayoutEffect to run drop-completion animation
         justDroppedDomKeyRef.current = draggingTaskDomKey;
         isDropCompletingRef.current = true;
@@ -490,6 +502,7 @@ export function useTaskReorderDrag({
 
       finishPointerDrag();
 
+      // 座標を取得する前に既存の変形を消し、再レイアウトを確定させる。
       // Clear any existing transforms and force reflow before capturing rects
       taskWrapperRefs.current.forEach((wrapper) => {
         wrapper.style.transition = "none";
@@ -497,6 +510,7 @@ export function useTaskReorderDrag({
       });
       void document.body.offsetHeight;
 
+      // 変形のない自然な配置を開始座標として取得する。
       // Capture start rects (natural positions, no transforms)
       const startRects = new Map<string, DOMRect>();
       taskWrapperRefs.current.forEach((element, domKey) => {
@@ -511,6 +525,7 @@ export function useTaskReorderDrag({
       }
       startRectsRef.current = startRects;
 
+      // ドラッグ対象以外のCSS遷移を戻す。
       // Restore CSS transition on non-dragged items
       taskWrapperRefs.current.forEach((wrapper, domKey) => {
         if (domKey !== taskDomKey) {
@@ -539,6 +554,7 @@ export function useTaskReorderDrag({
           event.currentTarget.setPointerCapture?.(event.pointerId);
         }
       } catch {
+        // ポインター捕捉がなくてもwindowのリスナーで操作を続けられるため、捕捉は任意とする。
         // capture is optional; window-level listeners keep the drag working without it
       }
 
@@ -694,6 +710,7 @@ export function useTaskReorderDrag({
     };
   }, [clearHoldTimer, stopAutoScroll, stopBlockingTouchScroll]);
 
+  // ドロップ後のアニメーションと後始末。
   // Post-drop animation and cleanup
   useLayoutEffect(() => {
     if (isDropCompletingRef.current) {
@@ -702,6 +719,7 @@ export function useTaskReorderDrag({
       justDroppedDomKeyRef.current = null;
 
       if (!isTaskOrderEditing) {
+        // 並び替えモードが終わったら、スタイルをすべてリセットするだけでよい。
         // Editing ended: just clear everything
         taskWrapperRefs.current.forEach((wrapper) => {
           wrapper.style.transition = "";
@@ -710,6 +728,7 @@ export function useTaskReorderDrag({
         return;
       }
 
+      // ドラッグされていないカードは既に正しい見た目の位置にあるので、アニメーションなしで即座にリセットする。
       // Non-dragged items are already at their correct visual positions — clear instantly
       taskWrapperRefs.current.forEach((wrapper, domKey) => {
         if (domKey === droppedDomKey) return;

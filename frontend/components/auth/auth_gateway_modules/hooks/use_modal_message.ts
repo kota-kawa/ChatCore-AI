@@ -1,3 +1,5 @@
+// 認証ゲートウェイのメッセージモーダルの表示状態と、自動クローズ・閉じるアニメーションのタイマーを管理するフック。
+// Hook that owns the auth gateway message-modal state plus the auto-close and close-animation timers.
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
 
 import { MODAL_AUTO_CLOSE_MS, MODAL_CLOSE_ANIMATION_MS } from "../constants";

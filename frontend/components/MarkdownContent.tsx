@@ -1,3 +1,5 @@
+// Markdown 文字列を、サニタイズ済みの HTML として表示する共通コンポーネント（スキル詳細・共有ページなどで使用）。
+// Shared component that renders a Markdown string as sanitized HTML (used by the skill detail modal, shared pages, etc.).
 import DOMPurify from "dompurify";
 import { useEffect, useMemo, useState } from "react";
 import { demoteMarkdownHeadings } from "../scripts/core/markdown_headings";

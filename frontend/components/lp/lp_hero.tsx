@@ -1,3 +1,5 @@
+// ランディングページ（lp.tsx）の先頭に置くヒーローセクションと、会話デモの装飾表示。
+// Hero section at the top of the landing page (lp.tsx), with a decorative conversation demo.
 import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 

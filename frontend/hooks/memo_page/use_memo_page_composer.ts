@@ -1,3 +1,5 @@
+// メモ画面の新規メモ作成フォーム（入力内容、AI タイトル提案、端末への書きかけ保存、展開状態）を扱うフック。
+// Hook for the memo page new-memo composer: form state, AI title suggestion, saving an unsaved draft on the device, and expansion state.
 import {
   useCallback,
   useEffect,
@@ -30,6 +32,7 @@ type UseMemoPageComposerParams = {
 export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashState }: UseMemoPageComposerParams) {
   const { t } = useTranslation();
 
+  // フォームの入力状態。
   // Form state
   const [formState, setFormState] = useState<MemoComposeFormState>({
     ai_response: "",
@@ -41,6 +44,7 @@ export function useMemoPageComposer({ draftOwnerId, mutate, showFlash, setFlashS
   const [submitting, setSubmitting] = useState(false);
   const [aiSuggesting, setAiSuggesting] = useState(false);
 
+  // Keep 風ボード（入力欄が展開する作りの画面）の表示状態。
   // Keep-style board state
   const [isComposeExpanded, setIsComposeExpanded] = useState(false);
   const [isComposePaletteOpen, setIsComposePaletteOpen] = useState(false);

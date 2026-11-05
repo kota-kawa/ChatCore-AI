@@ -1,6 +1,10 @@
+// 設定画面でデータ取得中に表示するスケルトン（プロフィール欄とプロンプトカード）。呼び出し元は settings_sections.tsx。
+// Skeleton placeholders shown while settings data loads (profile fields and prompt cards). Used by settings_sections.tsx.
 import { Skeleton, SkeletonText } from "../ui/skeleton";
 import { useTranslation } from "../../contexts/locale_context";
 
+// プロフィールセクションの読み込み中表示。アイコンと入力欄の並びを模す
+// Loading placeholder for the profile section, mimicking the avatar and input layout
 export function SettingsProfileSkeleton() {
   const { t } = useTranslation();
   return (
@@ -20,6 +24,8 @@ export function SettingsProfileSkeleton() {
   );
 }
 
+// プロンプトカード一覧の読み込み中表示（4枚）。タイトルの幅を交互に変えて単調に見せない
+// Loading placeholder for the prompt card list (4 cards); title widths alternate so it does not look uniform
 export function SettingsPromptCardSkeletonGrid() {
   return (
     <>

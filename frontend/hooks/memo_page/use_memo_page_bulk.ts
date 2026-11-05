@@ -1,3 +1,5 @@
+// メモ一覧の一括選択モードと一括操作（削除・復元・アーカイブ・ピン・コレクション設定、取り消し付き）を扱うフック。
+// Hook for the memo list bulk selection mode and bulk actions (delete, restore, archive, pin, set collection) with undo.
 import { useCallback, useEffect, useState } from "react";
 import type { KeyedMutator } from "swr";
 
@@ -34,13 +36,15 @@ const UNDO_ACTIONS: Partial<Record<BulkAction, BulkAction>> = { delete: "restore
 export function useMemoPageBulk({ memos, collections, mutate, updateMemoListOptimistically, showFlash }: UseMemoPageBulkParams) {
   const { t } = useTranslation();
 
+  // 一括選択の状態。
   // Bulk selection
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkCollectionId, setBulkCollectionId] = useState<number | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
 
-  // Exit bulk mode when memos change drastically
+  // 一覧から消えたメモの選択を外す（選択モード自体は終了しない）。
+  // Drop selected ids that no longer exist in the memo list (bulk mode itself stays on).
   useEffect(() => {
     if (!isBulkMode) return;
     setSelectedIds((prev) => {
@@ -81,6 +85,8 @@ export function useMemoPageBulk({ memos, collections, mutate, updateMemoListOpti
     return t("memo.bulkActionSuccess", { count, action: labels[action] });
   }, [t]);
 
+  // 一括操作の実行。先に一覧を楽観的に更新してから API を呼び、成功したら再取得する。失敗時もサーバーの状態に合わせて再取得して戻す。取り消し操作自身（isUndo）には、さらに取り消しを付けない。
+  // Runs a bulk action: updates the list optimistically, calls the API, then revalidates. A failure also revalidates to snap back to server state. An undo run itself never offers another undo.
   const executeBulk = useCallback(async (
     action: BulkAction,
     selectedIdList: string[],

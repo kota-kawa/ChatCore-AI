@@ -1,3 +1,6 @@
+// 公開プロンプトとSkillの投稿フォームをモーダルで提供する。
+// Provides modal forms for publishing prompts and Skills.
+
 import {
   useCallback,
   useEffect,

@@ -1,9 +1,12 @@
+// メモ本文のエディタ用の整形ツールバー（チェックリスト・箇条書き・番号・見出し・インデント）と、スマホで開閉する切り替えボタン。MemoComposer と MemoDetailModal から使われる。
+// Formatting toolbar for the memo body editor (task, bullet, number, heading, indent) and the toggle that opens it on phones; used by MemoComposer and MemoDetailModal.
 import type { MouseEvent, RefObject } from "react";
 import type { MemoEditorHandle, MemoFormat } from "../../lib/memo/editor";
 
 import { useTranslation } from "../../contexts/locale_context";
 import type { MessageKey } from "../../lib/i18n/catalogs/ja";
 
+// ── メモ本文の整形ツールバー ──
 // ── Memo body formatting toolbar ──
 // 記号を手で打たずに、選択した段落へリストや見出しを付け外しする（原文では行単位）。
 // 押してもキーボードが閉じないよう、ボタンはフォーカスを奪わない。
@@ -24,8 +27,12 @@ const FORMAT_ACTIONS: FormatAction[] = [
   { labelKey: "memo.format.indent", icon: "bi-text-indent-left", format: "indent" },
 ];
 
+// ボタンの mousedown を止め、エディタからフォーカスが外れないようにする。
+// Stops the button's mousedown so the editor keeps focus.
 const keepEditorFocus = (event: MouseEvent) => event.preventDefault();
 
+// スマホで整形ツールバーを開閉するボタン。
+// Button that opens and closes the formatting toolbar on phones.
 export function MemoFormatToggle({ open, onToggle, toolbarId, className = "" }: {
   open: boolean;
   onToggle: () => void;
@@ -47,6 +54,8 @@ export function MemoFormatToggle({ open, onToggle, toolbarId, className = "" }: 
   );
 }
 
+// 整形ボタンの並び。押した操作は editorRef 経由でエディタの format に渡す。
+// Row of format buttons; each press is passed to the editor's format through editorRef.
 export function MemoFormatToolbar({ editorRef, id, hidden = false }: {
   editorRef: RefObject<MemoEditorHandle | null>;
   id?: string;

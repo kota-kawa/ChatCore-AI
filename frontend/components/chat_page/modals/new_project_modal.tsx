@@ -1,3 +1,5 @@
+// 新規プロジェクト作成モーダル（名前と任意のカスタム指示）。pages/index.tsx から描画され、保存は home_page_context の createProject が行う。
+// New-project modal (name and optional custom instructions); rendered by pages/index.tsx, with saving done by createProject from home_page_context.
 import { memo, useCallback, useEffect, useState } from "react";
 
 import { useHomePageProjectContext } from "../../../contexts/chat_page/home_page_context";
@@ -22,6 +24,8 @@ function NewProjectModalComponent() {
     closeNewProjectModal,
   } = useHomePageProjectContext();
 
+  // 日本語入力の変換確定の Enter を送信と取り違えないためのガード（名前欄の Enter 送信で使う）
+  // Guard so the Enter that confirms an IME composition is not mistaken for submit (used by the name field's Enter handling)
   const { compositionHandlers: nameCompositionHandlers, isComposingKeyEvent } = useImeSubmitGuard<HTMLInputElement>();
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");

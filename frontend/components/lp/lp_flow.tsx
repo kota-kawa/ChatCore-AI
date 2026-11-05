@@ -14,6 +14,8 @@ const LP_FLOW_STEPS = [
     description: "良い回答はメモへ保存、良い聞き方はプロンプトとして共有します。"
   }
 ] as const;
+// 英語版のステップ。日本語版 LP_FLOW_STEPS と同じ順序で保つ。
+// English steps; keep the same order as the Japanese LP_FLOW_STEPS.
 const LP_FLOW_STEPS_EN = [
   { title: "Create your account", description: "Sign up with an email address in a few minutes. It’s free." },
   { title: "Talk to AI", description: "Describe what you want to research, write, or organize in your own words." },
