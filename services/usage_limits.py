@@ -1,4 +1,6 @@
-"""Per-user daily/weekly cost limits, the demo account allowance and the system-wide monthly budget.
+"""利用者ごとの日次・週次の料金上限、デモアカウントの利用枠、システム全体の月予算を判定する。
+
+Per-user daily/weekly cost limits, the demo account allowance and the system-wide monthly budget.
 
 `services.usage_metering` が記録した料金を読み、AI 機能を始める前に判定します。
 判定は処理の開始時だけ行うため、実行中のターンは上限を少し超えて終わることがあります。
@@ -33,7 +35,10 @@ LimitReason = Literal["daily", "weekly", "monthly_budget", "demo"]
 
 @dataclass(frozen=True, slots=True)
 class UsageLimitSettings:
-    """Configured limits in nano-dollars; ``0`` means the limit is disabled."""
+    """設定された上限（ナノドル）。``0`` はその上限を無効にする。
+
+    Configured limits in nano-dollars; ``0`` means the limit is disabled.
+    """
 
     user_daily: int
     user_weekly: int
@@ -47,13 +52,18 @@ def nano_usd_to_usd(amount: int) -> float:
     return amount / _NANO_USD_PER_USD
 
 
+# 日本語: 環境変数のドル額（0 以上）をナノドルの整数にして返す。
+# English: Read a dollar amount (0 or more) from the environment and return it as integer nano-dollars.
 def _usd_env(name: str, default: float) -> int:
     amount = env_float(name, default, minimum=0.0, minimum_inclusive=True, warn_on_invalid=True)
     return round(amount * _NANO_USD_PER_USD)
 
 
 def load_usage_limit_settings() -> UsageLimitSettings:
-    """Read the limits from the environment on every call so changes need no reload."""
+    """環境変数から上限を読む。毎回読み直すので、変更しても再起動やリロードが要らない。
+
+    Read the limits from the environment on every call so changes need no reload.
+    """
 
     ratio = min(env_float("USAGE_MONTHLY_STOP_RATIO", 0.9, warn_on_invalid=True), 1.0)
     return UsageLimitSettings(
@@ -68,7 +78,10 @@ def load_usage_limit_settings() -> UsageLimitSettings:
 
 @dataclass(frozen=True, slots=True)
 class DemoUsageTotals:
-    """A demo account's end and its cost since it was created, in nano-dollars."""
+    """デモアカウントの終了日時と、作成以降に使った料金（ナノドル）。
+
+    A demo account's end and its cost since it was created, in nano-dollars.
+    """
 
     expires_at: datetime
     lifetime_nano_usd: int
@@ -76,7 +89,10 @@ class DemoUsageTotals:
 
 @dataclass(frozen=True, slots=True)
 class UsageTotals:
-    """Costs in nano-dollars that the limits are compared against."""
+    """上限と比べる料金（ナノドル）の集計。
+
+    Costs in nano-dollars that the limits are compared against.
+    """
 
     subject: SubjectUsageTotals
     monthly_total_nano_usd: int
@@ -86,7 +102,10 @@ class UsageTotals:
 
 @dataclass(frozen=True, slots=True)
 class UsagePeriods:
-    """The Japan-time calendar windows that contain one moment."""
+    """ある時刻を含む、日本時間の暦上の日・週・月の区間。``next_*`` は各区間が切り替わる時刻（次回の利用再開時刻）。
+
+    The Japan-time calendar windows that contain one moment.
+    """
 
     day: date
     week_start: date
@@ -97,7 +116,10 @@ class UsagePeriods:
 
 
 def usage_periods(now: datetime | None = None) -> UsagePeriods:
-    """Return the day, the Monday-start week and the month containing ``now`` (Japan time)."""
+    """``now`` を含む日、月曜始まりの週、月を日本時間で返す。
+
+    Return the day, the Monday-start week and the month containing ``now`` (Japan time).
+    """
 
     local_now = (now or datetime.now(UTC)).astimezone(USAGE_TIMEZONE)
     day = local_now.date()
@@ -120,9 +142,14 @@ def usage_periods(now: datetime | None = None) -> UsagePeriods:
     )
 
 
+# 日本語: 計上先と期間から集計を読む関数の型。テストで差し替えられるよう、下の set_usage_totals_reader で入れ替える。
+# English: Type of the function that reads totals for a subject and period; swapped through set_usage_totals_reader below, e.g. in tests.
 UsageTotalsReader = Callable[[str, UsagePeriods], Awaitable[UsageTotals]]
 
 
+# 日本語: DB から集計を読む既定の実装。個人の日次・週次、月の全体合計、デモ用アカウントなら全期間の合計も読む。
+# English: Default reader backed by the database: personal daily/weekly totals, the monthly system total
+# and, for a demo account, its lifetime total.
 async def _read_usage_totals(subject_key: str, periods: UsagePeriods) -> UsageTotals:
     from services.db import session_scope
     from services.repositories.demo_access_repository import DemoAccessRepository
@@ -150,7 +177,10 @@ _usage_totals_reader: UsageTotalsReader = _read_usage_totals
 
 
 def set_usage_totals_reader(reader: UsageTotalsReader | None) -> None:
-    """Replace where totals are read from; ``None`` restores the database reader."""
+    """集計の読み取り元を差し替える。``None`` で DB 読み取りに戻す。
+
+    Replace where totals are read from; ``None`` restores the database reader.
+    """
 
     global _usage_totals_reader
     _usage_totals_reader = reader or _read_usage_totals
@@ -158,7 +188,10 @@ def set_usage_totals_reader(reader: UsageTotalsReader | None) -> None:
 
 @dataclass(frozen=True, slots=True)
 class UsageWindow:
-    """One personal limit window."""
+    """個人の上限 1 区間（日または週）の使用量・上限・リセット時刻。
+
+    One personal limit window.
+    """
 
     used_nano_usd: int
     limit_nano_usd: int
@@ -171,7 +204,10 @@ class UsageWindow:
 
 @dataclass(frozen=True, slots=True)
 class DemoAllowance:
-    """A demo account's allowance for its whole period; it never resets, the account just ends."""
+    """デモアカウントの期間全体の利用枠。リセットはされず、枠を使い切るか期限が来るとアカウントが終わる。
+
+    A demo account's allowance for its whole period; it never resets, the account just ends.
+    """
 
     used_nano_usd: int
     limit_nano_usd: int
@@ -185,7 +221,10 @@ class DemoAllowance:
 
 @dataclass(frozen=True, slots=True)
 class UsageStatus:
-    """Where one subject stands against its limits and the monthly budget."""
+    """1 つの計上先が、自分の上限と月予算に対してどの位置にいるか。``daily`` / ``weekly`` が None なのは個人上限の無い system。
+
+    Where one subject stands against its limits and the monthly budget.
+    """
 
     daily: UsageWindow | None
     weekly: UsageWindow | None
@@ -196,13 +235,18 @@ class UsageStatus:
 
 @dataclass(frozen=True, slots=True)
 class UsageLimitBlock:
-    """Why a new AI request is refused and when it may be retried."""
+    """新しい AI リクエストを断る理由と、再試行できる時刻・待ち秒数。
+
+    Why a new AI request is refused and when it may be retried.
+    """
 
     reason: LimitReason
     resets_at: datetime
     retry_after_seconds: int
 
 
+# 日本語: 計上先の種類に応じた (日次, 週次) の個人上限を返す。system には個人上限が無いので None。
+# English: Return the (daily, weekly) personal limits for the subject's kind; None for the system subject, which has none.
 def _personal_limits(subject_key: str, settings: UsageLimitSettings) -> tuple[int, int] | None:
     if subject_key == SYSTEM_USAGE_SUBJECT:
         return None
@@ -216,7 +260,10 @@ async def get_usage_status(
     *,
     now: datetime | None = None,
 ) -> UsageStatus:
-    """Return the current subject's standing against its limits."""
+    """計上先（省略時は現在のリクエストの計上先）の、上限に対する現在の状況を返す。
+
+    Return the current subject's standing against its limits.
+    """
 
     subject_key = subject_key or current_usage_subject()
     settings = load_usage_limit_settings()
@@ -242,6 +289,8 @@ async def get_usage_status(
     )
 
 
+# 日本語: 制限の理由とリセット時刻から、再試行までの秒数（最低 1 秒）を計算して返す。
+# English: Build a block with the seconds until reset, at least 1.
 def _block(reason: LimitReason, resets_at: datetime, now: datetime) -> UsageLimitBlock:
     seconds = int((resets_at - now).total_seconds())
     return UsageLimitBlock(reason=reason, resets_at=resets_at, retry_after_seconds=max(seconds, 1))
@@ -252,7 +301,10 @@ async def check_usage_limit(
     *,
     now: datetime | None = None,
 ) -> UsageLimitBlock | None:
-    """Return why a new AI request must be refused, or ``None`` when it may start."""
+    """新しい AI リクエストを断るべき理由を返す。開始してよければ ``None``。
+
+    Return why a new AI request must be refused, or ``None`` when it may start.
+    """
 
     moment = now or datetime.now(UTC)
     status = await get_usage_status(subject_key, now=moment)
@@ -275,5 +327,7 @@ async def check_usage_limit(
     return None
 
 
+# 日本語: 制限の理由に対応する、利用者向けの翻訳済みメッセージを返す。
+# English: Return the translated user-facing message for the limit reason.
 def usage_limit_message(block: UsageLimitBlock, locale: str | None = None) -> str:
     return translate(f"usage_limit.{block.reason}", locale)

@@ -130,6 +130,8 @@ MEDIA_TYPES: dict[str, MediaType] = {
 
 # 旧 prompt_type からのエイリアス吸収用 (正規化に使用)
 # Aliases for resolving a legacy/loosely-typed value to a canonical key.
+# 日本語: "image" は生成対象(メディア軸)を表す値なので、フォーマット軸では通常の prompt として扱う。
+# English: "image" names a media type, so on the format axis it resolves to a plain prompt.
 _CONTENT_FORMAT_ALIASES: dict[str, str] = {
     "skill": CONTENT_FORMAT_SKILL,
     "skill_prompt": CONTENT_FORMAT_SKILL,
@@ -157,6 +159,9 @@ _LEGACY_PROMPT_TYPE_MAP: dict[str, tuple[str, str]] = {
 }
 
 
+# 日本語: 以下の normalize_* は DB 値・API 入力・旧値のどれが来ても正準キーへ寄せ、未知の値でも例外にせず既定値へ落とす。
+# English: The normalize_* helpers map DB values, API input and legacy values to canonical keys and fall back
+# to defaults instead of raising.
 def normalize_content_format(value: object) -> str:
     """フォーマット軸の値を正規化する。未知の値は既定値へフォールバック。"""
     normalized = str(value or "").strip().lower()
@@ -176,6 +181,8 @@ def normalize_media_type(value: object) -> str:
 def legacy_prompt_type_to_axes(value: object) -> tuple[str, str]:
     """旧 prompt_type 文字列を (content_format, media_type) に変換する。"""
     normalized = str(value or "").strip().lower()
+    # 日本語: 旧値は 2 軸の組を一意に決められるので、個別の正規化より先にこの対応表を引く。
+    # English: A legacy value fixes both axes at once, so this table is consulted before normalizing each axis separately.
     if normalized in _LEGACY_PROMPT_TYPE_MAP:
         return _LEGACY_PROMPT_TYPE_MAP[normalized]
     return (normalize_content_format(value), normalize_media_type(value))
@@ -247,6 +254,8 @@ def reference_attachment_url(attachments: object) -> str | None:
     """attachments 配列から代表的な参照URL (role=reference) を取り出す。"""
     if not isinstance(attachments, list):
         return None
+    # 日本語: 最初に見つかった reference 添付を代表として返す。URL は公開用の形へ正規化し、変換できなければ元の値を使う。
+    # English: Returns the first reference attachment; its URL is normalized to the public form, falling back to the raw value.
     for att in attachments:
         if isinstance(att, dict) and att.get("role") == ATTACHMENT_ROLE_REFERENCE and att.get("url"):
             raw_url = str(att["url"])

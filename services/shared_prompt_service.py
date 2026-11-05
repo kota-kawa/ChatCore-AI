@@ -1,4 +1,7 @@
-"""Use cases for creating public shared prompts."""
+"""公開プロンプトを新規作成するユースケース。
+
+Use cases for creating public shared prompts.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +24,12 @@ async def create_shared_prompt(
     repository: SharedContentRepository | None = None,
     session: AsyncSession | None = None,
 ) -> int:
-    """Persist a validated public prompt in one transaction, then embed it off-request.
+    """検証済みの公開プロンプトを 1 トランザクションで保存し、リクエスト外で埋め込みを作る。
+
+    呼び出し側が session を渡した場合、埋め込みの予約はその呼び出し側のコミット前に行われる。
+    ワーカーが先に動くと行が見つからず、プロンプトは ``pending`` のまま残り、後続のバックフィルが拾う。
+
+    Persist a validated public prompt in one transaction, then embed it off-request.
 
     With a caller-supplied session the embedding is scheduled before that caller commits;
     if the worker runs first it finds no row, the prompt stays ``pending``, and the
@@ -30,7 +38,8 @@ async def create_shared_prompt(
     prompt_repository = repository or SharedContentRepository()
     resources = resource_repository or PromptResourceRepository()
     persisted_attributes = dict(payload.attributes or {})
-    # Legacy input is normalized into resources by the request model and is not
+    # 日本語: 旧形式の入力はリクエストモデルが resources に正規化済みなので、新しい投稿の attributes JSON には重複して残さない。
+    # English: Legacy input is normalized into resources by the request model and is not
     # duplicated into the attributes JSON of a new post.
     persisted_attributes.pop(SKILL_PYTHON_SCRIPT_KEY, None)
 

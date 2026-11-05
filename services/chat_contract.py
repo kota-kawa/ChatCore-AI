@@ -1,3 +1,8 @@
+"""フロントエンドと共有する chat_contract.json を読み込み、履歴ページ件数や API の大文字小文字規約などの定数にする。
+
+Loads the chat_contract.json shared with the frontend and exposes its values (history page sizes, API casing rules) as constants.
+"""
+
 from __future__ import annotations
 
 import json

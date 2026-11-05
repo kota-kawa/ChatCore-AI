@@ -1,3 +1,4 @@
+# 保存メモと個人コンテキストを回答根拠として検索する。対象は呼び出し元が指定した1利用者に限定する。
 """Owner-scoped memo and personal-context retrieval used during chat answer generation.
 
 The chat agent can call this while composing an answer, so the user's saved memos and
@@ -41,6 +42,7 @@ OVERVIEW_DIGEST_MAX_CHARS = 4_000
 
 @dataclass(frozen=True)
 class PersonalKnowledgeResult:
+    # 1クエリのメモと事実の検索結果を、プロンプト予算に収めたもの。
     """Memo and context-fact hits for one query, already trimmed for the prompt."""
 
     query: str
@@ -172,6 +174,7 @@ async def build_personal_overview(
     *,
     memo_limit: int = OVERVIEW_MEMO_LIMIT,
 ) -> dict[str, Any]:
+    # クエリとの照合をせず、保存済み情報の概況を返す。
     """Summarise what the user has saved, without matching anything against a query."""
     memos: list[dict[str, Any]] = []
     facts: list[dict[str, Any]] = []

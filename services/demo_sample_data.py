@@ -20,6 +20,8 @@ from services.repositories.memo_repository import insert_memo
 from services.repositories.project_repository import ProjectRepository
 from services.repositories.user_skill_repository import UserSkillRepository
 
+# 日本語: 以下はデモ用に入れるサンプルの内容（プロジェクト、チャット、メモ、コンテキスト、Skill）。
+# English: The sample content seeded for the demo user (project, chats, memos, context facts and a Skill).
 _PROJECT_NAME = "ポートフォリオサイトの公開"
 _PROJECT_INSTRUCTIONS = (
     "個人のポートフォリオサイトを来月公開する準備をしています。"
@@ -106,6 +108,8 @@ _SKILL_INSTRUCTIONS = (
 )
 
 
+# 日本語: チャットルームを 1 つ作り、メッセージを先頭から順に親子でつなげて保存して、ルーム ID を返す。
+# English: Create one chat room, save its messages in order chained as parent and child, and return the room id.
 async def _seed_room(
     chats: ChatRepository,
     user_id: int,
@@ -120,6 +124,8 @@ async def _seed_room(
     return room_id
 
 
+# 日本語: デモ用ユーザーにサンプルを入れる。呼び出し側のセッションを使い、コミットは呼び出し側に任せる。
+# English: Seed the demo user with sample data. Uses the caller's session; committing is left to the caller.
 async def seed_demo_sample_data(user_id: int, *, session: AsyncSession) -> None:
     project = await ProjectRepository(session).create_project(user_id, _PROJECT_NAME, _PROJECT_INSTRUCTIONS)
     chats = ChatRepository(session)

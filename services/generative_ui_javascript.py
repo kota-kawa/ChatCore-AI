@@ -38,7 +38,11 @@ _REGEX_LOOKBEHIND_CHARS = 24
 
 
 def _is_regex_start(code: str, index: int) -> bool:
-    """Decide whether the `/` at ``index`` opens a regular-expression literal."""
+    """``index`` の位置の `/` が正規表現リテラルの開始かを判定する。直前のトークンが演算子・開き括弧・特定のキーワードなら正規表現、
+    識別子や数値などなら除算とみなす。
+
+    Decide whether the `/` at ``index`` opens a regular-expression literal.
+    """
     cursor = index - 1
     while cursor >= 0 and code[cursor] in " \t":
         cursor -= 1
@@ -56,7 +60,10 @@ def _is_regex_start(code: str, index: int) -> bool:
 
 
 def scan_javascript(source: str) -> tuple[str, str | None, list[int]]:
-    """Return the blanked-out code, the first structural error, and the code-position indices.
+    """文字列・コメント・正規表現・テンプレートリテラルの本文を置き換えた「コードだけ」の文字列と、最初の構造エラー、
+    コードとして残した文字の元の位置（インデックス）を返す。括弧の対応もここで調べる。
+
+    Return the blanked-out code, the first structural error, and the code-position indices.
 
     Strings, comments, regular expressions, and the literal text of template literals are
     replaced by placeholders so the caller can pattern-match code structure without matching
@@ -187,13 +194,20 @@ def scan_javascript(source: str) -> tuple[str, str | None, list[int]]:
 
 
 def strip_javascript_noise(source: str) -> tuple[str, str | None]:
-    """Return the code with literals blanked out, plus the first structural error."""
+    """リテラルを置き換えたコードと、最初の構造エラーを返す。scan_javascript の位置情報を省いた版。
+
+    Return the code with literals blanked out, plus the first structural error.
+    """
     code, error, _ = scan_javascript(source)
     return code, error
 
 
 def javascript_structure_error(source: str) -> str | None:
-    """Return the first structural JavaScript problem, or ``None`` when plausible."""
+    """最初に見つかった JavaScript の構造上の問題を返す。問題なさそうなら ``None``。
+    括弧の不一致や未終端の文字列のほか、名前のない宣言・値のない代入・コード位置のバックスラッシュを検出する。
+
+    Return the first structural JavaScript problem, or ``None`` when plausible.
+    """
     if not isinstance(source, str) or not source.strip():
         return None
     code, bracket_error = strip_javascript_noise(source)
@@ -213,7 +227,9 @@ def javascript_structure_error(source: str) -> str | None:
 
 
 def unsupported_library_references(js: str, names: Iterable[str]) -> list[str]:
-    """Return the dropped library names that the JavaScript still calls into.
+    """取り除かれた未対応ライブラリのうち、JavaScript がまだ参照しているものの名前を返す。
+
+    Return the dropped library names that the JavaScript still calls into.
 
     未対応ライブラリの宣言を黙って削除しても、それを参照するコードが残っていれば
     サンドボックスでは必ず失敗する。参照が残っている場合だけ名前を返す。
@@ -242,11 +258,14 @@ def unsupported_library_references(js: str, names: Iterable[str]) -> list[str]:
 # token, stops on the first line, and leaves a blank frame. Only code-position characters are
 # mapped to their ASCII equivalents; strings, comments, and template text are left untouched.
 _CODE_HOMOGLYPHS = {
+    # 数学のマイナス記号
     "−": "-",  # minus sign
     "‐": "-",
     "‑": "-",
     "‒": "-",
+    # en ダッシュ
     "–": "-",  # en dash
+    # em ダッシュ
     "—": "-",  # em dash
     "―": "-",
     "（": "(",
@@ -279,7 +298,10 @@ _CODE_HOMOGLYPHS = {
 
 
 def repair_code_homoglyphs(source: str) -> str:
-    """Replace code-position lookalike characters with the ASCII they stand for."""
+    """コード位置にある、ASCII に似た全角記号などを、対応する ASCII に置き換える。
+
+    Replace code-position lookalike characters with the ASCII they stand for.
+    """
     if not isinstance(source, str) or not source:
         return source
     if not any(character in source for character in _CODE_HOMOGLYPHS):

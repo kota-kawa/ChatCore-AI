@@ -1,3 +1,11 @@
+"""LLM・認証メール・AIエージェント・Brave 検索の利用回数に日次/月次の上限をかけるクォータ管理。
+
+Redis があれば Lua スクリプトで原子的にカウントし、無ければプロセス内メモリで数える。
+チャット生成やメール送信、Web 検索の各経路から消費関数が呼ばれる。
+Daily and monthly quota control for LLM, auth email, AI agent and Brave search usage.
+Counts atomically in Redis through a Lua script, falling back to in-process memory without Redis.
+"""
+
 import hashlib
 import logging
 import os
@@ -79,6 +87,7 @@ def _seconds_until_next_month() -> int:
 def _build_quota_key(key_prefix: str, period: str, user_key: str | None) -> str:
     if not user_key:
         return f"{key_prefix}:{period}"
+    # ユーザー識別子を Redis のキーに生のまま残さず、入力によらずキー長を一定にするためハッシュ化する。
     # Hash to avoid leaking user identifiers into Redis keys and to
     # keep key length bounded regardless of input.
     hashed = hashlib.sha256(user_key.encode("utf-8", errors="replace")).hexdigest()
@@ -218,6 +227,7 @@ return {1, current}
     ) -> tuple[bool, int, int]:
         # 1日単位キーを作って Redis 優先で消費し、失敗時のみメモリ実装へ切り替えます。
         # Consume quota using a day-scoped key, preferring Redis and falling back to memory.
+        # user_key を渡すとユーザー/セッション単位のクォータになり、1人が全体の日次枠を使い切って他の人を巻き込むのを防ぐ。
         # When user_key is provided the quota is scoped per user/session so one
         # caller cannot burn the global daily budget for everyone else.
         daily_limit = _get_limit(env_name, default_limit)
@@ -260,6 +270,7 @@ return {1, current}
     ) -> tuple[bool, int, int]:
         # 月単位キーを作って Redis 優先で消費し、失敗時のみメモリ実装へ切り替えます。
         # Consume quota using a month-scoped key, preferring Redis and falling back to memory.
+        # user_key を渡すとユーザー/セッション単位のクォータになり、1人が全体の月次枠を使い切って他の人を巻き込むのを防ぐ。
         # When user_key is provided the quota is scoped per user/session so one
         # caller cannot burn the global monthly budget for everyone else.
         monthly_limit = _get_limit(env_name, default_limit)
@@ -298,6 +309,7 @@ return {1, current}
         user_key: str | None = None,
     ) -> tuple[bool, int, int]:
         # チャット応答 API 用の日次上限を 1 回分消費します。
+        # アカウントごとの user_key で枠を分け、1アカウントが全体の日次枠を使い切って他の人が使えなくなるのを防ぐ。
         # Consume one unit from the daily quota for chat API usage. The quota
         # is scoped per user_key so a single account can't deny service to
         # everyone else by burning the global daily budget.
@@ -333,6 +345,7 @@ return {1, current}
         user_key: str | None = None,
     ) -> tuple[bool, int, int]:
         # サポートAIエージェント用の月次上限を 1 回分消費します。
+        # user_key で枠を分け、1アカウントやゲストセッションが全体の月次枠を使い切って他の人が使えなくなるのを防ぐ。
         # Consume one unit from the monthly quota for support AI agent usage. The
         # quota is scoped per user_key so a single account or guest session can't
         # deny service to everyone else by burning the global monthly budget.

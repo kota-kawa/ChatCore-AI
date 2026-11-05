@@ -22,7 +22,10 @@ WORKSPACE_TOOL_RESULT_MAX_ITEMS = 16
 
 @dataclass
 class ChatGenerationTelemetry:
-    """Mutable per-turn counters rendered into one structured log record."""
+    """1ターン分の可変カウンタ。最終的に1件の構造化ログ（as_log_extra）として出力する。
+
+    Mutable per-turn counters rendered into one structured log record.
+    """
 
     model: str = ""
     # 会話モデルの推論ターン数と、実際に実行したツール数を別々に数える。
@@ -56,6 +59,7 @@ class ChatGenerationTelemetry:
     # 推論の下書きが `</think>` ごと本文へ漏れたため、回答の前から取り除いた回数。
     # How often a reasoning draft that leaked ahead of the answer with `</think>` was removed.
     reasoning_leak_strips: int = 0
+    # コンテキスト準備のカウンタ。サイズと回数だけを持ち、プロンプトの本文は持たない。
     # Context preparation counters. They contain sizes and counts only, never prompt bodies.
     context_projection_count: int = 0
     context_compaction_count: int = 0
@@ -139,13 +143,20 @@ class ChatGenerationTelemetry:
 
     @property
     def agent_steps(self) -> int:
-        """Total displayed steps: model turns plus executed tool calls."""
+        """画面に出すステップの合計。モデル判断の回数に、実行したツール呼び出しを足したもの。
+
+        Total displayed steps: model turns plus executed tool calls.
+        """
         return self.llm_turns + self.tool_calls
 
+    # 最初の本文を出した時刻だけを記録する（2回目以降は上書きしない）。started_at はジョブ開始時の monotonic 時刻
+    # Record only the first time body text became visible (later calls do not overwrite); started_at is the job's monotonic start time
     def record_first_visible_text(self, started_at: float) -> None:
         if self.first_visible_text_ms is None:
             self.first_visible_text_ms = max(round((time.monotonic() - started_at) * 1000), 0)
 
+    # 継続の理由を、上限件数まで・64文字までに切り詰めて記録する
+    # Record a continuation reason, capped in count and truncated to 64 characters
     def record_continuation_reason(self, reason: str) -> None:
         normalized = str(reason or "").strip()[:64]
         if not normalized:
@@ -154,6 +165,8 @@ class ChatGenerationTelemetry:
             return
         self.continuation_reasons.append(normalized)
 
+    # ツール呼び出しの拒否1件の診断を上限件数まで記録する。本文や引数は持たない
+    # Record one tool-call rejection diagnosis up to the item cap; no bodies or arguments are kept
     def record_tool_schema_rejection(self, *, reason: str, tool_name: str, offered_tool_names: list[str]) -> None:
         if len(self.tool_schema_rejections) >= TOOL_SCHEMA_REJECTION_MAX_ITEMS:
             return
@@ -166,11 +179,15 @@ class ChatGenerationTelemetry:
             }
         )
 
+    # 「ツール名:結果の status」を呼んだ順に、上限件数まで記録する
+    # Record "tool:status" in call order up to the item cap
     def record_workspace_tool_result(self, tool_name: str, status: Any) -> None:
         if len(self.workspace_tool_results) >= WORKSPACE_TOOL_RESULT_MAX_ITEMS:
             return
         self.workspace_tool_results.append(f"{str(tool_name)[:64]}:{str(status or 'unknown')[:32]}")
 
+    # 根拠ペイロードが空だった回数と、予算で切り詰められた回数を数える（空なら切り詰めは数えない）
+    # Count evidence payloads that were empty or truncated by the budget (an empty one is not also counted as truncated)
     def record_evidence_payload(self, *, empty: bool, truncated: bool) -> None:
         if empty:
             self.empty_evidence_payloads += 1
@@ -184,7 +201,10 @@ class ChatGenerationTelemetry:
         reason_codes: list[str],
         repair_attempted: bool,
     ) -> None:
-        """Record the outcome of one generated-UI turn from its normalized response."""
+        """正規化済みの応答から、生成 UI 1ターン分の結果を記録する。
+
+        Record the outcome of one generated-UI turn from its normalized response.
+        """
         self.artifact_status = status
         self.artifact_reason_codes = list(reason_codes)[:ARTIFACT_REASON_CODE_MAX_ITEMS]
         self.artifact_repair_attempted = repair_attempted
@@ -194,7 +214,10 @@ class ChatGenerationTelemetry:
         )
 
     def as_log_extra(self) -> dict[str, Any]:
-        """Render the counters as one flat structured-log payload."""
+        """カウンタを、平らな構造化ログ用の辞書として返す。
+
+        Render the counters as one flat structured-log payload.
+        """
         return {
             "model": self.model,
             "agent_steps": self.agent_steps,

@@ -156,6 +156,7 @@ def _bounded_payload(
         return payload
 
     payload = make_payload()
+    # JSON全体を読み取り予算に収める。文脈、自己紹介の順に削り、続きの取得用offsetを残す。
     # Keep the whole JSON result within the agent read budget. The profile context is trimmed
     # first, then bio; both retain explicit offsets so a later call can continue without gaps.
     for text_key in ("llm_profile_context", "bio"):

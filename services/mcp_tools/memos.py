@@ -1,4 +1,11 @@
-"""MCP tools for owner-scoped private memo access and safe edits."""
+"""所有者限定の非公開メモを読み取り、競合検出つきで安全に編集する MCP ツール（一覧・検索・取得・作成・更新・追記）。
+
+実際のメモ操作は `services/mcp_memo_service.py` に委ね、ここでは scope の検査、回数制限、監査ログ、エラー変換を行う。
+`mcp_server.py` が `register_memo_tools` で登録する。
+MCP tools for owner-scoped private memo access and safe edits (list, search, get, create, update, append).
+The memo operations themselves are delegated to `services/mcp_memo_service.py`; this module adds scope checks,
+rate limits, audit logging and error conversion. `mcp_server.py` registers them via `register_memo_tools`.
+"""
 
 from __future__ import annotations
 
@@ -34,6 +41,8 @@ from services.request_models import (
 )
 
 
+# メモ本文の一部分（offset から最大 content_limit 文字）。next_offset があれば続きがある。
+# A slice of a memo body (up to content_limit characters from the offset); a next_offset means more remains.
 class McpMemoContentSlice(BaseModel):
     memo_id: int
     title: str
@@ -49,6 +58,8 @@ class McpMemoContentSlice(BaseModel):
     collection_name: str | None = None
 
 
+# メモの作成・更新・追記の後に返す、本文を含まない結果。
+# Result returned after creating, updating or appending to a memo, without the body.
 class McpMemoMutationResult(BaseModel):
     memo_id: int
     title: str
@@ -57,6 +68,9 @@ class McpMemoMutationResult(BaseModel):
     is_shared: bool = False
 
 
+# ツールの性質をクライアントに伝えるヒント。読み取りは副作用なし、作成は追加のみ、更新・追記は既存メモを変えるため破壊的扱い。
+# Hints describing each tool kind: reads are side-effect free, creating only adds,
+# and update/append change an existing memo so count as destructive.
 READ_ANNOTATIONS = ToolAnnotations(
     readOnlyHint=True,
     destructiveHint=False,
@@ -82,6 +96,10 @@ MEMO_MARKDOWN_INSTRUCTION = (
 
 
 def _tool_error(exc: Exception) -> ToolError:
+    # 例外を MCP クライアントへ返す ToolError にする。業務エラーは文言をそのまま、入力検証エラーは入力の案内、
+    # それ以外は内部の詳細を出さない汎用文言にする。
+    # Convert an exception into a ToolError for the client: business errors keep their message, validation errors
+    # point to the input, and anything else is generic so no internals leak.
     if isinstance(exc, ApiServiceError):
         return ToolError(exc.message)
     if isinstance(exc, ValidationError):
@@ -90,6 +108,8 @@ def _tool_error(exc: Exception) -> ToolError:
 
 
 def _mutation_result(memo: McpMemoDetail) -> McpMemoMutationResult:
+    # メモ本文を返さず、識別と版の確認に必要な項目だけを結果にする。
+    # Return only what identifies the memo and its revision, never the body.
     return McpMemoMutationResult(
         memo_id=memo.id,
         title=memo.title,
@@ -100,7 +120,10 @@ def _mutation_result(memo: McpMemoDetail) -> McpMemoMutationResult:
 
 
 def register_memo_tools(mcp: FastMCP) -> None:
-    """Register private memo tools with bounded outputs and owner-only access."""
+    """出力量に上限を設けた、所有者だけが使える非公開メモのツールを登録する。
+
+    Register private memo tools with bounded outputs and owner-only access.
+    """
 
     # 日本語: 認証ユーザーの非公開メモ一覧を取得するMCPツール説明。
     @mcp.tool(
@@ -160,6 +183,8 @@ def register_memo_tools(mcp: FastMCP) -> None:
     ) -> McpMemoSearchListResult:
         actor = require_actor(MCP_MEMOS_READ_SCOPE)
         await consume_tool_limit(actor, "memo_read", limit=120, window_seconds=60)
+        # 意味検索は埋め込み生成のコストがかかるため、読み取りの制限に加えて、より厳しい別枠の回数制限を課す。
+        # Semantic search costs an embedding call, so it gets its own, stricter limit on top of the read limit.
         if mode == "semantic":
             await consume_tool_limit(actor, "memo_semantic_search", limit=30, window_seconds=3600)
         try:
@@ -200,6 +225,8 @@ def register_memo_tools(mcp: FastMCP) -> None:
             memo = await get_memo(actor.user_id, memo_id)
         except Exception as exc:
             raise _tool_error(exc) from exc
+        # 本文は content_offset から content_limit 文字ずつ返し、続きがあれば next_offset で次の開始位置を伝える。
+        # Return the body in content_limit-sized slices from content_offset, giving next_offset when more remains.
         total = len(memo.content)
         end = min(content_offset + content_limit, total)
         next_offset = end if end < total else None

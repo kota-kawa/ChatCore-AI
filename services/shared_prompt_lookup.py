@@ -1,4 +1,9 @@
-"""Public shared-prompt retrieval used during chat answer generation.
+"""チャットの回答生成中に使う、公開プロンプトの検索。
+
+メモや My Context と違い、公開プロンプトは誰でも読める投稿なので、所有者での絞り込みは不要で、
+未ログインの訪問者でも使える。ここで読むのは公開済みの内容だけ。
+
+Public shared-prompt retrieval used during chat answer generation.
 
 Unlike memos and My Context, shared prompts are public posts, so this lookup needs no
 owner scope and works for signed-out visitors too. Only published content is read here.
@@ -14,6 +19,8 @@ from services.shared_content_service import SharedContentService
 
 logger = logging.getLogger(__name__)
 
+# 日本語: LLM に見せるツール名と、検索結果の件数上限。
+# English: Tool name exposed to the LLM and the cap on search results.
 SHARED_PROMPT_TOOL_NAME = "shared_prompt_search"
 
 PROMPT_RESULT_LIMIT = 5
@@ -27,7 +34,10 @@ MAX_PROMPT_CONTENT_CHARS = 1_500
 
 @dataclass(frozen=True)
 class SharedPromptResult:
-    """Public prompt hits for one query, already trimmed for the prompt context."""
+    """1 回のクエリに対する公開プロンプトのヒット。プロンプトの文脈に載せるため整形済み。
+
+    Public prompt hits for one query, already trimmed for the prompt context.
+    """
 
     query: str
     prompts: list[dict[str, Any]] = field(default_factory=list)
@@ -35,6 +45,8 @@ class SharedPromptResult:
     # Whether the search itself could not run. Kept so a failure is never reported as "no match".
     failed: bool = False
 
+    # 日本語: 1 件以上ヒットしたか。
+    # English: Whether at least one prompt matched.
     @property
     def has_hits(self) -> bool:
         return bool(self.prompts)
@@ -78,6 +90,8 @@ def get_shared_prompt_tool_definition() -> dict[str, Any]:
     }
 
 
+# 日本語: 前後の空白を除き、limit 文字を超えたら切り詰めて「…」を付ける。
+# English: Strip whitespace and, when longer than limit characters, truncate with an ellipsis.
 def _trim(text: str, limit: int) -> str:
     normalized = (text or "").strip()
     if len(normalized) <= limit:
@@ -85,6 +99,8 @@ def _trim(text: str, limit: int) -> str:
     return f"{normalized[:limit]}…"
 
 
+# 日本語: 呼び出しごとにサービスを作る。テストで差し替えやすいよう、生成をこの関数に集めている。
+# English: Create the service per call; construction is kept in this function so tests can replace it.
 def _service() -> SharedContentService:
     return SharedContentService()
 

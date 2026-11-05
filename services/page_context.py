@@ -1,3 +1,6 @@
+# 現在の画面情報をモデル向けの文脈へ整形し、画面に応じた案内を支える。
+# Formats the current page context for model guidance tied to the active screen.
+
 from __future__ import annotations
 
 import logging

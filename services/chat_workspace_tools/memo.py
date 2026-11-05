@@ -188,6 +188,7 @@ def _memo_summary(memo: Any) -> dict[str, Any]:
     return summary
 
 
+# その場で実行する読み取りツール。
 # Read tools -----------------------------------------------------------------
 
 
@@ -274,6 +275,7 @@ async def _read_memo(user_id: int, arguments: dict[str, Any], max_chars: int) ->
     return ReadResult(payload=payload, query=f"memo:{memo.id}")
 
 
+# 承認を必要とする書き込み提案。
 # Write proposals -------------------------------------------------------------
 
 
@@ -341,6 +343,7 @@ async def _propose_memo_edit(user_id: int, arguments: dict[str, Any]) -> Proposa
     )
 
 
+# 承認トランザクション内での実行。
 # Execution (inside the approval transaction) ---------------------------------
 
 

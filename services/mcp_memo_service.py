@@ -1,4 +1,10 @@
-"""Owner-scoped memo operations exposed to the remote MCP server."""
+"""リモート MCP サーバーへ公開する、所有者限定のメモ操作（一覧・検索・取得・作成・更新・追記・コレクション一覧）。
+
+認証済みユーザー自身のメモだけを扱い、共有トークンなどを含まない許可項目のみの DTO で返す。`services/mcp_tools/memos.py` から呼ばれる。
+Owner-scoped memo operations exposed to the remote MCP server (list, search, get, create, update, append, list collections).
+Only the authenticated user's own memos are handled, returned as DTOs with an allowlist of fields that excludes share tokens.
+Called from `services/mcp_tools/memos.py`.
+"""
 
 from __future__ import annotations
 
@@ -37,7 +43,10 @@ MemoSearchMode = Literal["keyword", "semantic"]
 logger = logging.getLogger(__name__)
 
 
+# 認可済み MCP クライアントへ返してよいメモのメタデータ（本文は含まない）。
+# Memo metadata that may be returned to an authorized MCP client (no body).
 class McpMemoSummary(BaseModel):
+    # 認可済みMCPクライアントへ返せる非公開メモのメタデータ。
     """Private memo metadata safe to return to an authorized MCP client."""
 
     id: int
@@ -52,25 +61,36 @@ class McpMemoSummary(BaseModel):
     is_shared: bool = False
 
 
+# 検索結果の1件。メタデータに抜粋(excerpt)を足したもの。
+# One search hit: the summary metadata plus an excerpt.
 class McpMemoSearchResult(McpMemoSummary):
     excerpt: str = ""
 
 
+# メモ1件の詳細。本文(content)を含む。
+# Full detail of one memo, including its content.
 class McpMemoDetail(McpMemoSummary):
+    # メモ本文は利用者が書いた信頼できないデータであり、MCP クライアントへの指示ではない。
     # Memo content is untrusted user-authored data, not an instruction to the MCP client.
     content: str
 
 
+# メモ一覧の結果（総件数と、1ページ分のメタデータ）。
+# Result of listing memos: the total count and one page of metadata.
 class McpMemoListResult(BaseModel):
     total: int = Field(ge=0)
     memos: list[McpMemoSummary]
 
 
+# メモ検索の結果（総件数と、抜粋付きの1ページ分）。
+# Result of a memo search: the total count and one page of hits with excerpts.
 class McpMemoSearchListResult(BaseModel):
     total: int = Field(ge=0)
     memos: list[McpMemoSearchResult]
 
 
+# コレクション1件のメタデータ。
+# Metadata of one memo collection.
 class McpMemoCollection(BaseModel):
     id: int
     name: str
@@ -78,16 +98,23 @@ class McpMemoCollection(BaseModel):
     memo_count: int = Field(ge=0)
 
 
+# コレクション一覧の結果。
+# Result of listing collections.
 class McpMemoCollectionListResult(BaseModel):
     collections: list[McpMemoCollection]
 
 
 def _safe_limit(limit: int) -> int:
+    # 取得件数を 1 以上 MAX_MCP_MEMO_LIST_LIMIT 以下に丸める。
+    # Clamp the page size to between 1 and MAX_MCP_MEMO_LIST_LIMIT.
     return max(1, min(int(limit), MAX_MCP_MEMO_LIST_LIMIT))
 
 
 def _summary_fields(memo: dict[str, Any]) -> dict[str, Any]:
-    """Build an allowlisted DTO and deliberately omit share bearer tokens/URLs."""
+    """許可項目だけの DTO 用辞書を作る。共有のベアラートークンや URL は意図的に含めない。
+
+    Build an allowlisted DTO and deliberately omit share bearer tokens/URLs.
+    """
     return {
         "id": int(memo["id"]),
         "title": str(memo.get("title") or "保存したメモ"),
@@ -131,7 +158,10 @@ async def list_memos(
     collection_id: int | None = None,
     session: AsyncSession | None = None,
 ) -> McpMemoListResult:
-    """List only the authenticated owner's memo titles and safe metadata."""
+    """認証済みの所有者自身のメモについて、タイトルと安全なメタデータだけを一覧にする。
+
+    List only the authenticated owner's memo titles and safe metadata.
+    """
     result = await fetch_memo_summaries(
         user_id,
         limit=_safe_limit(limit),
@@ -167,11 +197,16 @@ async def search_memos(
     collection_id: int | None = None,
     session: AsyncSession | None = None,
 ) -> McpMemoSearchListResult:
-    """Search the authenticated owner's memo titles and bodies."""
+    """認証済みの所有者自身のメモのタイトルと本文を検索する。
+
+    Search the authenticated owner's memo titles and bodies.
+    """
     normalized_query = query.strip()
     if not normalized_query:
         raise ApiServiceError("検索語を指定してください。", 400, status="fail")
 
+    # 意味検索の埋め込み生成に失敗しても、検索は埋め込み無し（キーワード検索）で続ける。
+    # If generating the semantic embedding fails, the search continues without it (keyword search).
     semantic_embedding: list[float] | None = None
     if mode == "semantic" and embeddings_available():
         try:
@@ -212,7 +247,10 @@ async def get_memo(
     *,
     session: AsyncSession | None = None,
 ) -> McpMemoDetail:
-    """Load one private memo owned by the authenticated user."""
+    """認証済みユーザー自身の非公開メモを1件読み込む。
+
+    Load one private memo owned by the authenticated user.
+    """
     return _to_detail(await fetch_memo_detail(user_id, memo_id, session=session))
 
 
@@ -223,7 +261,10 @@ async def update_memo(
     *,
     session: AsyncSession | None = None,
 ) -> McpMemoDetail:
-    """Update title/content only when the caller's revision is still current."""
+    """呼び出し側の revision が最新のときに限り、タイトル/本文を更新する。
+
+    Update title/content only when the caller's revision is still current.
+    """
     memo = await update_memo_record(
         user_id,
         memo_id,
@@ -235,6 +276,8 @@ async def update_memo(
         allow_shared_content_change=payload.allow_shared_content_change,
         session=session,
     )
+    # 呼び出し側がトランザクションを持たない場合だけ、更新の確定後に埋め込みの再生成を予約する。
+    # Schedule the embedding refresh only when no caller-owned transaction is in play, i.e. the update is committed.
     if session is None:
         schedule_embedding(
             memo_id,
@@ -251,7 +294,10 @@ async def create_memo(
     *,
     session: AsyncSession | None = None,
 ) -> McpMemoDetail:
-    """Create a private memo for the authenticated owner."""
+    """認証済みの所有者のために非公開メモを作成する。
+
+    Create a private memo for the authenticated owner.
+    """
     title = ensure_title(payload.content, payload.title)
 
     async def operation(db: AsyncSession) -> McpMemoDetail:
@@ -266,6 +312,8 @@ async def create_memo(
             raise ApiServiceError("メモを作成できませんでした。", 500, status="fail")
         return _to_detail(await fetch_memo_detail(user_id, memo_id, session=db))
 
+    # 呼び出し側のセッションがあればその中で実行する。無ければ自前のトランザクションで確定してから埋め込みを予約する。
+    # Run inside the caller's session when given; otherwise commit in our own transaction, then schedule the embedding.
     if session is not None:
         return await operation(session)
     async with session_scope() as db, db.begin():
@@ -286,7 +334,10 @@ async def append_memo(
     *,
     session: AsyncSession | None = None,
 ) -> McpMemoDetail:
-    """Append text without silently overwriting a concurrently changed memo."""
+    """並行して変更されたメモを黙って上書きせずに、テキストを追記する。
+
+    Append text without silently overwriting a concurrently changed memo.
+    """
     async def operation(db: AsyncSession) -> McpMemoDetail:
         current = await fetch_memo_detail(user_id, memo_id, session=db)
         current_content = str(current.get("ai_response") or "")
@@ -328,7 +379,10 @@ async def list_collections(
     *,
     session: AsyncSession | None = None,
 ) -> McpMemoCollectionListResult:
-    """List collection metadata owned by the authenticated user."""
+    """認証済みユーザーが所有するコレクションのメタデータを一覧にする。
+
+    List collection metadata owned by the authenticated user.
+    """
     collections = await fetch_collections(user_id, session=session)
     return McpMemoCollectionListResult(
         collections=[

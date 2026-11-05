@@ -1,3 +1,8 @@
+"""Redis クライアントの共有取得と、障害時のクールダウン付きフォールバック、分散 single-flight ロックを提供する。
+
+Provides the shared Redis client with a failure cooldown fallback, and a distributed single-flight lock.
+"""
+
 import logging
 import os
 import queue
@@ -29,6 +34,8 @@ def is_redis_configured() -> bool:
     return bool(os.environ.get("REDIS_URL") or os.environ.get("REDIS_HOST"))
 
 
+# Redis が使えないと判断したときにクライアントを捨て、クールダウン中は再接続を試みないようにする
+# Drop the cached client and suppress reconnect attempts during the cooldown after Redis is judged unavailable
 def mark_redis_unavailable(exc: Exception | None = None) -> None:
     global _redis_client, _redis_retry_after
     _redis_client = None

@@ -1,3 +1,4 @@
+# 公開プロンプト用画像アップロードの検証と保存を担う。
 """Validation and persistence for prompt-share image uploads."""
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from services.prompt_types import get_attachment_rule
 
 
 def _prompt_attachment_signature_matches(extension: str, prefix: bytes) -> bool:
+    # ファイル名の拡張子と、実際の画像バイト列が一致することを確認する。
     """Confirm that the uploaded bytes match the filename's image extension."""
     if extension == ".png":
         return prefix.startswith(b"\x89PNG\r\n\x1a\n")
@@ -44,6 +46,7 @@ def save_prompt_attachment(
     filename: str,
     content_type: str = "",
 ) -> dict[str, str]:
+    # 1件の添付画像を検証・正規化して保存する。
     """Validate, normalize, and persist one prompt-share image attachment."""
     rule = get_attachment_rule(media_type)
     if rule is None:
@@ -88,6 +91,7 @@ def save_prompt_attachment(
 
 
 def infer_prompt_attachment_mime_type(source: bytes) -> str | None:
+    # 可能ならファイルのシグネチャから許可対象の画像MIMEを返す。
     """Return an accepted image MIME type from a file signature when possible."""
     prefix = source[:16]
     if prefix.startswith(b"\x89PNG\r\n\x1a\n"):

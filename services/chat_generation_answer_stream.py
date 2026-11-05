@@ -143,6 +143,8 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
             existing_urls.add(image_url)
             if len(selected_web_search_images) >= MAX_WEB_SEARCH_IMAGES_PER_REPLY:
                 break
+        # モデルが要求した検索は、本文がすでに配信された後に終わることがある。
+        # そのため選択した画像を、配信済みの本文に対して直ちに突き合わせ直す。
         # A model-requested search can finish after prose has already streamed.
         # Reconcile selected images against that existing text immediately.
         self._publish_stream_text_with_images(state, "")
@@ -362,6 +364,10 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
             reason="max_output_tokens",
         )
 
+        # 続きのチャンクを配信する。memo_tail_start があるときは、メモの状態文が未完のため
+        # すぐには配信せず chunks に溜め、状態封筒だけをフィルタで取り除く。
+        # Publish a continuation chunk. With memo_tail_start the memo status sentence is still
+        # unfinished, so chunks are held in state.chunks (state envelopes filtered out) instead of being sent.
         def publish_continuation_chunk(chunk: str) -> None:
             if memo_tail_start is None:
                 self._publish_answer_chunk(state, chunk)
@@ -408,6 +414,8 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
                     if not self._cancelled:
                         state.chunks.append(trailing)
         if memo_tail_start is not None:
+            # 最初のパスがメモの状態文の途中で終わることがある。未完のその末尾と続きだけを、
+            # 完結するまで配信せずに保留する。
             # The first pass may end in the middle of a memo status sentence. Keep only
             # that unfinished tail and its continuation off the wire until it is complete.
             with self._chunks_lock:

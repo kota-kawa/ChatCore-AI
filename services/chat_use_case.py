@@ -139,7 +139,10 @@ _GENERATION_CAPACITY_EXCEEDED_MESSAGE = (
 
 
 async def _maybe_await(value: Any) -> Any:
-    """Accept async production dependencies while keeping light unit doubles usable."""
+    """本番の依存は非同期だが、軽量な単体テストの代役は同期の値を返す。どちらも受け付ける。
+
+    Accept async production dependencies while keeping light unit doubles usable.
+    """
     return await value if inspect.isawaitable(value) else value
 
 
@@ -289,6 +292,17 @@ class ChatPostUseCase:
         llm_daily_limit_service: LlmDailyLimitService | None,
         chat_generation_service: ChatGenerationService | None,
     ) -> Response:
+        """投稿 1 件を最後まで処理する。まず検証・上限・ルーム解決・発話の保存を順に行い（どこかで早期レスポンスが返れば終了）、
+        次に履歴とプロンプト文脈を集め、生成中の重複と日次クォータを確認する。
+        その後 Skill を選び、会話メッセージを組み立て、参照資料と生成 UI のモードを加えて、
+        ストリーミング対応モデルならバックグラウンドの生成ジョブを開始し、そうでなければ同期で応答を返す。
+
+        Handle one chat post end to end. Validation, limits, room resolution and saving the user message run first, and
+        any phase may return an early response.
+        Then history and prompt context are loaded, running generations and the daily quota are checked, Skills are
+        selected and the messages are built with references and the Generative UI mode;
+        a streaming model starts a background generation job, any other model answers synchronously.
+        """
         turn = _ChatPostTurn(
             request=request,
             session=request.session,
@@ -373,6 +387,12 @@ class ChatPostUseCase:
         return None
 
     async def _reject_reused_generation_id(self, turn: _ChatPostTurn) -> Response | None:
+        """クライアントが指定した generation_id が、このルームですでに使われていないかを確認する。使用済みなら 409、
+        状態の確認先が使えなければ 503 で断る。
+
+        Check that the client-supplied generation_id is not already used in this room; reject with 409 when it is, or
+        503 when the coordination state is unavailable.
+        """
         if turn.generation_id is None:
             return None
         turn.generation_key = self.deps.generation.build_generation_key(
@@ -648,6 +668,8 @@ class ChatPostUseCase:
         取得したURL本文と今回の添付を最新発話へ前置します
         Prepend fetched URL bodies and this turn's attachments to the latest message.
         """
+        # 最新のユーザー発話の前に置くコンテキストブロックを組み立てる。
+        # 順序は、取得したURL本文 → 添付ファイルの本文 → ユーザーの発話。
         # Build context blocks to prepend to the last user message.
         # Order: fetched URL content → attached file content → user message text.
         prefix_blocks: list[str] = []
@@ -1124,6 +1146,15 @@ class ChatPostUseCase:
             web_search_context: list[dict[str, Any]] | None = None,
             tool_approval_ids: list[str] | None = None,
         ) -> dict[str, Any] | None:
+            """生成ジョブから呼ばれ、回答を保存する。承認カードがある回答は承認行との結び付けと同じトランザクションで保存す
+            る。保存できたら記憶の抽出を予約し、初回なら自動でタイトルを付ける（{"room_title": ...} を返す）。
+            保存できなかったときは None を返す。
+
+            Called by the generation job to persist the reply. A reply with approval cards is saved in the same
+            transaction that ties the approval rows to it.
+            After a successful save it defers context extraction and, for the first reply, auto-titles the room
+            (returning {"room_title": ...}); None when nothing was persisted.
+            """
             if tool_approval_ids and save_with_approvals is not None and user_id is not None:
                 # 承認カードのある回答は、承認行への回答 ID の結び付けと同じトランザクションで保存する。
                 # A reply with approval cards is saved in the same transaction that ties the
@@ -1157,6 +1188,8 @@ class ChatPostUseCase:
                     )
                 )
             if assistant_message_id is None:
+                # ID が無いのは、永続化の境界が回答を確定できなかったということ。
+                # 履歴に存在しないターンを on_finished が要約しないよう、ここで打ち切る。
                 # A missing id means the persistence boundary did not commit the reply. Do not
                 # let on_finished summarize a turn that is absent from the room history.
                 return None
@@ -1186,6 +1219,10 @@ class ChatPostUseCase:
             return None
 
         def on_finished() -> None:
+            """ストリーミング完了後に一度だけ呼ばれ、ルーム要約を作り直す。
+
+            Called once after streaming finishes to rebuild the room summary.
+            """
             # 応答を保存できなかったターンは履歴が変わっていないため、要約も作り直さない。
             # A turn whose reply was never persisted left the history unchanged, so skip the rebuild.
             if not persisted_reply:
@@ -1527,7 +1564,11 @@ class ChatPostUseCase:
         assistant_response: str,
         allowed_current_titles: list[str],
     ) -> str | None:
-        """Generate a title off-loop, then conditionally persist it through AsyncSession."""
+        """タイトルをイベントループの外（別スレッド）で生成し、現在のタイトルが改名前の候補のままのときだけ AsyncSession で
+        更新する。更新できたらそのタイトルを返す。
+
+        Generate a title off-loop, then conditionally persist it through AsyncSession.
+        """
         title = await asyncio.to_thread(
             generate_chat_room_title,
             user_message,
@@ -1559,7 +1600,10 @@ class ChatPostUseCase:
         user_message: str,
         assistant_response: str,
     ) -> None:
-        """Schedule candidate extraction only for eligible, persisted normal-room turns."""
+        """永続化できた通常ルームのターンで、抽出の対象になる利用者のときだけ、個人コンテキストの候補抽出を予約する。
+
+        Schedule candidate extraction only for eligible, persisted normal-room turns.
+        """
         if user_id is None or room_mode != "normal" or assistant_message_id is None:
             return
         try:
@@ -1590,7 +1634,10 @@ class ChatPostUseCase:
         user_message: str,
         assistant_response: str,
     ) -> None:
-        """Run eligibility checking off the response path, then schedule extraction."""
+        """対象かどうかの確認を応答の経路から外して実行し、そのうえで抽出を予約する。
+
+        Run eligibility checking off the response path, then schedule extraction.
+        """
         if user_id is None or room_mode != "normal" or assistant_message_id is None:
             return
         try:

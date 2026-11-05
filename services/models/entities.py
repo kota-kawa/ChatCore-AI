@@ -1,4 +1,9 @@
-"""SQLAlchemy 2.0 mappings for the current ChatCore PostgreSQL schema.
+"""現在の ChatCore の PostgreSQL スキーマに対応する SQLAlchemy 2.0 のテーブル定義（ORM マッピング）。
+
+スキーマの変遷の正本は migration の履歴で、ここは Alembic の head 時点のスキーマを表す。
+Pydantic のリクエスト/レスポンスの契約とは意図的に分けてある。
+
+SQLAlchemy 2.0 mappings for the current ChatCore PostgreSQL schema.
 
 The migration history remains the source of truth for schema evolution.  These
 models describe the schema at the current Alembic head and are intentionally
@@ -39,6 +44,8 @@ from .base import Base
 from .types import Vector
 
 
+# 作成時刻などに使う、DB の現在時刻を既定値にした日時列を作る。
+# Build a datetime column that defaults to the database's current time (used for created_at and the like).
 def _timestamp(*, timezone: bool = False, nullable: bool = True) -> Mapped[datetime | None]:
     return mapped_column(
         DateTime(timezone=timezone),
@@ -54,6 +61,8 @@ def _in_values(column: str, values: tuple[str, ...]) -> str:
     return f"{column} IN ({quoted})"
 
 
+# ユーザーアカウントとプロフィール、各種機能の有効/無効設定。
+# User account, profile and per-feature settings.
 class User(Base):
     __tablename__ = "users"
 
@@ -106,6 +115,8 @@ class DemoAccessCode(Base):
     )
 
 
+# ユーザーが登録したパスキー（WebAuthn の資格情報）。
+# Passkeys (WebAuthn credentials) registered by a user.
 class UserPasskey(Base):
     __tablename__ = "user_passkeys"
 
@@ -124,6 +135,8 @@ class UserPasskey(Base):
     __table_args__ = (Index("idx_user_passkeys_user_created_at", "user_id", desc("created_at")),)
 
 
+# チャットルーム（1つの会話）。通常/一時のモード、所属プロジェクト、固定の有無を持つ。
+# A chat room (one conversation), with its normal/temporary mode, owning project and pin state.
 class ChatRoom(Base):
     __tablename__ = "chat_rooms"
 
@@ -150,6 +163,8 @@ class ChatRoom(Base):
     )
 
 
+# チャットのメッセージ1件。parent_id と active_child_id で会話の分岐（再生成・編集）を木構造として表す。
+# One chat message; parent_id and active_child_id represent conversation branches (regeneration, edits) as a tree.
 class ChatHistory(Base):
     __tablename__ = "chat_history"
 
@@ -173,6 +188,8 @@ class ChatHistory(Base):
     )
 
 
+# チャットルームの共有リンク。トークン、有効期限、失効日時を持つ。
+# A share link for a chat room, with its token, expiry and revocation time.
 class SharedChatRoom(Base):
     __tablename__ = "shared_chat_rooms"
 
@@ -241,7 +258,10 @@ class ChatToolApproval(Base):
 
 
 class ChatToolAutoApproval(Base):
-    """A tool the user granted "always approve"; revoking deletes the row."""
+    """利用者が「常に承認」を許可したツール。許可を取り消すと行は削除される。
+
+    A tool the user granted "always approve"; revoking deletes the row.
+    """
 
     __tablename__ = "chat_tool_auto_approvals"
 
@@ -265,6 +285,8 @@ class ChatToolAutoApproval(Base):
     )
 
 
+# チャットルームの要約と、要約へ退避済みのメッセージ数。
+# A chat room summary and the number of messages already folded into it.
 class ChatRoomSummary(Base):
     __tablename__ = "chat_room_summaries"
 
@@ -274,6 +296,8 @@ class ChatRoomSummary(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
 
 
+# 会話から抽出した記憶用の事実。ルーム単位かユーザー単位かを scope で区別する。
+# A fact extracted from conversation for memory; scope distinguishes room-level from user-level.
 class MemoryFact(Base):
     __tablename__ = "memory_facts"
 
@@ -304,6 +328,8 @@ class MemoryFact(Base):
     )
 
 
+# ユーザーが保存したスキル（AI への指示文）。有効/無効を切り替えられ、共有投稿から取り込んだ場合は元の投稿を指す。
+# A skill (instructions for the AI) saved by a user; it can be enabled or disabled and points to its source post when imported.
 class UserSkill(Base):
     __tablename__ = "user_skills"
 
@@ -341,6 +367,9 @@ class UserSkill(Base):
     )
 
 
+# タスク（プロンプトのひな形と応答ルールなど）。user_id が NULL のものは全員共通で、system_task_key はシステム標準のタスクを識別する。
+# A task (prompt template, response rules and so on). A NULL user_id means shared by everyone; system_task_key
+# identifies built-in system tasks.
 class Task(Base):
     __tablename__ = "task_with_examples"
 
@@ -388,6 +417,8 @@ class Task(Base):
     )
 
 
+# タスクの変更履歴（各操作時点のスナップショット）。
+# Change history of a task (a snapshot at each operation).
 class TaskVersion(Base):
     __tablename__ = "task_versions"
 
@@ -419,6 +450,8 @@ class TaskVersion(Base):
     )
 
 
+# プロンプトや SKILL の投稿。is_public が真なら公開共有の対象で、検索用の埋め込みベクトルを持つ。
+# A prompt or SKILL post; when is_public is true it is part of public sharing, and it carries an embedding vector for search.
 class Prompt(Base):
     __tablename__ = "prompts"
 
@@ -484,6 +517,8 @@ class Prompt(Base):
     )
 
 
+# プロンプト投稿の変更履歴（各操作時点のスナップショット）。
+# Change history of a prompt post (a snapshot at each operation).
 class PromptVersion(Base):
     __tablename__ = "prompt_versions"
 
@@ -515,6 +550,8 @@ class PromptVersion(Base):
     )
 
 
+# ユーザーに紐づく外部ログインプロバイダ（プロバイダごとに1件）。
+# External sign-in providers linked to a user (one per provider).
 class UserAuthProvider(Base):
     __tablename__ = "user_auth_providers"
 
@@ -534,6 +571,8 @@ class UserAuthProvider(Base):
     )
 
 
+# プロンプト投稿へのいいね（ユーザーと投稿の組で一意）。
+# A like on a prompt post (unique per user and post).
 class PromptLike(Base):
     __tablename__ = "prompt_likes"
 
@@ -549,6 +588,8 @@ class PromptLike(Base):
     )
 
 
+# プロンプト投稿へのコメント。削除や、通報による非表示の状態を持つ。
+# A comment on a prompt post, with deleted and hidden-by-reports states.
 class PromptComment(Base):
     __tablename__ = "prompt_comments"
 
@@ -568,6 +609,8 @@ class PromptComment(Base):
     )
 
 
+# コメントへの通報（通報者ごとに1件）。
+# A report against a comment (one per reporter).
 class PromptCommentReport(Base):
     __tablename__ = "prompt_comment_reports"
 
@@ -585,6 +628,8 @@ class PromptCommentReport(Base):
     )
 
 
+# メモ1件。ゴミ箱・アーカイブ・固定の状態、コレクション、意味検索用の埋め込み、競合検出用の revision を持つ。
+# A memo, with trash/archive/pin states, its collection, an embedding for semantic search and a revision for conflict detection.
 class MemoEntry(Base):
     __tablename__ = "memo_entries"
 
@@ -629,6 +674,8 @@ class MemoEntry(Base):
     )
 
 
+# メモを分類するコレクション（ユーザー内で名前が一意）。
+# A collection that groups memos (the name is unique per user).
 class MemoCollection(Base):
     __tablename__ = "memo_collections"
 
@@ -645,6 +692,8 @@ class MemoCollection(Base):
     )
 
 
+# メモの共有リンク。トークン、有効期限、取り消し日時を持つ。
+# A share link for a memo, with its token, expiry and revocation time.
 class SharedMemoEntry(Base):
     __tablename__ = "shared_memo_entries"
 
@@ -661,6 +710,8 @@ class SharedMemoEntry(Base):
     )
 
 
+# チャットをまとめるプロジェクト。共通の指示文を持つ。
+# A project that groups chats and carries shared instructions.
 class Project(Base):
     __tablename__ = "projects"
 
@@ -674,6 +725,8 @@ class Project(Base):
     __table_args__ = (Index("idx_projects_user_created_at", "user_id", desc("created_at")),)
 
 
+# プロジェクトに添付されたファイル（本文とサイズ）。
+# A file attached to a project (content and size).
 class ProjectFile(Base):
     __tablename__ = "project_files"
 
@@ -687,6 +740,9 @@ class ProjectFile(Base):
     __table_args__ = (Index("idx_project_files_project_id", "project_id", "id"),)
 
 
+# パーソナル・コンテキストの事実。種類・重要度・状態、競合検出用の revision、検索用の埋め込み、重複防止用の冪等キーのハッシュを持つ。
+# A fact in the personal context, with type, importance, status, a revision for conflict detection, a search
+# embedding and idempotency-key hashes against duplicates.
 class ContextFact(Base):
     __tablename__ = "context_facts"
 
@@ -744,6 +800,8 @@ class ContextFact(Base):
     )
 
 
+# パーソナル・コンテキストの事実になる前の候補（承認待ち・承認済み・却下）。承認されると promoted_fact_id が事実を指す。
+# A candidate that may become a personal-context fact (pending, approved or rejected); once approved, promoted_fact_id points to the fact.
 class ContextFactCandidate(Base):
     __tablename__ = "context_fact_candidates"
 
@@ -782,6 +840,8 @@ class ContextFactCandidate(Base):
     )
 
 
+# SKILL に添付されるファイル。本文は text_content かストレージ上の storage_key のどちらか一方に持つ。
+# A file attached to a SKILL; its content lives in exactly one of text_content or a storage_key in storage.
 class PromptResource(Base):
     __tablename__ = "prompt_resources"
 
@@ -810,6 +870,8 @@ class PromptResource(Base):
     )
 
 
+# ゲストが投稿した公開プロンプトの記録。Cookie と IP のハッシュを持ち、後からログインしたユーザーが自分の投稿として引き取れる。
+# A record of a public prompt posted by a guest. It keeps cookie and IP hashes, and a user who signs in later can claim it as their own.
 class GuestPromptSubmission(Base):
     __tablename__ = "guest_prompt_submissions"
 
@@ -833,6 +895,8 @@ class GuestPromptSubmission(Base):
     )
 
 
+# プロンプト投稿ごとの閲覧回数の集計。
+# Aggregated view count per prompt post.
 class PromptViewCount(Base):
     __tablename__ = "prompt_view_counts"
 
@@ -845,6 +909,8 @@ class PromptViewCount(Base):
     )
 
 
+# プロンプト投稿ごとの表示（インプレッション）回数の集計。
+# Aggregated impression count per prompt post.
 class PromptImpressionCount(Base):
     __tablename__ = "prompt_impression_counts"
 
@@ -856,6 +922,8 @@ class PromptImpressionCount(Base):
     )
 
 
+# リモート MCP の OAuth クライアント（DCR・CIMD・事前登録）。シークレットは暗号化して保存する。
+# An OAuth client of the remote MCP server (DCR, CIMD or pre-registered); the secret is stored encrypted.
 class McpOAuthClient(Base):
     __tablename__ = "mcp_oauth_clients"
 
@@ -871,6 +939,8 @@ class McpOAuthClient(Base):
     )
 
 
+# ユーザーがクライアントに与えた許可（接続）。許可した scope、表示名、失効日時を持つ。
+# A permission (connection) a user gave a client, with its scopes, display name and revocation time.
 class McpOAuthGrant(Base):
     __tablename__ = "mcp_oauth_grants"
 
@@ -896,6 +966,8 @@ class McpOAuthGrant(Base):
     )
 
 
+# ユーザー本人が発行した個人用クライアントの所有関係とラベル。
+# Ownership and label of a personal client issued by a user.
 class McpOAuthUserClient(Base):
     __tablename__ = "mcp_oauth_user_clients"
 
@@ -909,6 +981,8 @@ class McpOAuthUserClient(Base):
     __table_args__ = (CheckConstraint("provider IN ('claude', 'manual')", name="mcp_oauth_user_clients_provider_check"),)
 
 
+# OAuth の認可コード。平文ではなくダイジェストを主キーにし、使用済みかどうかを記録する。
+# An OAuth authorization code, keyed by its digest rather than plaintext, with a used-at marker.
 class McpOAuthAuthorizationCode(Base):
     __tablename__ = "mcp_oauth_authorization_codes"
 
@@ -938,6 +1012,8 @@ class McpOAuthAuthorizationCode(Base):
     )
 
 
+# OAuth のアクセス/リフレッシュトークン。ダイジェストで保存し、回転済み(replaced_at)や失効を記録する。
+# OAuth access and refresh tokens, stored by digest, recording rotation (replaced_at) and revocation.
 class McpOAuthToken(Base):
     __tablename__ = "mcp_oauth_tokens"
 
@@ -965,7 +1041,10 @@ class McpOAuthToken(Base):
 
 
 class ApiUsageDaily(Base):
-    """Daily API usage and cost per billing subject and resource (model or search API)."""
+    """課金の対象者とリソース（モデルまたは検索 API）ごとの、日次の API 使用量とコスト。
+
+    Daily API usage and cost per billing subject and resource (model or search API).
+    """
 
     __tablename__ = "api_usage_daily"
 

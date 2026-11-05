@@ -1,3 +1,14 @@
+"""チャットに貼られた URL のページや画像を、SSRF を防ぎながら取得して本文・リンク・画像候補に変換する。
+
+リダイレクトの各ホップでグローバル IP かを検証し、検証した IP に DNS を固定する（DNS リバインディング対策）。
+取得はサイズ・時間・同時実行数に上限を持つワーカープールで行い、ページ用と画像用で枠を分ける。
+
+Fetches pages and images for URLs pasted into chat, guarding against SSRF, and turns them into text, links and image candidates.
+
+Every redirect hop is checked for a global IP and DNS is pinned to the validated IP (against DNS rebinding). Fetches run on
+worker pools bounded by size, time and concurrency, with separate slots for pages and images.
+"""
+
 from __future__ import annotations
 
 import ipaddress
@@ -26,7 +37,12 @@ logger = logging.getLogger(__name__)
 
 # 定数定義
 # Define constants
+# 日本語: 取得の上限。1 メッセージあたりの URL 数、応答サイズ、抽出する本文の文字数、タイムアウト、同時取得数、リダイレクト回数、
+# 1 文書から拾うリンク・画像の数と各文字数。
+# English: Fetch limits: URLs per message, response size, extracted text length, timeouts, concurrency, redirect hops,
+# and how many links and images (and how many characters each) are kept per document.
 MAX_URLS_PER_MESSAGE = 3
+# デコード前の生データ、保持文字数、単一URLと全URLの待機時間をそれぞれ制限する。
 MAX_URL_RESPONSE_BYTES = 300_000   # 300 KB raw cap before decoding
 MAX_URL_TEXT_CHARS = 30_000        # chars of plain text kept per URL
 URL_FETCH_TIMEOUT = 10             # seconds
@@ -38,6 +54,7 @@ MAX_LINK_URL_CHARS = 1_000
 MAX_LINK_TEXT_CHARS = 240
 MAX_LINK_CONTEXT_CHARS = 320
 MAX_IMAGES_PER_DOCUMENT = 20
+# プロキシする画像1件の生データ上限。
 MAX_IMAGE_RESPONSE_BYTES = 4_000_000  # raw cap for one proxied image
 MAX_CONCURRENT_IMAGE_FETCHES = 4
 # ブラウザが <img> で描けるラスタ形式だけ。SVG はスクリプトを含められるので中継しない。
@@ -48,6 +65,8 @@ FETCHABLE_IMAGE_MEDIA_TYPES = frozenset({"image/jpeg", "image/png", "image/gif",
 # Regular expression to extract URLs
 _URL_RE = re.compile(r"https?://[^\s<>\"'`()\[\]{}|\\^]+", re.IGNORECASE)
 
+# 日本語: 取得を拒否するホスト名と、手動で追跡するリダイレクトのステータス。ページ取得の同時実行は _fetch_slots で数える。
+# English: Hostnames that are never fetched and the redirect statuses followed manually; page-fetch concurrency is counted by _fetch_slots.
 _BLOCKED_HOSTNAMES = frozenset({"localhost"})
 _REDIRECT_STATUS_CODES = frozenset({301, 302, 303, 307, 308})
 _fetch_slots = threading.BoundedSemaphore(MAX_CONCURRENT_URL_FETCHES)
@@ -66,6 +85,8 @@ _FETCH_HEADERS = {
     "Accept": "text/html,text/plain,application/xhtml+xml;q=0.9,*/*;q=0.5",
     "Accept-Language": "ja,en;q=0.9",
 }
+# 日本語: 画像取得用のリクエストヘッダー。
+# English: Request headers for image fetches.
 _IMAGE_FETCH_HEADERS = {
     "User-Agent": _FETCH_HEADERS["User-Agent"],
     "Accept": "image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9",
@@ -76,7 +97,10 @@ _FetchResult = TypeVar("_FetchResult")
 
 @dataclass(frozen=True)
 class FetchedLink:
-    """A normalized link discovered in a fetched HTML document."""
+    """取得した HTML から見つけた、正規化済みのリンク。
+
+    A normalized link discovered in a fetched HTML document.
+    """
 
     url: str
     text: str
@@ -85,7 +109,10 @@ class FetchedLink:
 
 @dataclass(frozen=True)
 class FetchedImage:
-    """A normalized image candidate discovered in a fetched HTML document."""
+    """取得した HTML から見つけた、正規化済みの画像候補。kind は img / og:image / twitter:image / link など。
+
+    A normalized image candidate discovered in a fetched HTML document.
+    """
 
     url: str
     alt: str = ""
@@ -94,12 +121,18 @@ class FetchedImage:
 
 
 class FetchSlotsBusyError(Exception):
-    """No fetch slot was free, so nothing was requested from the origin."""
+    """取得枠が空いておらず、取得元へは何もリクエストしなかったことを表す。
+
+    No fetch slot was free, so nothing was requested from the origin.
+    """
 
 
 @dataclass(frozen=True)
 class FetchedImageContent:
-    """Bytes of one fetched image and the media type the origin declared."""
+    """取得した画像 1 枚のバイト列と、取得元が申告したメディアタイプ。
+
+    Bytes of one fetched image and the media type the origin declared.
+    """
 
     media_type: str
     data: bytes
@@ -107,7 +140,10 @@ class FetchedImageContent:
 
 @dataclass(frozen=True)
 class FetchedUrlDocument:
-    """Readable content and safe follow-up candidates from one URL fetch."""
+    """1 回の URL 取得で得た読める本文と、安全に辿れる後続の候補（リンク・画像）。
+
+    Readable content and safe follow-up candidates from one URL fetch.
+    """
 
     requested_url: str
     final_url: str
@@ -117,6 +153,10 @@ class FetchedUrlDocument:
     images: tuple[FetchedImage, ...] = ()
 
 
+# --- DNS ピン留め: DNS リバインディング型の SSRF を防ぐ -------------------------
+# 日本語: urllib3 の create_connection を包み、取得中は検証済みのホスト名を、検証した IP に固定して接続する。
+# これが無いと、TCP 接続時に urllib3 が再度 getaddrinfo を呼び、直前に切り替えられた内部アドレスの DNS 応答へ誘導されうる。
+# ピンはスレッドローカルなので並行する取得が干渉せず、HTTPS の SNI／証明書検証は TCP 層の後で元のホスト名に対して行われる。
 # --- DNS pinning to defeat DNS-rebinding-style SSRF -------------------------
 # urllib3's create_connection is wrapped so that, while a fetch is in
 # progress, any hostname we already validated is forced to resolve to the IP
@@ -155,7 +195,10 @@ def _pin_dns(host_to_ip: dict[str, str]) -> Iterator[None]:
 
 
 def _new_direct_session() -> requests.Session:
-    """Avoid proxy and .netrc settings that could bypass pinning or disclose local credentials."""
+    """DNS ピン留めを迂回したりローカルの認証情報を漏らしたりしうる、プロキシや .netrc の設定を使わないセッションを作る。
+
+    Avoid proxy and .netrc settings that could bypass pinning or disclose local credentials.
+    """
     session = requests.Session()
     session.trust_env = False
     return session
@@ -243,6 +286,8 @@ class _TextExtractor(HTMLParser):
         if tag in self._SKIP_TAGS:
             self._skip_depth += 1
 
+    # 日本語: meta タグが og:image / twitter:image の画像宣言なら、その種別を返す。そうでなければ空文字。
+    # English: Return the kind when a meta tag declares an og:image / twitter:image; otherwise an empty string.
     @staticmethod
     def _meta_image_kind(attributes: dict[str, str]) -> str:
         property_name = attributes.get("property", "").strip().lower()
@@ -253,6 +298,8 @@ class _TextExtractor(HTMLParser):
             return "twitter:image"
         return ""
 
+    # 日本語: srcset の先頭の候補から URL だけを取り出す。
+    # English: Extract just the URL from the first srcset candidate.
     @staticmethod
     def _first_srcset_url(srcset: str) -> str:
         for candidate in srcset.split(","):
@@ -286,6 +333,8 @@ class _TextExtractor(HTMLParser):
         if self._skip_depth == 0 and data.strip():
             self._parts.append(data)
 
+    # 日本語: 開いている <a> を閉じ、テキスト（無ければ title）と直前の文脈を添えてリンク候補に積む。
+    # English: Close the open <a> and queue it as a link candidate with its text (or title) and the preceding context.
     def _finish_active_link(self) -> None:
         if self._active_link is None:
             return
@@ -326,7 +375,12 @@ class _TextExtractor(HTMLParser):
 
 
 def canonicalize_url(url: str) -> str | None:
-    """Return a fragment-free canonical HTTP(S) URL, or ``None`` if invalid."""
+    """フラグメントを除いた正規の HTTP(S) URL を返す。不正なら ``None``。
+
+    認証情報つき URL と標準以外のポートは拒否する。
+
+    Return a fragment-free canonical HTTP(S) URL, or ``None`` if invalid.
+    """
     try:
         parsed = urlsplit(str(url or "").strip())
         scheme = parsed.scheme.lower()
@@ -336,11 +390,13 @@ def canonicalize_url(url: str) -> str | None:
             return None
         hostname = parsed.hostname.lower()
         if ":" not in hostname:
-            # Requests converts IDNs to ASCII before connecting; pinning must use that same host.
+            # 日本語: requests は接続前に国際化ドメイン名を ASCII に変換するので、ピン留めも同じホスト名で行う必要がある。
+            # English: Requests converts IDNs to ASCII before connecting; pinning must use that same host.
             hostname = hostname.encode("idna").decode("ascii")
         display_hostname = f"[{hostname}]" if ":" in hostname else hostname
         port = parsed.port
-        # The fetcher also handles discovered links and redirects; one check protects every path.
+        # 日本語: 取得処理は見つけたリンクやリダイレクト先も扱うので、ここで 1 回確認すれば全経路を守れる。
+        # English: The fetcher also handles discovered links and redirects; one check protects every path.
         if port is not None and port != (80 if scheme == "http" else 443):
             return None
         netloc = display_hostname
@@ -350,6 +406,10 @@ def canonicalize_url(url: str) -> str | None:
         return None
 
 
+# 日本語: HTML から本文・タイトル・リンク・画像候補を取り出す。<base> を考慮して相対 URL を解決し、
+# 重複と不正な URL は捨てて件数を上限で切る。
+# English: Extract text, title, links and image candidates from HTML. Relative URLs are resolved against <base>, duplicates and invalid URLs
+# are dropped, and counts are capped.
 def _extract_document_from_html(
     raw_html: str,
     *,
@@ -430,7 +490,10 @@ def extract_urls_from_text(text: str) -> list[str]:
 
 
 def url_for_logging(url: str) -> str:
-    """Keep only the URL origin and path in diagnostics, never credentials or signed parameters."""
+    """診断用には URL のオリジンとパスだけを残し、認証情報や署名付きパラメータは含めない。
+
+    Keep only the URL origin and path in diagnostics, never credentials or signed parameters.
+    """
     try:
         parsed = urlsplit(url)
         hostname = parsed.hostname
@@ -472,7 +535,8 @@ def _resolve_safe_ip(url: str) -> str | None:
             if family not in {socket.AF_INET, socket.AF_INET6}:
                 return None
             ip = ipaddress.ip_address(sockaddr[0])
-            # A mixed public/private DNS set must fail closed even though one address could be pinned.
+            # 日本語: 公開アドレスと内部アドレスが混ざった DNS 応答は、1 つだけピン留めできても拒否する（安全側に倒す）。
+            # English: A mixed public/private DNS set must fail closed even though one address could be pinned.
             if (
                 not ip.is_global
                 or ip.is_multicast
@@ -483,7 +547,8 @@ def _resolve_safe_ip(url: str) -> str | None:
                 return None
             safe_ips.append(str(ip))
     except Exception:
-        # Exception messages can include the original signed URL; never log their contents.
+        # 日本語: 例外メッセージに署名付きの元 URL が含まれることがあるので、内容はログに出さない。
+        # English: Exception messages can include the original signed URL; never log their contents.
         logger.debug("Failed to resolve a safe IP for URL %s; treating it as unsafe.", url_for_logging(url))
         return None
     else:
@@ -556,7 +621,10 @@ def _open_validated_response(
 
 
 def _read_response_body(response: requests.Response, *, deadline: float, max_bytes: int) -> bytes | None:
-    """Read at most *max_bytes* of the body, or None once the deadline passes."""
+    """本文を最大 *max_bytes* まで読む。期限を過ぎたら None。
+
+    Read at most *max_bytes* of the body, or None once the deadline passes.
+    """
     chunks: list[bytes] = []
     total = 0
     for chunk in response.iter_content(chunk_size=16_384):
@@ -631,7 +699,10 @@ def _fetch_url_document_impl(url: str) -> FetchedUrlDocument | None:
 
 
 def _fetch_image_content_impl(url: str) -> FetchedImageContent | None:
-    """Fetch one raster image under the same SSRF guard as page fetches."""
+    """ページ取得と同じ SSRF 対策のもとで、ラスタ画像を 1 枚取得する。
+
+    Fetch one raster image under the same SSRF guard as page fetches.
+    """
     deadline = time.monotonic() + URL_FETCH_TIMEOUT
     try:
         with _open_validated_response(url, deadline=deadline, headers=_IMAGE_FETCH_HEADERS) as opened:
@@ -660,7 +731,11 @@ def _run_bounded_fetch(
     slots: threading.BoundedSemaphore,
     executor: ThreadPoolExecutor,
 ) -> _FetchResult | None:
-    """Return within one URL's waiting limit while bounding unfinished network workers globally.
+    """1 URL の待ち時間の上限内で結果を返しつつ、未完了のネットワーク処理の総数を全体で抑える。
+
+    取得枠が空いていなければ、取得元に何も送る前に FetchSlotsBusyError を送出する。
+
+    Return within one URL's waiting limit while bounding unfinished network workers globally.
 
     Raises FetchSlotsBusyError when no slot is free, before anything is sent to the origin.
     """
@@ -671,7 +746,8 @@ def _run_bounded_fetch(
     except Exception:
         slots.release()
         return None
-    # A timed-out DNS or read can continue; retain its slot until the worker actually exits.
+    # 日本語: タイムアウトした DNS 解決や読み取りは裏で動き続けうるので、ワーカーが実際に終わるまで枠を返さない。
+    # English: A timed-out DNS or read can continue; retain its slot until the worker actually exits.
     future.add_done_callback(lambda _future: slots.release())
     try:
         return future.result(timeout=URL_FETCH_TIMEOUT)
@@ -684,7 +760,10 @@ def _run_bounded_fetch(
 
 
 def fetch_url_document(url: str) -> FetchedUrlDocument | None:
-    """Fetch one page through the bounded worker pool."""
+    """上限つきのワーカープールでページを 1 つ取得する。取得枠が空いていなければ None。
+
+    Fetch one page through the bounded worker pool.
+    """
     try:
         return _run_bounded_fetch(_fetch_url_document_impl, url, slots=_fetch_slots, executor=_fetch_executor)
     except FetchSlotsBusyError:
@@ -692,7 +771,12 @@ def fetch_url_document(url: str) -> FetchedUrlDocument | None:
 
 
 def fetch_image_content(url: str) -> FetchedImageContent | None:
-    """Fetch one image through the image worker pool.
+    """画像用のワーカープールで画像を 1 枚取得する。
+
+    画像の枠がすべて使われているときは FetchSlotsBusyError を送出する。呼び出し側が「試していない」ことと
+    取得元の失敗を区別できるようにするため。
+
+    Fetch one image through the image worker pool.
 
     Raises FetchSlotsBusyError when every image slot is taken, so the caller can tell "not
     attempted" apart from an origin that failed.
@@ -722,7 +806,8 @@ def fetch_urls_documents(urls: list[str]) -> dict[str, FetchedUrlDocument]:
     try:
         future_to_url = {executor.submit(fetch_url_document, url): url for url in unique_urls}
         try:
-            # Concurrent starts make the per-URL limit tighter today; the turn limit stays an independent ceiling.
+            # 日本語: 現状は同時に開始するため URL ごとの上限のほうが厳しいが、ターン全体の上限も独立した天井として残す。
+            # English: Concurrent starts make the per-URL limit tighter today; the turn limit stays an independent ceiling.
             for future in as_completed(future_to_url, timeout=min(URL_FETCH_TIMEOUT, URL_FETCH_TURN_BUDGET)):
                 url = future_to_url[future]
                 try:
@@ -735,7 +820,8 @@ def fetch_urls_documents(urls: list[str]) -> dict[str, FetchedUrlDocument]:
         except FuturesTimeoutError:
             pass
     finally:
-        # A stalled resolver or read must not hold the chat turn after its waiting budget.
+        # 日本語: 名前解決や読み取りが止まっても、待ち時間の予算を過ぎたチャットのターンを引き止めない。
+        # English: A stalled resolver or read must not hold the chat turn after its waiting budget.
         executor.shutdown(wait=False, cancel_futures=True)
     return {url: result[url] for url in unique_urls if url in result}
 

@@ -1,3 +1,14 @@
+"""公開プロンプト・SKILL 投稿の読み取りと、投稿・いいね・コメント・取り込みなどの操作をまとめたサービス。
+
+HTTP や MCP などの transport から再利用できるように、DB 操作は SharedContentRepository などのリポジトリへ委ね、
+ここでは入力の正規化、一覧カーソルの検証、公開 URL の組み立て、SKILL の取り込み変換を担当する。
+
+Service for reading public prompt / SKILL posts and for posting, liking, commenting and importing them.
+
+Reusable from transports such as HTTP and MCP: database work is delegated to repositories such as SharedContentRepository,
+while this module normalizes input, validates list cursors, builds public URLs and converts SKILL posts for import.
+"""
+
 from __future__ import annotations
 
 import base64
@@ -32,6 +43,8 @@ from services.repositories.user_skill_repository import UserSkillRepository
 from services.share_common import ShareContentKind, build_public_share_url, build_share_url
 from services.user_skills import normalize_user_skill_instructions
 
+# 日本語: 一覧の既定／最大件数、スニペットの文字数、検索語の最大長。
+# English: Default and maximum list size, snippet length, and maximum query length.
 SHARED_CONTENT_DEFAULT_LIMIT = 20
 SHARED_CONTENT_MAX_LIMIT = 50
 SHARED_CONTENT_SNIPPET_LENGTH = 280
@@ -39,10 +52,14 @@ SHARED_CONTENT_MAX_QUERY_LENGTH = 500
 T = TypeVar("T")
 
 
+# 日本語: 一覧カーソルが不正、または別の検索条件向けだった場合の例外。
+# English: Raised when a list cursor is invalid or belongs to a different set of filters.
 class InvalidSharedContentCursorError(ValueError):
     """一覧カーソルが不正、または別の検索条件向けの場合に送出する。"""
 
 
+# 日本語: 公開投稿の一覧 1 件分（本文は含まずスニペットだけ）。
+# English: One entry of the public listing (a snippet instead of the full body).
 class PublicSharedContentSummary(BaseModel):
     prompt_id: int
     title: str
@@ -56,6 +73,8 @@ class PublicSharedContentSummary(BaseModel):
     public_url: AnyHttpUrl
 
 
+# 日本語: 公開投稿の一覧 1 ページ分。next_cursor は次ページがあるときだけ入る。
+# English: One page of the public listing; next_cursor is set only when another page exists.
 class PublicSharedContentPage(BaseModel):
     items: list[PublicSharedContentSummary] = Field(default_factory=list)
     limit: int
@@ -63,6 +82,8 @@ class PublicSharedContentPage(BaseModel):
     next_cursor: str | None = None
 
 
+# 日本語: SKILL に付く資源ファイルのメタデータ（本文なし）。
+# English: Metadata of a resource file attached to a SKILL (without its content).
 class PublicSkillResourceMetadata(BaseModel):
     path: str
     role: str
@@ -72,10 +93,14 @@ class PublicSkillResourceMetadata(BaseModel):
     sha256: str = ""
 
 
+# 日本語: メタデータに本文を加えた、SKILL の資源ファイル 1 件。
+# English: A SKILL resource file: the metadata plus its content.
 class PublicSkillResourceDetail(PublicSkillResourceMetadata):
     content: str = ""
 
 
+# 日本語: 公開投稿 1 件の詳細。SKILL の場合は本文・資源も含む。
+# English: Details of one public post, including the SKILL body and resources for SKILL posts.
 class PublicSharedContentDetail(BaseModel):
     prompt_id: int
     title: str
@@ -98,6 +123,8 @@ class PublicSharedContentDetail(BaseModel):
     public_url: AnyHttpUrl
 
 
+# 日本語: MCP などの transport から再利用できる、公開投稿の読み取りと操作のサービス。
+# English: Service for reading and operating on public posts, reusable from transports such as MCP.
 class SharedContentService:
     """MCP等のtransportから再利用できる公開投稿の読み取りサービス。"""
 
@@ -114,6 +141,8 @@ class SharedContentService:
         self._view_repository = PromptViewRepository()
         self._impression_repository = PromptImpressionRepository()
 
+    # 日本語: 渡されたセッションがあればそれで、無ければ自前で開いたセッションで読み取りを実行する。
+    # English: Run a read on the given session, or on one opened here when none is given.
     @staticmethod
     async def _read(
         session: AsyncSession | None,
@@ -124,6 +153,9 @@ class SharedContentService:
         async with session_scope() as owned_session:
             return await operation(owned_session)
 
+    # 日本語: 書き込みを実行する。セッションが渡されなければ自前でトランザクションを開き、成功時に確定する。
+    # 渡された場合は呼び出し側が確定する。
+    # English: Run a write. Without a given session it opens its own transaction and commits on success; with one, the caller commits.
     @staticmethod
     async def _write(
         session: AsyncSession | None,
@@ -134,6 +166,9 @@ class SharedContentService:
         async with session_scope() as owned_session, owned_session.begin():
             return await operation(owned_session)
 
+    # 日本語: 公開投稿を新しい順に 1 ページ返す。検索条件を指紋にしてカーソルへ埋め込み、条件が違うカーソルは拒否する。
+    # English: Return one page of public posts, newest first. A fingerprint of the filters is embedded in the cursor so a cursor from other
+    # filters is rejected.
     async def list_public_content(
         self,
         *,
@@ -205,6 +240,10 @@ class SharedContentService:
             next_cursor=next_cursor,
         )
 
+    # 日本語: 公開投稿 1 件の詳細を返す。無ければ None。SKILL では旧クライアント向けに scripts/main.py の本文も
+    # skill_python_script へ入れる。
+    # English: Return the details of one public post, or None. For SKILLs, the scripts/main.py body is also exposed as skill_python_script
+    # for old clients.
     async def get_public_content(
         self,
         prompt_id: int,
@@ -252,6 +291,8 @@ class SharedContentService:
             public_url=self._public_url(int(row["id"])),
         )
 
+    # 日本語: 公開 SKILL の資源ファイルの一覧（本文なし）を返す。SKILL でなければ ValueError。
+    # English: Return the resource metadata of a public SKILL; raises ValueError if the post is not a SKILL.
     async def list_public_skill_resources(
         self,
         prompt_id: int,
@@ -266,6 +307,8 @@ class SharedContentService:
             return None
         return await self._resource_metadata_for_prompt(session, int(row["id"]))
 
+    # 日本語: 公開 SKILL の資源ファイル 1 件を本文つきで返す。無ければ None。
+    # English: Return one resource file of a public SKILL with its content, or None if it does not exist.
     async def get_public_skill_resource(
         self,
         prompt_id: int,
@@ -299,6 +342,8 @@ class SharedContentService:
             content=self._resource_content(resource),
         )
 
+    # 日本語: ここから create_prompt の手前までは、リポジトリの読み取りを同じセッション規則（_read）で呼ぶだけの委譲。
+    # English: From here up to create_prompt, methods simply delegate to repository reads under the same session rule (_read).
     async def get_public_feed(
         self,
         *,
@@ -405,6 +450,8 @@ class SharedContentService:
             ),
         )
 
+    # 日本語: 閲覧数・表示回数の記録は書き込みなので _write を通す。
+    # English: Recording views and impressions is a write, so it goes through _write.
     async def record_public_view(
         self,
         prompt_id: int,
@@ -427,6 +474,8 @@ class SharedContentService:
             lambda active: self._impression_repository.increment_public_impressions(active, prompt_ids),
         )
 
+    # 日本語: 投稿と資源ファイルを同じトランザクションで作成し、投稿 ID を返す。
+    # English: Create a post and its resource files in one transaction and return the post ID.
     async def create_prompt(
         self,
         *,
@@ -466,6 +515,9 @@ class SharedContentService:
 
         return await self._write(session, operation)
 
+    # 日本語: 自分の投稿を更新する。resources が None なら資源は変えない。更新できたときだけ埋め込みの再計算を予約する。
+    # English: Update the user's own post. resources=None leaves resources unchanged; embedding recomputation is scheduled only when an
+    # update happened.
     async def update_prompt(
         self,
         *,
@@ -507,6 +559,9 @@ class SharedContentService:
             schedule_prompt_embedding(prompt_id)
         return updated
 
+    # 日本語: 自分の投稿を削除し、(削除前の添付ファイル, 削除件数) を返す。添付は呼び出し側がストレージから消すために使う。
+    # English: Delete the user's own post and return (attachments before deletion, deleted count); the caller uses the attachments to clean
+    # up storage.
     async def delete_prompt(
         self,
         *,
@@ -567,6 +622,9 @@ class SharedContentService:
             lambda active: self._repository.list_liked_prompts(active, user_id=user_id),
         )
 
+    # 日本語: 公開プロンプトを自分のタスクとして取り込む。(結果, HTTP ステータス) を返し、投稿が無い・本文が空の場合は 404/400。
+    # English: Import a public prompt as the user's own task. Returns (result, HTTP status): 404 if the post is missing, 400 if it has no
+    # body.
     async def import_prompt_as_task(
         self,
         *,
@@ -600,7 +658,10 @@ class SharedContentService:
         prompt_id: int,
         session: AsyncSession | None = None,
     ) -> tuple[dict[str, Any], int]:
-        """Import a public SKILL post into the user's reusable Skills."""
+        """公開された SKILL 投稿を、利用者の再利用できる Skill に取り込む。
+
+        Import a public SKILL post into the user's reusable Skills.
+        """
 
         async def operation(active: AsyncSession) -> tuple[dict[str, Any], int]:
             prompt = await self._repository.get_prompt_for_import(
@@ -612,7 +673,9 @@ class SharedContentService:
             if str(prompt.get("content_format") or "").strip().lower() != CONTENT_FORMAT_SKILL:
                 return {"error": ERROR_SHARED_SKILL_INVALID_TYPE}, 400
 
-            # Keep the published definition and its text resources together in
+            # 日本語: 公開された定義とテキスト資源を 1 つの Skill にまとめる。normalize_user_skill_instructions が、手で作った Skill と同じ
+            # 12,000 文字の上限を適用する。
+            # English: Keep the published definition and its text resources together in
             # the user Skill.  ``normalize_user_skill_instructions`` enforces
             # the same 12,000-character contract as manually-created Skills.
             instructions = normalize_user_skill_instructions(self._compose_task_prompt_template(prompt))
@@ -637,6 +700,9 @@ class SharedContentService:
 
         return await self._write(session, operation)
 
+    # 日本語: ここから report_comment までは、いいね・コメント・通報の操作をリポジトリへ渡す委譲。判定や重複抑止はリポジトリ側にある。
+    # English: From here to report_comment, methods hand like/comment/report operations to the repository, which owns the checks and
+    # duplicate suppression.
     async def remove_prompt_as_task(
         self,
         *,
@@ -766,6 +832,10 @@ class SharedContentService:
             ),
         )
 
+    # 日本語: 資源ファイルを Markdown のコードフェンスに変換する。本文に含まれるバッククォートより長いフェンスにして、
+    # 本文でフェンスが閉じないようにする。
+    # English: Render a resource file as a Markdown code fence, using a fence longer than any backtick run in the content so it cannot close
+    # early.
     @staticmethod
     def _resource_code_fence(resource: Mapping[str, Any]) -> str:
         path = str(resource.get("path") or "").strip()
@@ -780,6 +850,10 @@ class SharedContentService:
         fence = "`" * max(3, longest_run + 1)
         return f"## Resource: `{path}`\n\n{fence}{language}\n{content}\n{fence}"
 
+    # 日本語: タスク／Skill として取り込むための本文を組み立てる。通常の投稿は本文そのまま、SKILL は SKILL.md に
+    # 資源のコードフェンスを続ける。資源が無い旧形式では skill_python_script を scripts/main.py として補う。
+    # English: Build the body to import as a task or Skill. A normal post is used as is; a SKILL is its markdown
+    # followed by resource code fences, and for the legacy form without resources skill_python_script is added as scripts/main.py.
     @classmethod
     def _compose_task_prompt_template(cls, prompt: Mapping[str, Any]) -> str:
         if str(prompt.get("content_format") or "").strip().lower() != CONTENT_FORMAT_SKILL:
@@ -809,6 +883,8 @@ class SharedContentService:
                 )
         return "\n\n".join(parts) or str(prompt.get("content") or "")
 
+    # 日本語: 公開 SKILL の行を取得する。投稿が無ければ None、SKILL 以外なら ValueError。
+    # English: Fetch the row of a public SKILL: None if the post does not exist, ValueError if it is not a SKILL.
     async def _get_public_skill_row(
         self,
         session: AsyncSession,
@@ -834,6 +910,8 @@ class SharedContentService:
             for resource in await self._resource_repository.list_for_prompt(session, prompt_id)
         ]
 
+    # 日本語: 資源ファイルのデータからメタデータを作る。サイズが無ければ本文の UTF-8 バイト数で補う。
+    # English: Build metadata from resource data, falling back to the UTF-8 byte length of the content when no size is stored.
     @classmethod
     def _resource_metadata(cls, resource: object) -> PublicSkillResourceMetadata:
         data = cls._resource_mapping(resource)
@@ -852,6 +930,8 @@ class SharedContentService:
         data = cls._resource_mapping(resource)
         return str(data.get("text_content") or data.get("content") or "")
 
+    # 日本語: 資源を辞書として読めるようにする。Mapping はそのまま、Pydantic モデルは model_dump() で辞書にする。
+    # English: Make a resource readable as a mapping: a Mapping as is, a Pydantic model via model_dump().
     @staticmethod
     def _resource_mapping(resource: object) -> Mapping[str, Any]:
         if isinstance(resource, Mapping):
@@ -861,6 +941,9 @@ class SharedContentService:
             return model_dump()
         raise TypeError("resource must be a mapping or Pydantic model.")
 
+    # 日本語: 以下の _normalize_* は入力を検証して正規化する。不正な値は ValueError にして、transport 側で入力エラーとして扱えるようにする。
+    # English: The _normalize_* helpers below validate and normalize input; invalid values raise ValueError so transports can report an
+    # input error.
     @staticmethod
     def _normalize_limit(value: int) -> int:
         try:
@@ -908,6 +991,8 @@ class SharedContentService:
             raise ValueError(f"{field_name} is invalid.")
         return normalized
 
+    # 日本語: 検索条件の指紋（SHA-256 の先頭 16 文字）。カーソルが別の条件で発行されたものでないことを確かめるために使う。
+    # English: Fingerprint of the filters (first 16 hex chars of SHA-256), used to check that a cursor was issued for the same filters.
     @staticmethod
     def _filter_fingerprint(
         *,
@@ -929,6 +1014,8 @@ class SharedContentService:
         )
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
 
+    # 日本語: 作成日時・ID・条件の指紋を base64 にしたカーソルを作る。次ページはこの位置より後から読む。
+    # English: Build a cursor from the creation time, ID and filter fingerprint (base64); the next page continues after that position.
     @staticmethod
     def _encode_cursor(
         *,
@@ -947,6 +1034,9 @@ class SharedContentService:
         )
         return base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii").rstrip("=")
 
+    # 日本語: カーソルを (作成日時, ID) に戻す。壊れている、または条件の指紋が違う場合は InvalidSharedContentCursorError。
+    # English: Decode a cursor into (created_at, id); a corrupt cursor or a mismatched filter fingerprint raises
+    # InvalidSharedContentCursorError.
     @staticmethod
     def _decode_cursor(
         value: str | None,
@@ -993,6 +1083,8 @@ class SharedContentService:
             public_url=self._public_url(int(row["id"])),
         )
 
+    # 日本語: 空白をまとめ、上限を超える場合は切り詰めて「…」を付けたスニペットにする。
+    # English: Collapse whitespace and truncate with an ellipsis when over the snippet limit.
     @staticmethod
     def _make_snippet(value: str) -> str:
         normalized = " ".join(value.split())
@@ -1001,8 +1093,8 @@ class SharedContentService:
         return normalized[: SHARED_CONTENT_SNIPPET_LENGTH - 1].rstrip() + "…"
 
     def _public_url(self, prompt_id: int) -> str:
-        # 明示指定が無ければ共通の解決結果を使い、経路ごとのホスト差を防ぐ
-        # Fall back to the shared resolution so every transport agrees on the host.
+        # 日本語: 明示指定が無ければ共通の解決結果を使い、経路ごとのホスト差を防ぐ
+        # English: Fall back to the shared resolution so every transport agrees on the host.
         if not self._public_base_url:
             return build_public_share_url(ShareContentKind.PROMPT, prompt_id)
         return build_share_url(

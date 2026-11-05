@@ -1,3 +1,17 @@
+"""Brave Search による Web 検索と、その結果を回答の根拠として使うための一連の処理。
+
+検索 API の呼び出し・キャッシュ・月間クォータ、検索結果ページの本文取得とリンクの深掘り、根拠 ID の採番と引用 marker の解決、
+文脈ブロックの組み立て（文字数予算つき）、過去ターンの検索結果の再注入、保存用のシリアライズ、画面に出す出典 HTML を担当する。
+検索結果は外部の信頼できないデータとして扱い、文脈の制御タグは無害化してから差し込む。
+
+Web search through Brave Search and everything needed to use its results as answer evidence.
+
+Covers the search API call, caching and the monthly quota, reading result pages and following links, evidence ID assignment and
+citation-marker resolution, building context blocks under character budgets, re-injecting prior-turn results, serialization for
+storage, and the source HTML shown in the UI. Results are treated as untrusted external data and control tags are neutralized
+before they are inserted.
+"""
+
 from __future__ import annotations
 
 import contextvars
@@ -98,12 +112,16 @@ WEB_SEARCH_LINK_FOLLOW_CANDIDATES_PER_PAGE = 20
 WEB_SEARCH_LINK_FOLLOW_OVERALL_TIMEOUT_SECONDS = 30.0
 WEB_SEARCH_LINK_FOLLOW_PLANNER_CONTEXT_CHARS = 16000
 WEB_SEARCH_LINK_FOLLOW_MODEL = LIGHTWEIGHT_TASK_MODEL
-# Stable codes for UI status handling. User-facing wording is localized in the client;
+# 日本語: UI の状態処理に使う安定したコード。ユーザー向けの文言はクライアント側で翻訳するので、呼び出し側は翻訳後の
+# エラー文を照合して失敗を分類してはならない。
+# English: Stable codes for UI status handling. User-facing wording is localized in the client;
 # callers must not classify failures by matching translated error text.
 WEB_SEARCH_ERROR_CONFIGURATION = "web_search.configuration"
 WEB_SEARCH_ERROR_QUOTA_EXCEEDED = "web_search.quota_exceeded"
 WEB_SEARCH_ERROR_REQUEST_FAILED = "web_search.request_failed"
 
+# 日本語: 機密情報らしさを判定する文字列。含まれるトークンはログや文脈に出す前にマスクする。
+# English: Substrings that suggest a credential; tokens containing them are masked before reaching logs or context.
 _SENSITIVE_MARKERS = (
     "api_key",
     "api-key",
@@ -117,6 +135,8 @@ _SENSITIVE_MARKERS = (
     "aiza",
     "ghp_",
 )
+# 日本語: Brave Search が受け付ける search_lang の値。
+# English: The search_lang values that Brave Search accepts.
 _BRAVE_SEARCH_LANG_VALUES = {
     "ar",
     "eu",
@@ -211,6 +231,8 @@ _BRAVE_SEARCH_LANG_ALIASES = {
     "dk": "da",
     "ee": "et",
 }
+# 日本語: 検索言語の方針をモデルへ渡す指示文。ここで使えるコードを明示する。
+# English: Instruction text that tells the model how to choose the search language, listing the supported codes.
 _BRAVE_SEARCH_LANGUAGE_CODES = tuple(sorted(_BRAVE_SEARCH_LANG_VALUES))
 _SEARCH_LANGUAGE_POLICY = (
     "Search-language policy:\n"
@@ -226,6 +248,8 @@ _SEARCH_LANGUAGE_POLICY = (
     "language is still the best source language. Apply the same policy to every later search.\n"
     f"Supported Brave Search language codes: {', '.join(_BRAVE_SEARCH_LANGUAGE_CODES)}.\n"
 )
+# 日本語: 以下は、文字の Unicode 範囲から検索クエリの言語を推定するための表。
+# English: The tables below infer a query's language from the Unicode ranges of its characters.
 _CJK_UNIFIED_RANGES = (
     (0x3400, 0x4DBF),
     (0x4E00, 0x9FFF),
@@ -233,6 +257,7 @@ _CJK_UNIFIED_RANGES = (
     (0x20000, 0x2FA1F),
 )
 _JAPANESE_RANGES = (
+    # ひらがな・カタカナ・拡張カタカナ・半角カタカナの範囲。
     (0x3040, 0x309F),  # Hiragana
     (0x30A0, 0x30FF),  # Katakana
     (0x31F0, 0x31FF),  # Katakana phonetic extensions
@@ -258,6 +283,8 @@ _SCRIPT_LANGUAGE_RANGES = (
     ("ml", ((0x0D00, 0x0D7F),)),
     ("ru", ((0x0400, 0x04FF),)),
 )
+# 日本語: 言語固有の文字。漢字だけの文を日本語・繁体字中国語に、ラテン文字の文を各言語に振り分ける手がかりにする。
+# English: Language-specific characters used to tell Japanese from Traditional Chinese in Han-only text, and to tell Latin-script languages apart.
 _JAPANESE_HAN_HINTS = frozenset("観覧駅円験経済発働塩辺図広転売帰戦説読関気歳県変対楽")
 _TRADITIONAL_CHINESE_HINTS = frozenset("臺灣體學國與專覺樂萬")
 _UKRAINIAN_HINTS = frozenset("іїєґІЇЄҐ")
@@ -270,6 +297,9 @@ _GERMAN_HINTS = frozenset("ßẞ")
 _DANISH_HINTS = frozenset("æøåÆØÅ")
 _SWEDISH_HINTS = frozenset("åäöÅÄÖ")
 
+
+# 日本語: 根拠 ID を作る。URL を正規化したうえでハッシュにするので、結果の順序やターンが変わっても同じ URL は同じ ID になる。
+# English: Build an evidence ID; the URL is normalized and hashed so the same URL keeps its ID across result order and turns.
 def build_web_search_evidence_id(url: str) -> str:
     # URLを正規化し、検索順やターンをまたいでも変わらない根拠IDを生成する
     # Normalize a URL and derive a stable evidence ID independent of result order/turn.
@@ -363,6 +393,8 @@ class WebSearchResult:
 
 @dataclass(frozen=True)
 class _LinkFollowCandidate:
+    # 日本語: リンクを辿る候補 1 件。LLM に見せる candidate_id と、取得元ページの情報を持つ。
+    # English: One candidate link to follow, with the candidate_id shown to the LLM and its parent page info.
     candidate_id: str
     parent_url: str
     parent_title: str
@@ -374,12 +406,17 @@ class _LinkFollowCandidate:
 
 @dataclass(frozen=True)
 class _LinkFollowDecision:
+    # 日本語: リンク追跡の判断。sufficient が真なら情報が足りているので追跡せず、そうでなければ selected_ids の候補を辿る。
+    # English: The link-following decision: if sufficient, stop; otherwise follow the candidates in selected_ids.
     sufficient: bool
     selected_ids: tuple[str, ...] = ()
 
 
 class WebPageFetchBudget:
-    """Thread-safe page-fetch and response-wait budget shared by one answer."""
+    """1 つの回答で共有する、ページ取得の回数と応答待ち時間の予算。スレッドセーフ。
+
+    Thread-safe page-fetch and response-wait budget shared by one answer.
+    """
 
     def __init__(
         self,
@@ -409,6 +446,8 @@ class WebPageFetchBudget:
     def remaining_seconds(self) -> float:
         return max(0.0, self._deadline - time.monotonic())
 
+    # 日本語: requested 件の取得枠を予約し、実際に確保できた件数を返す。
+    # English: Reserve up to `requested` fetch attempts and return how many were actually granted.
     def reserve(self, requested: int) -> int:
         with self._lock:
             granted = min(max(0, requested), self.max_attempts - self._attempted)
@@ -417,7 +456,10 @@ class WebPageFetchBudget:
 
 
 class WebEvidenceContextBudget:
-    """Thread-safe Web-evidence character budget shared by one answer."""
+    """1 つの回答で共有する、Web 根拠の文字数予算。スレッドセーフ。
+
+    Thread-safe Web-evidence character budget shared by one answer.
+    """
 
     def __init__(self, max_chars: int = WEB_SEARCH_MAX_CONTEXT_CHARS) -> None:
         self.max_chars = max(1, min(int(max_chars), WEB_SEARCH_MAX_CONTEXT_CHARS))
@@ -434,10 +476,14 @@ class WebEvidenceContextBudget:
         with self._lock:
             return max(0, self.max_chars - self._consumed)
 
+    # 日本語: 1 回の検索結果メッセージに使える文字数。要求量と残り予算の小さいほう。
+    # English: Characters available to one search-result message: the smaller of the request and the remaining budget.
     def message_limit(self, requested: int) -> int:
         with self._lock:
             return min(max(0, int(requested)), self.max_chars - self._consumed)
 
+    # 日本語: 実際に使った文字数を予算から差し引く。上限は超えない。
+    # English: Deduct the characters actually used; never beyond the cap.
     def consume(self, used: int) -> None:
         with self._lock:
             self._consumed = min(
@@ -485,7 +531,10 @@ _bounded_int_env = partial(env_int_in_range, minimum=1, maximum=100)
 
 
 def create_web_page_fetch_budget() -> WebPageFetchBudget:
-    """Create the bounded page-fetch budget used for a single answer."""
+    """1 つの回答で使う、上限つきのページ取得予算を作る。環境変数で絞れるが、定数の上限は超えられない。
+
+    Create the bounded page-fetch budget used for a single answer.
+    """
     return WebPageFetchBudget(
         max_attempts=_bounded_int_env(
             "WEB_SEARCH_LINK_FOLLOW_MAX_PAGES",
@@ -506,7 +555,10 @@ def create_web_page_fetch_budget() -> WebPageFetchBudget:
 def create_web_evidence_context_budget(
     max_tool_calls: int = WEB_SEARCH_DEFAULT_MAX_TOOL_CALLS,
 ) -> WebEvidenceContextBudget:
-    """Create the Web-evidence context budget that covers every permitted tool call."""
+    """許可されたすべてのツール呼び出しを賄える Web 根拠の文脈予算を作る。
+
+    Create the Web-evidence context budget that covers every permitted tool call.
+    """
     permitted_calls = max(1, int(max_tool_calls))
     return WebEvidenceContextBudget(
         permitted_calls * WEB_SEARCH_TOOL_CONTEXT_MAX_CHARS
@@ -564,6 +616,8 @@ _CITATION_CHIP_HTML_PATTERNS = (
 )
 _CITATION_CHIP_STREAM_PREFIX = '<a class="web-search-citation"'
 _CITATION_CHIP_STREAM_CLOSING = "</a>"
+
+
 def _neutralize_context_delimiters(value: str) -> str:
     # コンテキスト制御タグの偽装を防止するために対象のタグを無害化する
     # Neutralize control tags to prevent indirect prompt injection.
@@ -588,7 +642,10 @@ _normalize_text = normalize_text
 
 
 def _parse_web_search_citation_marker(marker: str) -> tuple[str, bool]:
-    """Return the evidence ID and whether the marker uses a supported form."""
+    """引用 marker から根拠 ID を取り出し、サポートする形式で閉じているかを返す。
+
+    Return the evidence ID and whether the marker uses a supported form.
+    """
     lowered_marker = marker.lower()
     for prefix, closing, accepted in _CITATION_MARKER_STYLES:
         if not lowered_marker.startswith(prefix):
@@ -604,7 +661,10 @@ def _parse_web_search_citation_marker(marker: str) -> tuple[str, bool]:
 
 
 def strip_web_search_citation_html(text: str) -> str:
-    """Remove citation chip markup that the model wrote instead of a citation marker."""
+    """引用 marker の代わりにモデルが書いた出典チップの HTML を取り除く。
+
+    Remove citation chip markup that the model wrote instead of a citation marker.
+    """
     if not isinstance(text, str) or not text:
         return ""
     if CITATION_CHIP_CLASS not in text.lower():
@@ -617,7 +677,10 @@ def strip_web_search_citation_html(text: str) -> str:
 
 
 def _split_trailing_citation_chip_html(text: str) -> tuple[str, str]:
-    """Hold back a chip tag that the model has only partially streamed."""
+    """ストリーミングで途中までしか届いていない出典チップのタグを、公開せず保留として切り分ける。
+
+    Hold back a chip tag that the model has only partially streamed.
+    """
     lowered = text.lower()
     chip_start = lowered.rfind(_CITATION_CHIP_STREAM_PREFIX)
     if chip_start >= 0 and _CITATION_CHIP_STREAM_CLOSING not in lowered[chip_start:]:
@@ -639,7 +702,10 @@ def _split_trailing_citation_chip_html(text: str) -> tuple[str, str]:
 
 
 def _split_trailing_citation_marker(text: str) -> tuple[str, str]:
-    """Hold back a citation marker that the model has only partially streamed."""
+    """ストリーミングで途中までしか届いていない引用 marker を、公開せず保留として切り分ける。
+
+    Hold back a citation marker that the model has only partially streamed.
+    """
     lowered = text.lower()
     marker_candidates = [
         (lowered.rfind(prefix), closing)
@@ -651,7 +717,9 @@ def _split_trailing_citation_marker(text: str) -> tuple[str, str]:
         if closing not in text[marker_start:]:
             return text[:marker_start], text[marker_start:]
 
-    # Providers can split a marker prefix across token chunks. Keep the longest
+    # 日本語: プロバイダは marker の接頭辞をトークンの塊の途中で分割することがある。内部の引用構文が早く公開されないよう、
+    # 末尾が接頭辞の一部になっている最長の部分を保留する。
+    # English: Providers can split a marker prefix across token chunks. Keep the longest
     # possible prefix suffix so no internal citation syntax is published early.
     partial_prefix_length = max(
         (
@@ -668,12 +736,17 @@ def _split_trailing_citation_marker(text: str) -> tuple[str, str]:
 
 
 def split_web_search_citation_stream_text(text: str) -> tuple[str, str]:
-    """Split complete streamed text from a trailing partial citation marker or chip."""
+    """ストリーミングされた本文を、確定した部分と、末尾の途中の引用 marker／チップ（保留分）に分ける。
+
+    Split complete streamed text from a trailing partial citation marker or chip.
+    """
     complete, pending = _split_trailing_citation_marker(text)
     complete, chip_pending = _split_trailing_citation_chip_html(complete)
     return complete, f"{chip_pending}{pending}"
 
 
+# 日本語: リンクの深さを 0 から最大深さの範囲に丸める。不正な値は 0（検索結果ページ）にする。
+# English: Clamp a link depth into 0..max depth; invalid values become 0 (a search-result page).
 def _coerce_link_depth(value: Any) -> int:
     try:
         depth = int(value or 0)
@@ -962,6 +1035,7 @@ def _normalize_brave_search_lang(value: str) -> str:
 
 
 def _normalize_requested_search_language(value: Any) -> str:
+    # 任意のツール言語指定を正規化し、根拠のない既定言語は補わない。
     """Normalize an optional tool-call language without inventing a fallback."""
     normalized = str(value or "").strip().casefold()
     if normalized in {"", "auto", "user", "input", "same", "same-as-user", "same_as_user"}:
@@ -970,6 +1044,7 @@ def _normalize_requested_search_language(value: Any) -> str:
 
 
 def normalize_search_language(value: Any) -> str:
+    # モデルが指定した検索言語の正規化を公開する入口。
     """Public entry point for normalizing a model-supplied search language."""
     return _normalize_requested_search_language(value)
 
@@ -998,6 +1073,7 @@ def _contains_han(value: str) -> bool:
 
 
 def _detect_search_language(value: str) -> str:
+    # 漢字だけの入力を誤分類しないよう、文字体系からBraveの検索言語を推定する。
     """Infer a Brave Search language from the user's script without misclassifying Han text."""
     if _contains_japanese(value):
         return "jp"
@@ -1020,6 +1096,7 @@ def _detect_search_language(value: str) -> str:
                     return "sr"
             return language
 
+    # ラテン文字の言語判定には文脈が要るため、特徴的な文字だけを使いASCIIを英語と決めつけない。
     # Latin-script languages need lexical context for reliable detection. These
     # distinctive characters cover the common cases without adding a dependency
     # or treating every ASCII query as English-only in the image flow.
@@ -1370,6 +1447,7 @@ def _choose_links_for_followup(
 def _allow_explicit_valuable_followup(
     decision: _LinkFollowDecision | None,
 ) -> _LinkFollowDecision | None:
+    # 根拠が十分でも、明示的に選んだ価値の高いリンクを1件だけ追加で開けるようにする。
     """Allow one explicitly selected high-value link after evidence is sufficient."""
     if decision is None or not decision.sufficient or not decision.selected_ids:
         return decision
@@ -1867,6 +1945,7 @@ def _render_source_block(
         _neutralize_context_delimiters(source.url),
         quote=True,
     )
+    # 属性内の引用符やアンパサンドは展開で長くなるため、escape後に上限を適用する。
     # Apply the limit after escaping because '&' and quotes expand in attributes.
     safe_url = escaped_url[:320]
     safe_title = _neutralize_context_delimiters(
@@ -1911,6 +1990,7 @@ WEB_SEARCH_EVIDENCE_POLICY_LINES = (
 
 
 def build_web_search_evidence_policy_message() -> dict[str, str]:
+    # Web根拠を保持するターンの回答方針を返す。
     """Return the answering policy used by a turn that holds web evidence."""
     return {"role": "system", "content": "\n".join(WEB_SEARCH_EVIDENCE_POLICY_LINES)}
 
@@ -2091,6 +2171,7 @@ def serialize_web_search_result(result: WebSearchResult) -> dict[str, Any]:
 
 
 def serialize_web_search_result_for_storage(result: WebSearchResult) -> dict[str, Any]:
+    # 保存履歴を肥大化させないよう、出典と上限付き抜粋だけを残し、ページ全文と画像候補を除く。
     """Persist source references and bounded excerpts without page bodies or images."""
     compact_sources: list[WebSearchSource] = []
     for source in result.sources:

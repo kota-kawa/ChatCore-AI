@@ -1,3 +1,8 @@
+"""ヘルスチェック用の状態を組み立てる。liveness は常に ok、readiness は DB（必須）・Redis・埋め込み（任意）の状態をまとめて返す。
+
+Builds the health-check payloads. Liveness is always ok; readiness combines the database (required), Redis and embeddings (optional).
+"""
+
 from __future__ import annotations
 
 import logging
@@ -20,6 +25,8 @@ def get_liveness_status() -> dict[str, Any]:
 # データベースやRedisの接続状態を確認し、アプリがリクエストを受け入れ可能かを示す準備（Readiness）状態を返します。
 # Check database and Redis connections and return the readiness status of the application.
 async def get_readiness_status() -> tuple[dict[str, Any], int]:
+    # 日本語: DB が失敗すれば全体を error（503）にする。Redis や埋め込みの不調は必須ではないため、degraded（200）として返す。
+    # English: A database failure makes the whole result error (503); Redis or embedding trouble is optional and only reports degraded.
     components: dict[str, dict[str, Any]] = {}
     overall_ok = True
     degraded = False
@@ -28,6 +35,7 @@ async def get_readiness_status() -> tuple[dict[str, Any], int]:
     # Attempt database connection and verify access to key tables to ensure schema health.
     try:
         async with session_scope() as session:
+            # 日本語: 接続と主要テーブルの両方を確認する。クエリはごく小さくして、readiness が長いトランザクションを使わないようにする。
             # Check both connectivity and a core mapped table.  The query is
             # intentionally tiny so readiness never consumes a long-lived
             # application transaction.

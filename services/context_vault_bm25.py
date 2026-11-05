@@ -1,3 +1,4 @@
+# 個人コンテキスト候補の類似重複をBM25で絞り込む。
 """BM25-based near-duplicate filtering for personal-context candidates."""
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from services.bm25 import tokenize_bm25
 
 logger = logging.getLogger(__name__)
 
+# BM25で比較候補を絞り、語の重なりでコーパス規模に依存しない重複判定を行う。
 # BM25 narrows the comparison set; token overlap then provides a stable,
 # corpus-size-independent duplicate decision.
 BM25_DUPLICATE_TOP_K = 5
@@ -71,6 +73,7 @@ def filter_bm25_duplicates(
     candidates: list[dict[str, Any]],
     existing_documents: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    # 既存文書や同一バッチと類似重複する候補を除く。
     """Drop candidates near-duplicating existing documents or the same batch."""
     documents = [dict(document) for document in existing_documents]
     accepted: list[dict[str, Any]] = []

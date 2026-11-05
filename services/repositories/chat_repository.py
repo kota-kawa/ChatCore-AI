@@ -1,3 +1,4 @@
+# チャットが所有するデータへの非同期SQLAlchemy永続化境界。
 """Async SQLAlchemy persistence boundary for chat-owned data."""
 
 from __future__ import annotations
@@ -46,6 +47,7 @@ from services.share_common import (
 from services.tool_approval_parts import TOOL_APPROVAL_PART_TYPE, tool_approval_part
 
 DB_WRITE_MAX_ATTEMPTS = 3
+# 旧import名を保ちながら、再試行設定は共通定義を唯一の正本にする。
 # Keep the old repository-level name for callers that imported it while using
 # the shared share-token retry configuration as the single source of truth.
 DB_RETRY_BACKOFF_SECONDS = SHARED_TOKEN_RETRY_BACKOFF_SECONDS
@@ -124,6 +126,7 @@ _TREE_TURN_CONTEXT_COLUMNS: tuple[Any, ...] = (
 
 
 class RememberedFact(NamedTuple):
+    # ルーム内の記憶と、最後に言及した時刻をnaive UTCで保持する。
     """A room memory fact and when the user last mentioned it (naive UTC)."""
 
     fact: str
@@ -131,6 +134,7 @@ class RememberedFact(NamedTuple):
 
 
 class ChatRepository:
+    # ルーム・履歴・分岐・共有・記憶の永続化を担う。commitはサービスが所有する。
     """Repository for chat rooms, message history, branches, sharing and room memory.
 
     The repository never commits.  Services own the transaction and pass an
@@ -146,6 +150,7 @@ class ChatRepository:
         self.session = session
         self._token_generator = token_generator
 
+    # チャットルームと履歴。
     # Chat rooms and history -------------------------------------------------
 
     async def save_message(
@@ -185,6 +190,7 @@ class ChatRepository:
         web_search_context: list[dict[str, Any]] | None = None,
         attached_images: list[Any] | None = None,
     ) -> ChatHistory:
+        # 分岐へ追加した行をそのまま返し、JSONBを取得し直すDB読み取りを省く。
         """Append one message to the branch and return the stored row.
 
         Returning the row lets a caller reuse the encoded JSONB values it just
@@ -250,6 +256,7 @@ class ChatRepository:
         attached_file_contents: list[Any] | None = None,
         attached_images: list[Any] | None = None,
     ) -> dict[str, Any]:
+        # 質問追加と文脈取得を1トランザクションのツリー読み取りへまとめ、一貫したsnapshotと接続数を保つ。
         """Append one turn to the active branch and derive its context from a single tree read.
 
         The chat-post use case used to run three separate room-tree queries per
@@ -261,6 +268,7 @@ class ChatRepository:
 
         nodes, active_root_id = await self._load_room_tree(chat_room_id, columns=_TREE_TURN_CONTEXT_COLUMNS)
         path = self._walk_active_path(nodes, active_root_id, self._children_by_parent(nodes))
+        # 新しいターンは有効分岐の末尾を親にして追加する。
         # New turns extend the active branch: the parent is the current branch tip.
         parent_id = int(path[-1]["id"]) if path else None
         record = await self._insert_message(
@@ -397,6 +405,7 @@ class ChatRepository:
         return [serialize_room(room) for room in (await self.session.execute(stmt)).scalars().all()]
 
     async def set_room_pinned(self, room_id: str, user_id: int, pinned: bool) -> str | None:
+        # 所有するルームのピン状態を変更し、保存時刻または解除を表すNoneを返す。
         """Pin or unpin an owned room and return the stored pin time (``None`` when unpinned)."""
 
         room = await load_owned_room(self.session, room_id, user_id, ERROR_CHAT_ROOM_FORBIDDEN, lock=True)
@@ -479,6 +488,7 @@ class ChatRepository:
         return bool(result.rowcount)
 
     async def list_referenced_chat_image_ids(self) -> set[str]:
+        # 非表示の分岐も参照中として集計し、切り替え可能な会話の画像を掃除で消さないようにする。
         """Return every chat image id still referenced by a stored message, on any branch."""
 
         values = await self.session.scalars(
@@ -547,6 +557,7 @@ class ChatRepository:
         return str(row[1] or "normal")
 
     async def _load_share_row(self, room_id: str) -> dict[str, Any] | None:
+        # ルームが所有する共有リンクのライフサイクル行を読む。
         """Read the share-link lifecycle row owned by ``room_id``."""
 
         result = await self.session.execute(
@@ -575,6 +586,7 @@ class ChatRepository:
         expires_at: datetime | None = None,
         force_refresh: bool = False,
     ) -> dict[str, Any]:
+        # 失効した共有リンクを復活させず、新しいトークンを作って有効なリンクを返す。
         """Return the active share link for a room, minting a new token when needed.
 
         A revoked or expired row is replaced by a fresh token instead of being
@@ -613,6 +625,7 @@ class ChatRepository:
                 )
             )
             try:
+                # トークン衝突では挿入試行だけを戻し、外側のトランザクションにある他の書き込みを失わない。
                 # A collision must roll back only this insert attempt.  The
                 # caller may have other writes in the surrounding service
                 # transaction, so rolling back the whole AsyncSession here
@@ -630,6 +643,7 @@ class ChatRepository:
         raise RuntimeError("Failed to create shared chat token after collision retries.")
 
     async def revoke_shared_chat_token(self, room_id: str, user_id: int) -> dict[str, Any] | None:
+        # 共有リンクを失効させる。再失効でも最初の失効時刻を保ち、未発行ならNoneを返す。
         """Revoke the room's share link and return its resulting lifecycle state.
 
         ``None`` means the room never had a share link.  Re-revoking keeps the
@@ -712,6 +726,7 @@ class ChatRepository:
             },
         }
 
+    # 記憶した事実と要約。
     # Memory facts and summaries -------------------------------------------
 
     async def list_room_memory_facts(
@@ -833,6 +848,7 @@ class ChatRepository:
         await self.session.execute(statement)
         return summary
 
+    # 内部の補助処理。
     # Internal helpers -------------------------------------------------------
 
     async def _load_room_tree(
@@ -841,6 +857,7 @@ class ChatRepository:
         *,
         columns: tuple[Any, ...] = (),
     ) -> tuple[dict[int, dict[str, Any]], int | None]:
+        # 呼び出し元が必要とする列だけ読み、分岐の走査に不要な添付データの転送を避ける。
         """Load one room's message tree, transferring only the columns the caller reads.
 
         ``columns`` extends the navigation projection (``id`` / ``parent_id`` /
@@ -861,6 +878,7 @@ class ChatRepository:
 
     @staticmethod
     def _path_to_llm_messages(path: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # 有効な分岐経路をLLMへ渡すメッセージ列へ変換する。
         """Turn an active-branch path into the message list handed to the LLM."""
 
         messages: list[dict[str, Any]] = []
@@ -883,6 +901,7 @@ class ChatRepository:
 
     @staticmethod
     def _path_to_web_search_contexts(path: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # 有効な分岐経路に保存されたWeb検索根拠を集める。
         """Collect the web-search evidence stored along an active-branch path."""
 
         contexts: list[dict[str, Any]] = []

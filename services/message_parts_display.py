@@ -33,7 +33,11 @@ _DETAILS_TAG_RE = re.compile(r"<details\b|</details\s*>", re.IGNORECASE)
 
 
 def split_answer_trace_block(text: str) -> tuple[str, str]:
-    """Split a leading answer-trace block off ``text``.
+    """``text`` の先頭にある回答トレースのブロックを切り離す。
+
+    戻り値は ``(トレースのブロック, 残りの本文)``。先頭がトレースでなければトレースは ``""`` で、本文はそのまま返す。
+
+    Split a leading answer-trace block off ``text``.
 
     Returns ``(trace_block, remaining_text)``. When the text does not start with
     a trace block, the trace is ``""`` and the text is returned unchanged.
@@ -55,7 +59,12 @@ def split_answer_trace_block(text: str) -> tuple[str, str]:
 
 
 def apply_visual_part_contract(parts: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-    """Enforce visual exclusivity and keep the authored part order.
+    """視覚パーツの排他規則を適用し、書かれた順序は保つ。
+
+    生成 UI があれば Web 検索画像は落とす。生成 UI が無いときは、画像パーツを前後のテキストの間に残し、先頭の5枚だけ残す。
+    トレースを考慮した配置は、後で :func:`normalize_message_parts_for_display` が行う。
+
+    Enforce visual exclusivity and keep the authored part order.
 
     A generated UI wins over web-search images. Without a generated UI, inline
     image parts stay between their surrounding text parts, and only the first five
@@ -80,7 +89,13 @@ def apply_visual_part_contract(parts: list[dict[str, Any]] | None) -> list[dict[
 def normalize_message_parts_for_display(
     parts: list[dict[str, Any]] | None,
 ) -> list[dict[str, Any]]:
-    """Apply the display contract without re-validating payloads.
+    """ペイロードを再検証せずに、表示の規則を適用する。
+
+    :func:`apply_visual_part_contract` に加えて、先頭の回答トレースのブロックを独立したテキストパーツに分け、
+    トレースより前に保存された旧形式の画像が「回答までのステップ」の下に出るようにする。
+    インライン画像は前後のテキストの間に残る。ペイロードの検証は ``services.generative_ui._decode_message_parts`` の責務。
+
+    Apply the display contract without re-validating payloads.
 
     On top of :func:`apply_visual_part_contract`, a leading answer-trace block is
     split into its own text part so legacy images saved before the trace render

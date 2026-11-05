@@ -1,4 +1,7 @@
-"""Persistence operations for memo share links."""
+"""メモの共有リンク(shared_memo_entries)の作成・状態取得・失効・公開用データの取得。
+
+Persistence operations for memo share links.
+"""
 
 from __future__ import annotations
 
@@ -16,11 +19,16 @@ from services.share_common import TokenShareLifecycle
 
 
 class MemoShareRepository:
-    """Read and write share-link rows without owning the caller's transaction."""
+    """共有リンクの行を読み書きする。呼び出し側のトランザクションは持たない。
+
+    Read and write share-link rows without owning the caller's transaction.
+    """
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    # 日本語: トークンがあり、失効しておらず、期限内なら有効とみなす(判定は TokenShareLifecycle に集約)。
+    # English: A link is active when it has a token, is not revoked and has not expired; the rule lives in TokenShareLifecycle.
     @staticmethod
     def _is_active(row: Any) -> bool:
         expires_at = row.get("expires_at") if hasattr(row, "get") else None
@@ -28,6 +36,10 @@ class MemoShareRepository:
         share_token = row.get("share_token") if hasattr(row, "get") else None
         return TokenShareLifecycle(share_token, expires_at, revoked_at).is_active
 
+    # 日本語: 共有リンクを作る。force_refresh でなければ、有効な既存リンクを再利用して is_reused=True で返す。
+    # メモごとに 1 行(memo_entry_id が一意)で、再発行時は同じ行のトークン・期限を上書きして失効を解除する。
+    # English: Creates a share link; unless force_refresh, a still-active link is reused and returned with is_reused=True.
+    # There is one row per memo (unique memo_entry_id), so reissuing overwrites its token and expiry and clears the revocation.
     async def create_or_get(
         self,
         memo_id: int,
@@ -103,6 +115,8 @@ class MemoShareRepository:
             }
         return {**dict(row), "is_reused": False}
 
+    # 日本語: 共有状態の取得。所有者のゴミ箱外のメモでなければ 404。共有行が無ければ None。
+    # English: Returns the share state; 404 unless the memo is the user's and not trashed. None when no share row exists.
     async def get_state(self, memo_id: int, user_id: int) -> dict[str, Any] | None:
         owner = await self.session.scalar(
             select(MemoEntry.id).where(
@@ -123,6 +137,8 @@ class MemoShareRepository:
         row = result.mappings().first()
         return dict(row) if row is not None else None
 
+    # 日本語: 共有を失効させる(行は残し revoked_at だけ立てる)。共有行が無ければ None。
+    # English: Revokes sharing by setting revoked_at while keeping the row; returns None when there is no share row.
     async def revoke(self, memo_id: int, user_id: int) -> dict[str, Any] | None:
         owner = await self.session.scalar(
             select(MemoEntry.id).where(
@@ -146,6 +162,8 @@ class MemoShareRepository:
         row = result.mappings().first()
         return dict(row) if row is not None else None
 
+    # 日本語: 共有トークンから公開用のメモ内容を返す。ゴミ箱のメモ・失効済み・期限切れはどれも「見つからない」(404)として区別しない。
+    # English: Returns the public memo content for a token; trashed, revoked and expired links are all indistinguishably "not found" (404).
     async def get_public_payload(self, token: str) -> dict[str, Any]:
         result = await self.session.execute(
             select(

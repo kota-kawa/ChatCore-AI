@@ -1,3 +1,14 @@
+"""API の JSON 応答を作る共通ヘルパー。
+
+JSON ボディの取得と検証、サービス層のエラーやレート制限・内部エラーの統一形式での応答、
+システムメッセージの多言語化を担当する。services/web.py 経由で各ルーターが使う。
+
+Shared helpers that build the API's JSON responses.
+
+Handles reading and validating the JSON body, unified responses for service errors, rate limits and internal errors,
+and localization of system messages. Routers use them through services/web.py.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -20,6 +31,8 @@ logger = logging.getLogger(__name__)
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
+# 日本語: コードを持たない旧来の日本語エラー文から、機械可読なエラーコードへの対応表。未登録の文は "api_error" になる。
+# English: Maps legacy Japanese error texts without a code to machine-readable error codes; unlisted texts become "api_error".
 _ERROR_CODES_BY_TEXT = {
     "ログインが必要です": "auth.login_required",
     "ログインが必要です。": "auth.login_required",
@@ -31,7 +44,10 @@ _ERROR_CODES_BY_TEXT = {
 
 
 def _localize_system_payload(payload: Any, status_code: int) -> Any:
-    """Localize only top-level system fields, never nested user content."""
+    """最上位のシステム用フィールドだけを翻訳し、入れ子になった利用者のコンテンツには触れない。
+
+    Localize only top-level system fields, never nested user content.
+    """
     if not isinstance(payload, dict):
         return payload
 

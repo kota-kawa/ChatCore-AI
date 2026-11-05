@@ -43,6 +43,8 @@ class ChatGenerationCapacityError(RuntimeError):
 # 生成ジョブ専用プールと、その使用中スロット数を保持するシングルトン。
 # Singleton holding the generation-only pool and the number of slots currently in use.
 class _GenerationExecutor:
+    # プールは最初に使われるまで作らない。_in_flight は枠の確保から完了コールバックまでの間だけ数える
+    # The pool is not created until first use; _in_flight counts a slot from admission until the done callback
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._executor: ThreadPoolExecutor | None = None
@@ -63,15 +65,21 @@ class _GenerationExecutor:
             )
         return self._executor
 
+    # プールを返す（未作成なら作る）
+    # Return the pool, creating it if needed
     def get(self) -> ThreadPoolExecutor:
         with self._lock:
             return self._ensure_executor_locked()
 
+    # 同時に実行できる生成ジョブ数の上限を返す
+    # Return the ceiling on concurrently running generation jobs
     def capacity(self) -> int:
         with self._lock:
             self._ensure_executor_locked()
             return self._capacity
 
+    # いま枠を占有している生成ジョブ数を返す
+    # Return how many generation jobs currently hold a slot
     def in_flight(self) -> int:
         with self._lock:
             return self._in_flight
@@ -87,6 +95,8 @@ class _GenerationExecutor:
                 )
             self._in_flight += 1
 
+        # ジョブの完了時（成功・失敗・キャンセルのいずれでも）に枠を返す
+        # Give the slot back when the job finishes, whether it succeeded, failed or was cancelled
         def _release(_future: Future[Any]) -> None:
             with self._lock:
                 self._in_flight = max(self._in_flight - 1, 0)
@@ -100,6 +110,8 @@ class _GenerationExecutor:
         # submitting context into the worker.
         context = contextvars.copy_context()
 
+        # 投入自体が失敗した場合は完了コールバックが付かないため、ここで枠を戻す
+        # If the submit itself fails no done callback is attached, so return the slot here
         try:
             future: Future[T] = executor.submit(context.run, func, *args, **kwargs)
         except BaseException:
@@ -109,6 +121,8 @@ class _GenerationExecutor:
         future.add_done_callback(_release)
         return future
 
+    # プールを閉じて枠の数え直しを 0 に戻す。次に使うときに再作成される
+    # Close the pool and reset the slot count to 0; it is recreated on next use
     def shutdown(self, *, wait: bool = True, cancel_futures: bool = False) -> None:
         with self._lock:
             executor = self._executor

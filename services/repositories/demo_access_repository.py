@@ -1,4 +1,10 @@
-"""SQLAlchemy persistence for demo access codes."""
+"""デモ用アクセスコード(demo_access_codes)の永続化。コードはダイジェストで保持し、期限切れの削除対象を取得する。
+
+services/demo_access.py と services/usage_limits.py から使われる。
+
+SQLAlchemy persistence for demo access codes.
+Used by services/demo_access.py and services/usage_limits.py.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +17,10 @@ from services.models import DemoAccessCode
 
 
 class DemoAccessRepository:
-    """Read and lock demo access code rows; the service owns the transaction."""
+    """デモ用アクセスコードの行を読み取り・ロックする。トランザクションは Service 側が持つ。
+
+    Read and lock demo access code rows; the service owns the transaction.
+    """
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -53,6 +62,8 @@ class DemoAccessRepository:
         )
         return list(result)
 
+    # 日本語: デモユーザーに紐づくコードの有効期限を返す(通常ユーザーなら None)。
+    # English: Returns the expiry of the code tied to a demo user, or None for a regular user.
     async def expiry_for_user(self, user_id: int) -> datetime | None:
         return await self.session.scalar(
             select(DemoAccessCode.expires_at).where(DemoAccessCode.user_id == int(user_id))

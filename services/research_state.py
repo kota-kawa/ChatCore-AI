@@ -1,4 +1,10 @@
-"""Single semantic state for one chat turn.
+"""1 回のチャットターンで保持する、意味的な状態(TurnState)をまとめたモジュール。
+
+``TurnState`` はモデルの判断と判断の間で引き継ぐ唯一のチェックポイント。ツールの生の応答は外部の証拠ストアが持ち、
+ここには再取得に必要な安定した参照だけを残す。そのため、状態を投影しても検索テキストを切り詰めたり、
+先頭/末尾の断片を抜き出したりしない。services/chat_generation_agent_loop.py などの生成ループが使う。
+
+Single semantic state for one chat turn.
 
 ``TurnState`` is the only checkpoint carried between model decisions. Raw tool responses are
 owned by an external evidence store; this module keeps only stable references needed to find
@@ -16,13 +22,18 @@ from typing import Any
 from services.chat_context import estimate_token_count
 from services.chat_prompt import insert_before_latest_user_message
 
+# 日本語: 状態を system メッセージとして差し込むときの開始/終了タグと、投影の既定トークン上限。
+# English: Opening/closing tags for the state injected as a system message, and the default projection token cap.
 TURN_STATE_MARKER = "<turn_state>"
 TURN_STATE_CLOSE_MARKER = "</turn_state>"
 DEFAULT_TURN_STATE_MAX_TOKENS = 6_000
 
 
 def _normalize_text(value: Any) -> str:
-    """Normalize model-produced text without discarding any part of it."""
+    """モデルが出したテキストの空白を整える。内容は一切捨てない。
+
+    Normalize model-produced text without discarding any part of it.
+    """
     if not isinstance(value, str):
         return ""
     return " ".join(value.split()).strip()
@@ -40,7 +51,10 @@ def _normalized_unique_strings(value: Any) -> list[str]:
 
 
 def is_reference_context_message(message: Mapping[str, Any]) -> bool:
-    """Return whether a system message is a generated reference-data block."""
+    """system メッセージが、生成された参照データのブロック(選択した参照・Web 検索結果)かどうかを返す。
+
+    Return whether a system message is a generated reference-data block.
+    """
     if message.get("role") != "system":
         return False
     content = str(message.get("content") or "").lstrip()
@@ -54,12 +68,18 @@ def is_reference_context_message(message: Mapping[str, Any]) -> bool:
 
 
 class TurnStateProjectionError(ValueError):
-    """Raised when a complete state cannot fit the caller's projection budget."""
+    """完全な状態が、呼び出し側の投影の予算に収まらないときに送出する。
+
+    Raised when a complete state cannot fit the caller's projection budget.
+    """
 
 
 @dataclass(frozen=True)
 class Fact:
-    """A model-selected fact and the evidence records supporting it."""
+    """モデルが選んだ事実と、それを裏付ける証拠の ID。
+
+    A model-selected fact and the evidence records supporting it.
+    """
 
     statement: str
     evidence_ids: tuple[str, ...] = ()
@@ -73,7 +93,12 @@ class Fact:
 
 @dataclass(frozen=True)
 class EvidenceReference:
-    """Lookup metadata for evidence whose full content is stored externally.
+    """全文を外部に保存している証拠への参照(再取得用のメタデータ)。
+
+    ``search_ids`` は、この証拠を含む外部保存のツール応答を指す。``external_path`` は Web 以外のペイロード内の
+    レコードを指す(任意)。
+
+    Lookup metadata for evidence whose full content is stored externally.
 
     ``search_ids`` identify the externally stored tool responses containing this evidence.
     ``external_path`` optionally identifies the record inside a non-web payload.
@@ -117,7 +142,10 @@ class EvidenceReference:
 
 @dataclass(frozen=True)
 class SearchExecution:
-    """One executed lookup and the keys for its externally stored result."""
+    """実行した検索 1 回と、その結果を外部から引くためのキー。
+
+    One executed lookup and the keys for its externally stored result.
+    """
 
     search_id: str
     tool_name: str
@@ -147,7 +175,13 @@ class SearchExecution:
 
 @dataclass
 class TurnState:
-    """The sole model-maintained state for a normal chat turn.
+    """通常のチャットターンでモデルが維持する唯一の状態。
+
+    モデルの更新は、メモや要約を追記するのではなく、渡された意味的な項目を置き換える。これにより、新しい証拠で事実を
+    訂正し、未解決の質問を解消できる。``executed_searches`` はツール実行の台帳、``evidence_refs`` は呼び出し側の
+    外部証拠ストアへのポインタのうち、モデルが選べる作業セット。
+
+    The sole model-maintained state for a normal chat turn.
 
     Model updates replace supplied semantic fields instead of appending notes or summaries. This
     lets new evidence correct facts and resolve open questions. ``executed_searches`` is a tool
@@ -167,6 +201,8 @@ class TurnState:
         self.unresolved_questions = _normalized_unique_strings(self.unresolved_questions)
         self.facts = [fact for fact in self.facts if isinstance(fact, Fact) and fact.statement]
 
+    # 日本語: 実行済みの検索と重複しない "search-N" 形式の ID を採番する。
+    # English: Allocates a "search-N" id that does not collide with an executed search.
     def _next_search_id(self) -> str:
         used = {search.search_id for search in self.executed_searches}
         index = len(self.executed_searches) + 1
@@ -201,6 +237,8 @@ class TurnState:
             ),
         )
 
+    # 日本語: 同じ証拠 ID が既にあれば、検索 ID は和集合にし、タイトル等は既存の値を優先して統合する。
+    # English: If the evidence id already exists, merges by taking the union of search ids and preferring existing title/url/path values.
     def _store_evidence_ref(self, reference: EvidenceReference) -> None:
         existing = self.evidence_refs.get(reference.evidence_id)
         if existing is None:
@@ -222,7 +260,12 @@ class TurnState:
         *,
         search_id: str = "",
     ) -> tuple[str, ...]:
-        """Register metadata returned by an external evidence store.
+        """外部の証拠ストアが返したメタデータを登録する。
+
+        メタデータだけを受け付ける。生のスニペットやページ本文、参照ペイロードの中身は ``EvidenceReference`` に
+        入れる欄が無いので、次の状態の投影に漏れることがない。
+
+        Register metadata returned by an external evidence store.
 
         The method deliberately accepts metadata only. Raw snippets, page bodies, or reference
         payload contents have no field in ``EvidenceReference`` and therefore cannot leak into
@@ -252,7 +295,10 @@ class TurnState:
         freshness: str = "",
         status: str = "",
     ) -> SearchExecution:
-        """Record one tool execution and link evidence-store metadata to it."""
+        """ツールの実行 1 回を記録し、証拠ストアのメタデータをそれに結び付ける。
+
+        Record one tool execution and link evidence-store metadata to it.
+        """
         resolved_search_id = self._resolve_search_id(search_id)
         evidence_ids = self.record_evidence_refs(
             evidence_refs,
@@ -271,7 +317,13 @@ class TurnState:
         return execution
 
     def apply_model_update(self, update: Mapping[str, Any] | None) -> None:
-        """Apply a canonical state update produced by the main model.
+        """メインのモデルが出した正規の状態更新を適用する。
+
+        ``update`` に含まれる項目は以前の値を置き換える。特に ``facts`` の置き換えは訂正を、
+        ``unresolved_questions`` の置き換えは解消の記録を表す。``evidence_ids`` を渡すと、作業セットの参照は
+        モデルが選んだ証拠(と事実が使う証拠)に絞られるが、生の結果は呼び出し側の証拠ストアと検索台帳から復元できる。
+
+        Apply a canonical state update produced by the main model.
 
         Fields present in ``update`` replace their previous values. In particular, replacing
         ``facts`` supports corrections and replacing ``unresolved_questions`` records resolution.
@@ -292,6 +344,10 @@ class TurnState:
             )
 
         if "facts" in update:
+            # 日本語: 事実が参照できる証拠 ID は、登録済みのものに限る(モデルが存在しない ID を
+            # 作っても落とす)。同じ文言の事実は 1 件にまとめる。
+            # English: A fact may cite only registered evidence ids (invented ids are dropped), and
+            # facts with identical text are collapsed into one.
             known_evidence_ids = set(self.evidence_refs)
             replacement: list[Fact] = []
             seen_statements: set[str] = set()
@@ -336,7 +392,10 @@ class TurnState:
             self.ready_to_answer = update["ready_to_answer"]
 
     def evidence_lookup(self, evidence_id: str) -> tuple[tuple[str, str], ...]:
-        """Return ``(search_id, external_path)`` coordinates for external retrieval."""
+        """外部から再取得するための ``(search_id, external_path)`` の組を返す。
+
+        Return ``(search_id, external_path)`` coordinates for external retrieval.
+        """
         reference = self.evidence_refs.get(evidence_id)
         if reference is None:
             return ()
@@ -358,7 +417,12 @@ class TurnState:
         }
 
     def render(self, *, max_tokens: int | None = None) -> str:
-        """Render the complete state as untrusted data, without lossy truncation."""
+        """完全な状態を、信頼できないデータとして描画する。欠落を伴う切り詰めはしない。
+
+        予算(max_tokens)を超える場合は切り詰めずに TurnStateProjectionError にして、呼び出し側にモデルによる状態更新を促す。
+
+        Render the complete state as untrusted data, without lossy truncation.
+        """
         payload = json.dumps(self.as_dict(), ensure_ascii=False, separators=(",", ":"))
         rendered = (
             f"{TURN_STATE_MARKER}\n"
@@ -385,7 +449,12 @@ class TurnState:
         *,
         max_tokens: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Project base conversation plus state without replaying raw tool history."""
+        """会話の土台に状態を足したメッセージ列を作る。生のツール履歴は再送しない。
+
+        tool メッセージ、ツール呼び出しを含む assistant メッセージ、生成された参照データ、古い TurnState は除く。
+
+        Project base conversation plus state without replaying raw tool history.
+        """
         prepared = [
             dict(message)
             for message in base_messages

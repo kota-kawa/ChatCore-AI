@@ -1,4 +1,7 @@
-"""Reconcile stored avatar files with the URLs users still reference."""
+"""保存済みのアバター画像ファイルを、ユーザーがまだ参照している URL と突き合わせて整理する。
+
+Reconcile stored avatar files with the URLs users still reference.
+"""
 
 from __future__ import annotations
 

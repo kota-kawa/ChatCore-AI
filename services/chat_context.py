@@ -1,3 +1,10 @@
+"""LLM に渡す会話コンテキスト（基本指示、プロフィール、要約、記憶、直近履歴）をトークン予算内で組み立てる。
+
+Builds the conversation context sent to the LLM (base prompt, profile, summary, memory, recent history) within token budgets.
+各メッセージは CJK を考慮したトークン見積もりで切り詰め、必須の system メッセージと直近履歴を先に確保する。
+Messages are trimmed using a CJK-aware token estimate, reserving the mandatory system messages and recent history first.
+"""
+
 from __future__ import annotations
 
 import html
@@ -50,6 +57,9 @@ _CJK_PATTERN = re.compile(
 _CJK_CHARS_PER_TOKEN = 1.5
 _LATIN_CHARS_PER_TOKEN = 4.0
 
+# これはアプリが入力に割り当てる予算であり、LLM プロバイダーのコンテキストウィンドウの上限ではない。
+# 固定の製品プロンプトと直近の1ターン全体が収まる余裕を意図的に残している。
+# プロバイダー固有のリクエスト上限の最終的な判定は、各プロバイダーの API 側に任せる。
 # This is an application input budget, not an LLM provider context-window limit.
 # It deliberately leaves sufficient room for the fixed product prompt and a
 # complete recent turn. Provider-specific APIs remain the final authority on
@@ -172,11 +182,16 @@ def trim_text_to_token_budget(text: str, max_tokens: int) -> str:
 
 
 def _trim_user_text_preserving_trailing_request(text: str, max_tokens: int) -> str:
-    """Keep both the subject and trailing constraints in an oversized user turn."""
+    """長すぎるユーザー発話で、主題と末尾の指定（質問・形式・例外）の両方を残す。
+
+    Keep both the subject and trailing constraints in an oversized user turn.
+    """
     normalized = normalize_message_text(text)
     if estimate_token_count(normalized) <= max_tokens:
         return normalized
 
+    # 貼り付けた長い資料は、実際の質問・希望する形式・例外が末尾に書かれていることが多い。
+    # 主題が分かるよう先頭を少しだけ残し、末尾を多め（7割）に確保する。
     # Long pasted material often ends with the actual question, requested
     # format, or an exception. Preserve that tail while keeping a small leading
     # slice so the request still has a subject.
@@ -205,11 +220,16 @@ def _trim_user_text_preserving_trailing_request(text: str, max_tokens: int) -> s
 
 
 def _split_leading_reference_context(text: str) -> tuple[str, str] | None:
-    """Split generated reference prefixes from the user's trailing request."""
+    """生成された参照ブロックの前置きと、ユーザー自身の末尾の依頼を分ける。
+
+    Split generated reference prefixes from the user's trailing request.
+    """
     normalized = normalize_message_text(text)
     if not _REFERENCE_CONTEXT_START_PATTERN.match(normalized):
         return None
 
+    # URL と添付のブロックは実際の依頼の前に生成され、空行で区切られている。
+    # 両方のブロックを含むターンでも1つの参照文脈として扱えるよう、最後のブロック境界を使う。
     # URL and attachment blocks are generated before the actual user request and
     # separated from it by a blank line. Use the final generated block boundary so
     # a turn containing both blocks keeps them together as reference context.
@@ -229,7 +249,10 @@ def _trim_latest_message_to_token_budget(
     role: str,
     max_tokens: int,
 ) -> str:
-    """Trim the newest message while preserving a trailing user request first."""
+    """最新のメッセージを切り詰める。ユーザーの末尾の依頼を最優先で残し、参照ブロックから先に縮める。
+
+    Trim the newest message while preserving a trailing user request first.
+    """
     normalized_content = normalize_message_text(content)
     if estimate_token_count(normalized_content) <= max_tokens:
         return normalized_content
@@ -256,10 +279,12 @@ def _trim_latest_message_to_token_budget(
     return f"{trimmed_reference}{separator}{user_request}"
 
 
-# 会話履歴の古いメッセージから、要約情報（XML形式）を作成する
-# Build a summary (XML format) from the older messages in the conversation history
+# 会話履歴のうち、要約に回す古いメッセージを選ぶ（直近のやり取りは残す）
+# Select the older conversation messages to summarize, leaving the recent exchange out
 def select_archived_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
     """要約対象となる古いメッセージを切り出す / Split off the older messages to summarize."""
+    # 直近の窓はメッセージ数とトークン量の両方で決める。生成 UI のような長い回答は
+    # 数ターンで履歴の予算を使い切るため、件数だけでは要約すべき時点を判断できない。
     # Keep a recent window by both message count and token size. A generated UI
     # or other long answer can exhaust the history budget in only a few turns,
     # so message count alone is not sufficient to decide when to summarize.
@@ -274,6 +299,7 @@ def select_archived_messages(messages: list[dict[str, str]]) -> list[dict[str, s
     recent_tokens = 0
     for recent_count, index in enumerate(reversed(range(len(messages)))):
         message_tokens = estimate_token_count(messages[index].get("content", ""))
+        # 最新のやり取り（直近2件）は必ず残し、それより古いものはトークン窓に収まる間だけ残す。
         # Always retain the latest pair. Older messages are retained only while
         # they fit the rolling token window.
         if recent_count >= 2 and (
@@ -303,6 +329,8 @@ def render_summary_context(body_sections: list[str], archived_count: int) -> str
     return trim_text_to_token_budget(summary, SUMMARY_TOKEN_BUDGET)
 
 
+# 古いメッセージから、最初の依頼・ユーザーの要点・アシスタントの要点を並べた要約文脈と、要約したメッセージ数を返す
+# Build a summary context (first goal, user points, assistant points) from older messages, plus the number of messages summarized
 def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
     archived_messages = select_archived_messages(messages)
     if not archived_messages:
@@ -386,7 +414,10 @@ def select_recent_messages(
     remaining_tokens = token_budget
 
     def with_images(message: dict[str, Any], content: str, *, always: bool = False) -> dict[str, Any]:
-        """Return the selected message, keeping its images when they fit the remaining budget."""
+        """選んだメッセージを返す。画像は残りの予算に収まるときだけ付ける（always なら常に付ける）。
+
+        Return the selected message, keeping its images when they fit the remaining budget.
+        """
         nonlocal remaining_tokens
         selected: dict[str, Any] = {"role": message["role"], "content": content}
         image_inputs = message.get(IMAGE_INPUTS_KEY)
@@ -397,6 +428,8 @@ def select_recent_messages(
                 remaining_tokens -= image_tokens
         return selected
 
+    # まず最新のメッセージを入れ、その直前の2件も縮めた形で残す。この窓を先に確保することで、
+    # 長いアシスタント回答が、それに答えているユーザーの指示を押し出すのを防ぐ。
     # Include the newest message first and retain a compact representation of
     # the two preceding messages. Allocating that window up front prevents one
     # long assistant answer from dropping the user instruction that it answers.
@@ -426,6 +459,8 @@ def select_recent_messages(
         remaining_tokens -= estimate_token_count(content)
         selected_reversed.append(with_images(message, content))
 
+    # 残りの容量を、より古い履歴で埋める。大きすぎるメッセージは縮めた形で残し、
+    # そこで打ち切らずに先へ進む。
     # Fill the remaining capacity with older history. If a message is too large,
     # preserve a bounded version and keep walking instead of terminating early.
     older_end = max(0, len(normalized_messages) - guaranteed_count)
@@ -540,6 +575,8 @@ def build_context_messages(
         estimate_token_count(str(message.get("content", "")))
         for message in [*mandatory_messages, runtime_context_message]
     )
+    # 任意の system 文脈より先に、直近履歴の枠を確保する。プロジェクトやタスクの指示が長くても
+    # 過去のターンが残るようにするため。
     # Reserve the recent-history window before optional system context. This
     # keeps prior turns available even when a project or task has long guidance.
     reserved_history_tokens = min(
@@ -553,6 +590,10 @@ def build_context_messages(
     optional_messages: list[dict[str, str]] = []
     dynamic_messages: list[dict[str, str]] = []
 
+    # 任意の system 文脈を、個別の上限と残りの予算の小さい方まで縮めて追加する。
+    # dynamic=True のものは履歴の後ろ（最新発話の直前）に挿入するため別のリストへ入れる。
+    # Add an optional system context trimmed to the smaller of its own limit and the remaining budget.
+    # dynamic=True entries go to a separate list because they are inserted after the history (just before the latest message).
     def append_optional_system_message(content: str | None, limit: int, *, dynamic: bool = False) -> None:
         nonlocal optional_tokens_remaining
         if not content or optional_tokens_remaining <= 0:

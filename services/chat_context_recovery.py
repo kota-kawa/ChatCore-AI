@@ -1,4 +1,7 @@
-"""Bounded conversation context for retrying a rejected model request."""
+"""モデルに拒否されたリクエストを再試行するための、サイズを抑えた会話文脈を組み立てる。
+
+Bounded conversation context for retrying a rejected model request.
+"""
 
 from typing import Any
 
@@ -12,13 +15,21 @@ RECOVERY_HISTORY_TOKEN_BUDGET = 1500
 def build_recovery_base_messages(
     messages: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Keep base guidance, the preceding exchange, and the latest user input.
+    """基本の指示、直前のやり取り、最新のユーザー入力だけを残す。
+
+    過去の各メッセージに配分を確保し、長いアシスタント回答がその直前のユーザーの質問を
+    押し出さないようにする。ツールのやり取りと任意の system ブロックは省く。
+    完全な TurnState の投影と、リクエスト全体の予算確認は呼び出し側が行う。
+
+    Keep base guidance, the preceding exchange, and the latest user input.
 
     Reserve a share for each prior message so a long assistant response cannot
     erase its user question. Tool traffic and optional system blocks are omitted;
     the caller projects the complete TurnState and checks the full request budget.
     """
     base: list[dict[str, Any]] = []
+    # TurnState や参照コンテキストではない、最初の system メッセージを基本の指示として使う
+    # The first system message that is neither a TurnState nor reference context serves as the base guidance
     first_system = next(
         (
             message for message in messages
@@ -62,6 +73,7 @@ def build_recovery_base_messages(
         if content:
             base.append({"role": message["role"], "content": content})
             remaining -= estimate_token_count(content)
+    # 今回のユーザー依頼は、参照の接頭辞も含めて加工せずそのまま残す。
     # Preserve the user's current request verbatim, including any reference prefix.
     base.append(conversation[latest_user_index])
     return base

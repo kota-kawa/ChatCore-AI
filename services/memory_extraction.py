@@ -28,6 +28,8 @@ MAX_MEMORY_FACTS_PER_MESSAGE = 5
 # Cap on the extractor input; pasted material does not need to be read in full.
 MEMORY_EXTRACTION_INPUT_CHARS = 4000
 
+# 整形用の正規表現: 連続する空白、HTML の <br>、その他の HTML タグ。
+# Cleanup patterns: runs of whitespace, HTML <br>, and any other HTML tag.
 _MULTISPACE_PATTERN = re.compile(r"\s+")
 _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
@@ -64,7 +66,10 @@ def normalize_fact_text(text: str) -> str:
 
 
 def _plain_text(message: str) -> str:
-    """Reduce a stored message to plain text for the extractor."""
+    """保存されたメッセージを、抽出器に渡すプレーンテキストへ縮める。
+
+    Reduce a stored message to plain text for the extractor.
+    """
     normalized = _HTML_BR_PATTERN.sub("\n", message or "")
     normalized = _HTML_TAG_PATTERN.sub("", normalized)
     normalized = normalized.strip()
@@ -74,7 +79,10 @@ def _plain_text(message: str) -> str:
 
 
 def _parse_facts(raw_response: Any) -> list[str]:
-    """Read the model's JSON payload into a normalized fact list."""
+    """モデルが返した JSON を、正規化した事実のリストに読み替える。不正な形式なら空リスト。重複は除き、件数は上限で打ち切る。
+
+    Read the model's JSON payload into a normalized fact list.
+    """
     payload: Any = raw_response
     if isinstance(payload, str):
         try:

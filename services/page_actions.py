@@ -1,3 +1,6 @@
+# モデルが提案した画面操作を解析し、許可されたページと操作の契約に制限する。
+# Parses model-proposed page actions and restricts them to supported pages and action contracts.
+
 from __future__ import annotations
 
 import json
@@ -194,6 +197,7 @@ def _is_safe_internal_path(path: Any) -> bool:
 # 日本語: 遷移先パスが機能カタログに登録されているアプリ内画面かどうかを検証します。
 # English: Check whether the path exists in the registered application capability catalog.
 def _is_allowed_navigation_path(path: Any) -> bool:
+    # 機能カタログで許可されたページだけへ移動し、副作用のあるGETや外部URLを拒否する。
     """Allow navigation only to known app pages from the capability catalog.
 
     This blocks side-effecting GET endpoints (e.g. /logout, /google-login) and any path
@@ -240,6 +244,7 @@ def _clean_action_step(step: dict[str, Any], fallback_description: str = "") -> 
         if command not in ALLOWED_AGENT_COMMANDS:
             return None
         normalized_args = args if isinstance(args, dict) else {}
+        # navigation.openPageも通常の画面移動と同じ許可リストを通し、副作用のあるURLへ進めない。
         # navigation.openPage moves the page just like action="navigate"; hold it to the
         # same app-route allowlist so it cannot reach side-effecting URLs.
         if command == "navigation.openPage" and not _is_allowed_navigation_path(normalized_args.get("path")):

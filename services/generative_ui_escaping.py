@@ -40,7 +40,10 @@ _ESCAPE_SEQUENCE_RE = re.compile(r"\\[nrt\"']")
 
 
 def _decode_one_level(value: str) -> str:
-    """Decode one level of JSON-style escapes, leaving unknown escapes untouched."""
+    """JSON 風のエスケープを 1 段だけ復号する。未知のエスケープはそのまま残す。
+
+    Decode one level of JSON-style escapes, leaving unknown escapes untouched.
+    """
     pieces: list[str] = []
     index = 0
     length = len(value)
@@ -65,6 +68,8 @@ def _decode_one_level(value: str) -> str:
     return "".join(pieces)
 
 
+# 日本語: HTML が二重エスケープかの判定。タグ内に `\"` が現れることだけを確証として扱う。
+# English: Whether HTML is double-escaped; only an escaped quote inside a tag counts as proof.
 def _html_is_over_escaped(html: str) -> bool:
     return bool(_ESCAPED_QUOTE_IN_TAG_RE.search(html))
 
@@ -77,7 +82,10 @@ MAX_DECODE_PASSES = 3
 
 
 def _decode_until_plausible(js: str) -> tuple[str, int] | None:
-    """Peel escape levels off broken JavaScript until it parses; report how many it took."""
+    """壊れた JavaScript から、構文として成立するまでエスケープを 1 段ずつ剥がす。成功したら (復号結果, 段数) を返す。
+
+    Peel escape levels off broken JavaScript until it parses; report how many it took.
+    """
     candidate = js
     for passes in range(1, MAX_DECODE_PASSES + 1):
         decoded = _decode_one_level(candidate)
@@ -90,7 +98,10 @@ def _decode_until_plausible(js: str) -> tuple[str, int] | None:
 
 
 def _javascript_is_over_escaped(js: str) -> bool:
-    """Whether the JavaScript is broken now and becomes plausible after decoding."""
+    """今は壊れている JavaScript が、復号すると成立するようになるか。
+
+    Whether the JavaScript is broken now and becomes plausible after decoding.
+    """
     if not js.strip() or not _ESCAPE_SEQUENCE_RE.search(js):
         return False
     if javascript_structure_error(js) is None:
@@ -99,7 +110,10 @@ def _javascript_is_over_escaped(js: str) -> bool:
 
 
 def _decode_levels(value: str, passes: int) -> str:
-    """Decode up to ``passes`` levels, stopping once no stray escape is left."""
+    """最大 ``passes`` 段まで復号する。余分なエスケープが残っていなければそこで止める。
+
+    Decode up to ``passes`` levels, stopping once no stray escape is left.
+    """
     for _ in range(passes):
         if not _ESCAPE_SEQUENCE_RE.search(value):
             break
@@ -112,7 +126,9 @@ def repair_over_escaped_sources(
     css: str,
     js: str,
 ) -> tuple[str, str, str, bool]:
-    """Return the sources with one or more levels of stray escaping removed.
+    """HTML・CSS・JS から、余分なエスケープを 1 段以上取り除いたソースと、変更したかどうかを返す。
+
+    Return the sources with one or more levels of stray escaping removed.
 
     過剰エスケープはJSON出力全体に一様に起きるため、どれか1つで確証が取れた時点で
     3つとも復号する。ただし復号がJSを壊す場合は、その場で元へ戻す。

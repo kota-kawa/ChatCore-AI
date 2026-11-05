@@ -1,4 +1,10 @@
-"""Async PostgreSQL catalog and DDL operations for the administrator UI."""
+"""管理者画面向けに、PostgreSQL のテーブル一覧・列情報・先頭行の取得と、テーブル/列の作成・削除 DDL を実行する。
+
+blueprints/admin/views.py から呼ばれる。識別子は検証したうえで引用符付きで SQL に埋め込む。
+
+Async PostgreSQL catalog and DDL operations for the administrator UI.
+Called from blueprints/admin/views.py; identifiers are validated and quoted before being placed in SQL.
+"""
 
 from __future__ import annotations
 
@@ -12,10 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.db import session_scope
 
+# 日本語: DDL には識別子をバインド変数で渡せないため、英数字と _ のみ・63 文字以内(PostgreSQL の上限)に限定して SQL へ埋め込む。
+# English: DDL cannot take identifiers as bind parameters, so only letters, digits and _ up to 63 chars (PostgreSQL's limit) are inlined.
 _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
 
 
 def quote_identifier(identifier: str) -> str:
+    # 検証済みPostgreSQL識別子をSQLAlchemyで引用する。
     """Quote one already-validated PostgreSQL identifier with SQLAlchemy."""
     if not _IDENTIFIER_PATTERN.fullmatch(identifier):
         raise ValueError("Invalid SQL identifier.")
@@ -23,6 +32,10 @@ def quote_identifier(identifier: str) -> str:
     return preparer.quote(identifier)
 
 
+# 日本語: 列定義(名前 型 修飾子)を 1 つの文字列にする。名前は検証済みの識別子に限る。型と修飾子は、呼び出し
+# 側(views の _parse_column_definition)で解析済みの値を渡す前提。
+# English: Renders one column definition. The name must be a validated identifier; the type and modifiers are expected to come
+# already parsed by the caller (views._parse_column_definition).
 def _render_column(column: Mapping[str, object]) -> str:
     name = quote_identifier(str(column["name"]))
     column_type = str(column["type"])
@@ -40,6 +53,8 @@ def build_create_table_sql(
     columns: list[dict[str, object]],
     table_options: str = "",
 ) -> str:
+    # 日本語: 任意の SQL 断片が紛れ込まないよう、テーブルオプションは受け付けない。
+    # English: Table options are rejected so no arbitrary SQL fragment can slip in.
     if table_options:
         raise ValueError("Table options are not supported.")
     if not columns:
@@ -150,6 +165,8 @@ async def fetch_table_columns(
     ]
 
 
+# 日本語: プレビューは最大 100 行に制限する。
+# English: The preview is capped at 100 rows.
 async def fetch_table_preview(
     session: AsyncSession, table_name: str
 ) -> tuple[list[str], list[tuple]]:
@@ -158,6 +175,10 @@ async def fetch_table_preview(
     return list(result.keys()), [tuple(row) for row in result.all()]
 
 
+# 日本語: 管理画面の表示用に、テーブル一覧と選択中テーブルの列・先頭行をまとめて返す。
+# 選択名が存在しない/不正な場合は選択を外し、missing_selected_table で知らせる。
+# English: Returns the table list plus columns and preview rows for the selected table in one payload.
+# An unknown or invalid selection is cleared and flagged via missing_selected_table.
 async def load_dashboard_data(selected_table: str | None) -> dict[str, Any]:
     async with session_scope() as session:
         tables = await fetch_tables(session)
@@ -168,6 +189,8 @@ async def load_dashboard_data(selected_table: str | None) -> dict[str, Any]:
         missing_selected_table = False
 
         if selected_table:
+            # 日本語: 一覧に実在するテーブル名だけを SQL に使う(クエリ文字列由来の値を直接埋め込まない)。
+            # English: Only names that exist in the table list reach SQL; the query-string value is never inlined as is.
             if _IDENTIFIER_PATTERN.fullmatch(selected_table) and selected_table in tables:
                 column_names, rows = await fetch_table_preview(session, selected_table)
                 column_details = await fetch_table_columns(session, selected_table)
@@ -206,6 +229,10 @@ async def drop_table_if_exists(table_name: str) -> bool:
         return True
 
 
+# 日本語: 同一トランザクション内で存在確認と DDL を行い、結果を "ok" / "missing_table" / "duplicate_column" の状態文字列で返す。
+# 列名の重複判定は大文字小文字を区別しない(PostgreSQL は引用なしの識別子を小文字に畳むため)。
+# English: Checks and runs the DDL in one transaction and returns a status string ("ok" / "missing_table" / "duplicate_column").
+# Duplicate detection is case-insensitive because PostgreSQL folds unquoted identifiers to lower case.
 async def add_column_if_valid(
     table_name: str,
     column_name: str,
@@ -225,6 +252,9 @@ async def add_column_if_valid(
         return "ok"
 
 
+# 日本語: 列削除。表や列が無い場合と、最後の 1 列を消そうとした場合(列 0 のテーブルを作らせない)は DDL を実行せず状態文字列を返す。
+# English: Drops a column. A missing table/column, or an attempt to drop the last column (which would leave a zero-column table),
+# returns a status string without running DDL.
 async def drop_column_if_valid(
     table_name: str, column_name: str
 ) -> tuple[str, str | None]:

@@ -1,3 +1,6 @@
+# WebAuthnパスキーの登録と認証を検証し、利用者の資格情報を管理する。
+# Verifies WebAuthn passkey registration and authentication and manages user credentials.
+
 from __future__ import annotations
 
 import asyncio

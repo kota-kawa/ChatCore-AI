@@ -1,4 +1,8 @@
-"""Chat room ownership and serialization shared by chat and project persistence.
+"""チャットルームの所有者確認とシリアライズを、チャットとプロジェクトの永続化で共有するモジュール。
+
+ルームの移動時にも同じ所有権ルールとロック/エラー契約を使うため、チェックとペイロードをここに一本化している。
+
+Chat room ownership and serialization shared by chat and project persistence.
 
 ``chat_rooms`` rows are owned by :class:`~services.repositories.chat_repository.ChatRepository`,
 but project persistence also has to verify the same ownership rules when a room
@@ -26,6 +30,8 @@ __all__ = [
     "serialize_room",
 ]
 
+# タイトル未設定のルームに表示する既定名(DB の値は変えず、シリアライズ時にだけ補う)
+# Default title for rooms without one (applied only when serializing; the DB value is untouched).
 DEFAULT_CHAT_ROOM_TITLE = "新規チャット"
 
 
@@ -38,7 +44,12 @@ async def load_owned_room(
     lock: bool = False,
     forbidden_returns_false: bool = False,
 ) -> ChatRoom | None:
-    """Return the room only when ``user_id`` owns it.
+    """ルームを取得し、``user_id`` が所有者のときだけ返す。
+
+    不在は ResourceNotFoundError、他人のルームは ``forbidden_message`` 付きの ForbiddenOperationError。
+    ``lock=True`` は行ロック(FOR UPDATE)で、移動などの更新前に競合を防ぐ。
+
+    Return the room only when ``user_id`` owns it.
 
     ``forbidden_returns_false`` lets callers that report a boolean outcome skip
     the exception contract without re-implementing the lookup.
@@ -60,6 +71,7 @@ async def load_owned_room(
 
 
 def serialize_room(room: ChatRoom, *, project_room: bool = False) -> dict[str, Any]:
+    # 履歴一覧とプロジェクト詳細に使うルーム情報へ変換する。
     """Serialize a room row for history lists and project detail payloads."""
 
     payload: dict[str, Any] = {
@@ -69,6 +81,8 @@ def serialize_room(room: ChatRoom, *, project_room: bool = False) -> dict[str, A
         "created_at": serialize_datetime_iso(room.created_at),
         "last_activity_at": serialize_datetime_iso(room.last_activity_at),
     }
+    # 日本語: プロジェクト詳細は camelCase、履歴一覧は snake_case を使う(それぞれの既存フロントの契約に合わせる)。
+    # English: Project detail payloads use camelCase while history lists use snake_case, matching each existing frontend contract.
     if project_room:
         payload["createdAt"] = payload.pop("created_at")
         payload["lastActivityAt"] = payload.pop("last_activity_at")

@@ -1,3 +1,15 @@
+"""署名付き Cookie と Redis でセッションを保持する ASGI ミドルウェア。
+
+Cookie にはセッション ID への署名付き参照だけを入れ、セッション本体は Redis に置く。リクエスト開始時に復元し、
+レスポンス開始の直前に保存する。同じブラウザで待機中の別アカウントのセッション ID 一覧も別 Cookie で扱う。
+
+ASGI middleware that keeps sessions in a signed cookie plus Redis.
+
+The cookie carries only a signed reference to the session ID and the session body lives in Redis. The session is
+restored at the start of a request and saved right before the response starts. The IDs of other accounts parked
+in the same browser are tracked in a separate cookie.
+"""
+
 from __future__ import annotations
 
 import contextlib
@@ -42,6 +54,8 @@ logger = logging.getLogger(__name__)
 REDIS_BACKEND = "redis"
 
 
+# 日本語: ログイン成功時に呼び、古いセッション ID を削除対象に積んで新しい ID を発行させる。
+# English: Called after a successful login; queues the old session ID for deletion and forces a new one to be issued.
 def rotate_session_identifier(request: Request) -> None:
     # ログイン成功時はセッションIDを再発行して fixation を防ぐ
     # Rotate the session identifier after authentication to mitigate session fixation.
@@ -53,6 +67,8 @@ def rotate_session_identifier(request: Request) -> None:
     scope["session_id"] = None
 
 
+# 日本語: HybridSessionMiddleware の薄いラッパー。アプリ側が使う公開のミドルウェア名として残している。
+# English: Thin wrapper around HybridSessionMiddleware; this is the middleware name the application registers.
 class PermanentSessionMiddleware:
     # セッションは Redis にのみ保存する。Redis に書けない場合はセッションを発行せず Cookie をクリアする
     # Sessions are stored only in Redis. If Redis is unavailable the cookie is cleared
@@ -89,6 +105,8 @@ class PermanentSessionMiddleware:
         await self.inner(scope, receive, send)
 
 
+# 日本語: Cookie の復元、Redis からの読み込み、レスポンス直前の保存までを担当する本体。
+# English: The core middleware: restores the cookie, loads from Redis, and saves right before the response.
 class HybridSessionMiddleware:
     # Redisベースのセッション管理を行うハイブリッドミドルウェアクラス
     # Hybrid middleware class that performs Redis-based session management
@@ -163,6 +181,8 @@ class HybridSessionMiddleware:
 
         return await self.app(scope, receive, send_wrapper)
 
+    # 日本語: Cookie ヘッダーから指定名の値を取り出す。無ければ None。
+    # English: Read the named cookie value from the Cookie header, or None if absent.
     @staticmethod
     def _read_cookie(scope: Scope, name: str) -> str | None:
         headers = Headers(scope=scope)
@@ -195,7 +215,9 @@ class HybridSessionMiddleware:
             # Handle this case to avoid breaking existing logins.
             return {"backend": REDIS_BACKEND, "id": payload}
         if isinstance(payload, dict):
-            # Legacy cookie-backed payloads ({"backend": "cookie", "data": {...}})
+            # 日本語: 旧形式の Cookie 保存型セッション（{"backend": "cookie", "data": {...}}）は、機密データを
+            # Cookie に直接埋め込んでいたため、期限切れとして扱い、Redis 方式で再認証させる。
+            # English: Legacy cookie-backed payloads ({"backend": "cookie", "data": {...}})
             # are intentionally ignored here: they used to embed sensitive session
             # data directly in the cookie, so we treat any such cookie as expired
             # to force the user to re-authenticate against the Redis-backed flow.
@@ -220,6 +242,8 @@ class HybridSessionMiddleware:
         session_ids = [item for item in payload if isinstance(item, str) and item]
         return list(dict.fromkeys(session_ids))[:MAX_PARKED_SESSIONS]
 
+    # 日本語: レスポンス開始直前に、表示中のセッションと待機セッション一覧の両方を保存する。
+    # English: Right before the response starts, persist both the active session and the parked-session list.
     def _commit(self, scope: Scope, headers: MutableHeaders) -> None:
         self._commit_session(scope, headers)
         self._commit_parked_session_ids(scope, headers)
@@ -242,6 +266,10 @@ class HybridSessionMiddleware:
             name=self.parked_sessions_cookie,
         )
 
+    # 日本語: 復元結果を (データ, セッションID, 区分) で返す。区分は SESSION_RESTORE_* で、
+    # 「ID は有るが Redis に無い」(MISSING) と「Redis に触れない」(REDIS_UNAVAILABLE) を保存時に区別するために使う。
+    # English: Returns (data, session ID, status). The SESSION_RESTORE_* status lets the commit step tell
+    # "ID present but gone from Redis" (MISSING) apart from "Redis unreachable" (REDIS_UNAVAILABLE).
     def _restore_session(
         self, cookie_state: dict[str, Any] | None
     ) -> tuple[dict[str, Any], str | None, str]:
@@ -354,7 +382,10 @@ class HybridSessionMiddleware:
             logger.info("Skipped stale session write after an optimistic concurrency conflict.")
             return
 
-        # Redis is unavailable: refuse to persist the session. We previously
+        # 日本語: Redis が使えない場合はセッションを保存しない。以前は署名のみで暗号化していないシリアライザで
+        # セッション全体を Cookie に書いており、メール確認コード・管理者フラグ・OAuth 状態・パスキーの
+        # チャレンジが Cookie を読める相手に漏れていた。Cookie を消して Redis 復旧後に再認証させるのが安全側の失敗。
+        # English: Redis is unavailable: refuse to persist the session. We previously
         # fell back to writing the entire session dict into the cookie via a
         # signed-but-unencrypted serializer, which leaked email verification
         # codes, the is_admin flag, OAuth state and passkey challenges to
@@ -369,6 +400,10 @@ class HybridSessionMiddleware:
         scope["session_id"] = None
         self._set_cookie(headers, "", max_age=0)
 
+    # 日本語: セッションを Redis に保存する。戻り値は True=保存した／None=競合で保存を見送った／False=Redis 利用不可。
+    # original_session があるときは、読み込み時から Redis 側が変わっていない場合だけ書く（楽観的ロック）。
+    # English: Save the session to Redis. Returns True=saved, None=skipped due to a conflict, False=Redis unavailable.
+    # When original_session is given, write only if Redis still holds that state (optimistic locking).
     def _save_session(
         self,
         session_id: str,
@@ -401,6 +436,10 @@ class HybridSessionMiddleware:
             return False
         return True
 
+    # 日本語: WATCH/MULTI で、Redis 上の値が original_session のままのときだけ上書きする。
+    # 他のリクエストが先に更新していた場合は None を返し、新しい認証状態を古いリクエストが潰さないようにする。
+    # English: Overwrite with WATCH/MULTI only while Redis still holds original_session. Returns None when another
+    # request updated it first, so a stale request cannot clobber the newer authentication state.
     def _save_session_if_unchanged(
         self,
         redis_client: Any,
@@ -446,6 +485,8 @@ class HybridSessionMiddleware:
                     pipeline.reset()
         return True
 
+    # 日本語: CSRF トークンは毎回自動で入るため除外し、アプリ側の実質的な変更があったかを判定する。
+    # English: Exclude the CSRF token, which is added automatically, and report whether the app really changed the session.
     @staticmethod
     def _has_application_session_changes(
         session: dict[str, Any],

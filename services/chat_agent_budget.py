@@ -28,6 +28,8 @@ READ_MESSAGE_MIN_CHARS = 512
 DEFAULT_MAX_WRITE_PROPOSALS = 3
 
 
+# 環境変数を 1 以上 maximum 以下の整数として読む。未設定や整数でない値は既定値を返す
+# Read an environment variable as an integer clamped to 1..maximum; unset or non-integer values give the default
 def _get_clamped_int_env(name: str, default: int, *, maximum: int) -> int:
     raw = os.environ.get(name)
     if raw is None:
@@ -40,7 +42,10 @@ def _get_clamped_int_env(name: str, default: int, *, maximum: int) -> int:
 
 
 def _legacy_total_steps() -> int | None:
-    """Read the superseded combined budget so existing deployments keep their intent."""
+    """廃止済みの合算予算（CHAT_AGENT_MAX_STEPS）を読み、既存の環境の設定意図を保つ。
+
+    Read the superseded combined budget so existing deployments keep their intent.
+    """
     raw = os.environ.get("CHAT_AGENT_MAX_STEPS")
     if raw is None:
         return None
@@ -51,6 +56,8 @@ def _legacy_total_steps() -> int | None:
     return value if value > 0 else None
 
 
+# ツール実行の上限。専用の環境変数を優先し、無ければ旧合算予算の半分（切り捨て）を使う
+# Tool-call limit: the dedicated variable wins, else half (rounded down) of the legacy combined budget
 def get_max_tool_calls() -> int:
     explicit = os.environ.get("CHAT_AGENT_MAX_TOOL_CALLS")
     if explicit is not None:
@@ -65,6 +72,8 @@ def get_max_tool_calls() -> int:
     return DEFAULT_MAX_TOOL_CALLS
 
 
+# 推論ターンの上限。専用の環境変数を優先し、無ければ旧合算予算からツール分を引いた残りを使う
+# LLM-turn limit: the dedicated variable wins, else the legacy combined budget minus the tool share
 def get_max_llm_turns() -> int:
     explicit = os.environ.get("CHAT_AGENT_MAX_LLM_TURNS")
     if explicit is not None:
@@ -81,7 +90,10 @@ def get_max_llm_turns() -> int:
 
 @dataclass
 class AgentStepBudget:
-    """Mutable per-turn step accounting shared by the loop and its tool runners."""
+    """1ターン分の推論ターン・ツール実行・ページ読み取り・書き込み提案の消費を数える可変の予算。ループとツール実行側で共有する。
+
+    Mutable per-turn step accounting shared by the loop and its tool runners.
+    """
 
     max_llm_turns: int
     max_tool_calls: int
@@ -103,17 +115,24 @@ class AgentStepBudget:
 
     @property
     def max_steps(self) -> int:
-        """Displayed model/search total; page reads have a separate budget and counter."""
+        """画面に出す推論とツール実行の合計。ページ読み取りは別の予算とカウンタで数える。
+
+        Displayed model/search total; page reads have a separate budget and counter.
+        """
         return self.max_llm_turns + self.max_tool_calls
 
     @property
     def step(self) -> int:
         return self.llm_turns + self.tool_calls
 
+    # 1回の読み取り結果に許す文字数。残りの読み取り予算を超えない範囲で READ_MESSAGE_MAX_CHARS を上限にする
+    # Characters allowed for one read result: capped by READ_MESSAGE_MAX_CHARS and by the remaining read budget
     @property
     def read_message_limit(self) -> int:
         return min(READ_MESSAGE_MAX_CHARS, max(0, self.max_read_chars - self.read_chars))
 
+    # ページ読み取りの回数上限に達したか、1回分に許す文字数が最小値を下回ったとき真
+    # True when the read-call limit is reached or the characters left for one read fall below the minimum
     @property
     def reads_exhausted(self) -> bool:
         return self.read_calls >= self.max_read_calls or self.read_message_limit < READ_MESSAGE_MIN_CHARS
@@ -140,6 +159,8 @@ class AgentStepBudget:
     def llm_turns_exhausted(self) -> bool:
         return self.llm_turns >= self.max_llm_turns
 
+    # ツール実行か推論ターンのどちらかが尽きたら、調査はこれ以上続けられない
+    # Research cannot continue once either the tool calls or the LLM turns run out
     @property
     def research_exhausted(self) -> bool:
         return self.tool_calls_exhausted or self.llm_turns_exhausted

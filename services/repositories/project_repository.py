@@ -1,3 +1,4 @@
+# プロジェクトとルーム所属の非同期永続化境界。ルーム所有確認は共通処理を通す。
 """Async SQLAlchemy persistence boundary for project-owned data.
 
 Projects group chat rooms, so this repository owns the ``projects`` rows and the
@@ -30,6 +31,7 @@ MAX_PROJECT_INSTRUCTIONS_LENGTH = 20_000
 
 
 class ProjectRepository:
+    # プロジェクトと所属ルームのrepository。トランザクションの確定はサービスが担う。
     """Repository for projects and their chat room membership.
 
     The repository never commits.  Services own the transaction and pass an
@@ -119,6 +121,7 @@ class ProjectRepository:
             return None
         return {"project_id": row[0], "name": str(row[1] or ""), "instructions": str(row[2] or "").strip()}
 
+    # 内部の補助処理。
     # Internal helpers -------------------------------------------------------
 
     async def _project_rooms(self, project_id: int) -> list[dict[str, Any]]:

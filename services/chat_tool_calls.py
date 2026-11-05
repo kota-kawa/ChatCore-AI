@@ -28,7 +28,10 @@ logger = logging.getLogger(__name__)
 
 
 def _contains_unconfirmed_context_facts(payload: dict[str, Any] | None) -> bool:
-    """Whether a personal-knowledge result contains facts the owner has not confirmed."""
+    """個人の知識の検索結果に、持ち主がまだ確認していない事実が含まれているかを返す。
+
+    Whether a personal-knowledge result contains facts the owner has not confirmed.
+    """
     if not payload:
         return False
     facts = payload.get("context_facts")
@@ -38,7 +41,10 @@ def _contains_unconfirmed_context_facts(payload: dict[str, Any] | None) -> bool:
 
 
 def _is_memo_only_request(latest_user_message: str) -> bool:
-    """Whether this memo-related request lacks an explicit external lookup request."""
+    """メモに関する依頼で、Web 検索など外部の情報を明示的には求めていないかを返す。引用やコードブロック内の語は無視する。
+
+    Whether this memo-related request lacks an explicit external lookup request.
+    """
     request = re.sub(r"```.*?```", "", latest_user_message, flags=re.DOTALL)
     request = re.sub(r'「[^」]*」|『[^』]*』|"[^"]*"|“[^”]*”|`[^`]*`', "", request)
     request = request.casefold()
@@ -71,6 +77,10 @@ _OWN_DATA_EVIDENCE_TYPES = frozenset(
 
 
 def _includes_external_evidence(payload: dict[str, Any]) -> bool:
+    """get_evidence の結果に、利用者自身のデータ以外（外部）の根拠が含まれているかを返す。
+
+    Whether a get_evidence result contains evidence other than the user's own data, i.e. external content.
+    """
     evidence = payload.get("evidence")
     if not isinstance(evidence, list):
         return False

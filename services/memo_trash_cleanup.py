@@ -1,4 +1,7 @@
-"""Permanently delete memos whose trash retention period has passed."""
+"""ゴミ箱の保持期間を過ぎたメモを完全に削除する定期処理。
+
+Permanently delete memos whose trash retention period has passed.
+"""
 
 from __future__ import annotations
 

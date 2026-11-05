@@ -1,4 +1,13 @@
-"""Context loading for user-selected chat reference sources."""
+"""利用者がチャットで選んだ参照元（メモ・My Context、公開プロンプト）を、生成の前に検索して文脈へ差し込む。
+
+検索語の候補作成、参照元ごとの検索と再試行、結果の system メッセージ化を担当する。同期版は純粋なプロンプト組み立てのテスト用、
+リクエスト処理は非同期版を使う。
+
+Context loading for user-selected chat reference sources.
+
+Plans query candidates, searches each source with retries, and injects the results as a system message before generation.
+The synchronous variant serves pure prompt-composition tests; request handlers use the async one.
+"""
 
 from __future__ import annotations
 
@@ -20,6 +29,8 @@ from services.reference_query_rewrite import rewrite_reference_query
 
 logger = logging.getLogger(__name__)
 
+# 日本語: 検索語の最大文字数。
+# English: Maximum number of characters in a search query.
 MAX_SELECTED_REFERENCE_QUERY_CHARS = 500
 # 追従発話を補うために前ターンから借りる文字数。長すぎると、質問ではなく前ターンの
 # 添付テキストを検索してしまう。
@@ -36,6 +47,8 @@ MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS = 3
 # A transient failure is retried once with the same query. If it fails again the source is
 # abandoned instead of being hammered once per remaining attempt.
 MAX_SELECTED_REFERENCE_FAILURE_RETRIES = 1
+# 日本語: 参照元の識別子と、モデルに見せる名前・結果タグ。
+# English: Source identifiers and the labels and result tags shown to the model.
 _WHITESPACE_PATTERN = re.compile(r"\s+")
 
 PERSONAL_KNOWLEDGE_SOURCE = "personal_knowledge_search"
@@ -60,13 +73,18 @@ UNAVAILABLE_SOURCE_REASONS = {
 
 @dataclass(frozen=True)
 class SelectedReferenceLookupTrace:
-    """A completed pre-generation lookup retained for the answer-step UI."""
+    """生成前に完了した検索 1 件。回答ステップの UI に表示するため保持する。
+
+    A completed pre-generation lookup retained for the answer-step UI.
+    """
 
     source: str
     query: str
     payload: dict[str, Any]
 
 
+# 日本語: 空白を 1 つにまとめ、limit を超える場合は先頭と末尾を残して中央を落とす。
+# English: Collapse whitespace and, when over the limit, keep the head and tail and drop the middle.
 def _normalize_query(query: str, limit: int = MAX_SELECTED_REFERENCE_QUERY_CHARS) -> str:
     normalized = _WHITESPACE_PATTERN.sub(" ", str(query or "")).strip()
     if len(normalized) <= limit:
@@ -77,7 +95,11 @@ def _normalize_query(query: str, limit: int = MAX_SELECTED_REFERENCE_QUERY_CHARS
 
 
 def previous_user_message(messages: Sequence[dict[str, Any]]) -> str:
-    """Return the user turn before the current one, used to resolve follow-up phrasing.
+    """現在の 1 つ前のユーザー発話を返す。追従発話の言い回しを補うために使う。
+
+    短い一部だけを残す。前の発話には先頭に付けた添付テキストが入りうるので、それが検索語を占めると、質問ではなくファイルを探してしまう。
+
+    Return the user turn before the current one, used to resolve follow-up phrasing.
 
     Only a short slice is kept: the previous turn may carry prepended attachment text, and
     letting that dominate the query would search for the file instead of the question.
@@ -93,7 +115,14 @@ def previous_user_message(messages: Sequence[dict[str, Any]]) -> str:
 
 
 class CandidateQueryPlan:
-    """The original turn followed by LLM-produced structured query rewrites.
+    """元の発話に続けて、LLM が作った言い換えの検索語を順に出す候補列。
+
+    入力したままの発話を最初に試すので、当たれば追加の費用はかからない。それで 0 件のときだけ、直前の発話を踏まえて
+    最新の発話を解釈する検索語プランナーを呼ぶ。モデルが失敗するか使える検索語を返さなければ、元の発話だけが検索語になり、
+    機械的なトークン分割での代替はしない。反復は遅延評価なので、同期版の経路では、どの参照元も最初の候補で当たれば言い換えは呼ばれない
+    （非同期版は先に全候補を展開する）。
+
+    The original turn followed by LLM-produced structured query rewrites.
 
     The turn as typed is tried first so a hit costs nothing extra. Only when that finds
     nothing is the selected-reference query planner asked to interpret the latest turn in
@@ -114,6 +143,8 @@ class CandidateQueryPlan:
         self._lock = Lock()
         self._rewritten: list[str] | None = None
 
+    # 日本語: 言い換えを一度だけ生成して使い回す。複数スレッドから呼ばれても二重に呼ばないようロックする。
+    # English: Produce the rewrites once and reuse them; locked so concurrent callers never invoke the planner twice.
     def _rewritten_queries(self) -> list[str]:
         with self._lock:
             if self._rewritten is None:
@@ -130,6 +161,8 @@ class CandidateQueryPlan:
                 self._rewritten = rewritten if isinstance(rewritten, list) else []
             return self._rewritten
 
+    # 日本語: 元の発話 → 言い換えの順に、重複と空を除いて最大 MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS 件まで出す。
+    # English: Yield the original turn, then the rewrites, skipping blanks and duplicates, up to MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS.
     def __iter__(self) -> Iterator[str]:
         seen: set[str] = set()
         emitted = 0
@@ -151,7 +184,8 @@ class CandidateQueryPlan:
 
 
 def _safe_json(payload: dict[str, Any]) -> str:
-    # System-level delimiters must not be forgeable by user-authored memo/prompt bodies.
+    # 日本語: メモやプロンプトの本文は利用者が書くので、& < > をエスケープし、system 側の区切りタグを偽装できないようにする。
+    # English: System-level delimiters must not be forgeable by user-authored memo/prompt bodies.
     return (
         json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         .replace("&", "\\u0026")
@@ -160,6 +194,8 @@ def _safe_json(payload: dict[str, Any]) -> str:
     )
 
 
+# 日本語: 検索を 1 回実行する。例外や辞書以外の戻り値は、例外を伝えずに status=failed の結果へ変える。
+# English: Run one search; an exception or a non-dict return becomes a status=failed result instead of propagating.
 def _run_lookup_once(
     search: Callable[[str], dict[str, Any]],
     query: str,
@@ -185,6 +221,9 @@ def _run_lookup_once(
     }
 
 
+# 日本語: 1 つの参照元について、候補の検索語を順に試す。失敗は同じ検索語で一度だけ引き直し、0 件なら次の候補へ進む。
+# English: Try the candidate queries for one source in order: a failure is retried once with the same query,
+# and a zero-hit result moves on to the next candidate.
 def _run_lookup(
     search: Callable[[str], dict[str, Any]],
     candidates: CandidateQueryPlan,
@@ -223,7 +262,10 @@ def _run_lookups(
     *,
     query: str,
 ) -> list[dict[str, Any]]:
-    """Run every selected source concurrently; both block on I/O and neither needs the other."""
+    """選ばれた参照元をすべて並行して検索する。どちらも I/O で待ち、互いの結果を必要としない。
+
+    Run every selected source concurrently; both block on I/O and neither needs the other.
+    """
     if len(lookups) == 1:
         source, search = lookups[0]
         return [
@@ -253,7 +295,10 @@ def _run_lookups(
 
 
 async def _maybe_await(value: Any) -> Any:
-    """Await an async repository lookup while keeping pure context tests lightweight."""
+    """非同期のリポジトリ検索なら await し、同期の値ならそのまま返す。文脈だけを見るテストを軽く保つため。
+
+    Await an async repository lookup while keeping pure context tests lightweight.
+    """
     return await value if inspect.isawaitable(value) else value
 
 
@@ -263,7 +308,10 @@ async def _run_lookup_once_async(
     *,
     source_label: str,
 ) -> dict[str, Any]:
-    """Run one selected-reference lookup without moving database work to a worker thread."""
+    """参照元の検索を 1 回実行する。DB の処理をワーカースレッドへ移さない。
+
+    Run one selected-reference lookup without moving database work to a worker thread.
+    """
     try:
         payload = await _maybe_await(search(query))
     except Exception:
@@ -290,7 +338,10 @@ async def _run_lookup_async(
     query: str,
     source_label: str,
 ) -> dict[str, Any]:
-    """Run one source's retry plan using its native async lookup when available."""
+    """1 つの参照元の再試行計画を、可能ならネイティブの非同期検索で実行する。
+
+    Run one source's retry plan using its native async lookup when available.
+    """
     attempted_queries: list[str] = []
     payload: dict[str, Any] = {}
     for candidate in candidates:
@@ -320,7 +371,10 @@ async def _run_lookups_async(
     *,
     query: str,
 ) -> list[dict[str, Any]]:
-    """Run selected database lookups concurrently without sharing an AsyncSession."""
+    """選ばれた DB 検索を並行して実行する。AsyncSession は共有しない。
+
+    Run selected database lookups concurrently without sharing an AsyncSession.
+    """
     return list(
         await asyncio.gather(
             *(
@@ -339,7 +393,10 @@ async def _run_lookups_async(
 async def _load_overview_async(
     personal_overview: Callable[[], Any] | None,
 ) -> dict[str, Any] | None:
-    """Load the personal inventory through the caller's async session boundary."""
+    """呼び出し側の非同期セッションの境界を通して、個人の保存内容の一覧を読み込む。
+
+    Load the personal inventory through the caller's async session boundary.
+    """
     if personal_overview is None:
         return None
     try:
@@ -362,7 +419,12 @@ def _load_overview_if_unmatched(
     payloads: Sequence[dict[str, Any]],
     personal_overview: Callable[[], dict[str, Any]] | None,
 ) -> dict[str, Any] | None:
-    """Load the inventory only when the memo lookup ran and matched nothing.
+    """メモ検索が実行されて 0 件だったときだけ、保存内容の一覧を読み込む。
+
+    ヒットしなかったことは、何も保存していないこととは違う。これが無いと、モデルは「検索で見つからなかった」と伝えられて
+    会話だけで答えてしまい、利用者が自分のメモを答えに反映させたくてその参照元を有効にした意図が活きない。
+
+    Load the inventory only when the memo lookup ran and matched nothing.
 
     A miss is not the same as having nothing saved. Without this the model is told the
     search found nothing and answers from the conversation alone, even though the user
@@ -393,7 +455,10 @@ def _load_overview_if_unmatched(
 
 
 def _build_overview_block(overview: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Wrap the query-independent inventory for injection as data."""
+    """検索語に依存しない保存内容の一覧を、データとして差し込むためのブロックに包む。
+
+    Wrap the query-independent inventory for injection as data.
+    """
     payload = {"status": "overview", **overview}
     return (
         f'<{PERSONAL_OVERVIEW_TAG} encoding="json">'
@@ -403,6 +468,8 @@ def _build_overview_block(overview: dict[str, Any]) -> tuple[str, dict[str, Any]
     )
 
 
+# 日本語: モデルに渡す system メッセージ本文を組み立てる。ルール文は JSON の外に置き、結果の JSON は信頼できないデータとして示す。
+# English: Build the system message body for the model; rules stay outside the JSON, and the result JSON is declared untrusted data.
 def _build_context(
     result_blocks: list[str],
     selected_sources: list[str],
@@ -473,7 +540,10 @@ def augment_messages_with_selected_references(
     unavailable_sources: Sequence[str] = (),
     trace_results: list[SelectedReferenceLookupTrace] | None = None,
 ) -> list[dict[str, Any]]:
-    """Load every enabled source before generation and inject it as required evidence."""
+    """有効なすべての参照元を生成の前に検索し、必ず参照すべき根拠として差し込む。
+
+    Load every enabled source before generation and inject it as required evidence.
+    """
     lookups: list[tuple[str, Callable[[str], dict[str, Any]]]] = []
     if personal_knowledge_search is not None:
         lookups.append((PERSONAL_KNOWLEDGE_SOURCE, personal_knowledge_search))
@@ -549,7 +619,12 @@ async def augment_messages_with_selected_references_async(
     unavailable_sources: Sequence[str] = (),
     trace_results: list[SelectedReferenceLookupTrace] | None = None,
 ) -> list[dict[str, Any]]:
-    """Prefetch selected references through native async database callbacks.
+    """選ばれた参照元を、ネイティブの非同期 DB コールバックで先読みする。
+
+    上の同期関数は、プロンプト組み立てだけを調べるテストや DB を使わない呼び出し元のために残している。リクエストハンドラは
+    こちらを使うこと。参照元の検索は自前の AsyncSession を作るので、run_blocking の中に隠してはならない。
+
+    Prefetch selected references through native async database callbacks.
 
     The synchronous function above remains useful for pure prompt-composition tests and
     non-database callers. Request handlers must use this variant: selected reference
@@ -568,6 +643,8 @@ async def augment_messages_with_selected_references_async(
         return messages
 
     candidate_plan = CandidateQueryPlan(normalized_query, previous_user_message(messages))
+    # 日本語: 言い換えの LLM 呼び出しはブロッキングなので、ワーカースレッドで全候補を先に展開する（遅延評価にはならない）。
+    # English: The rewrite LLM call blocks, so expand all candidates up front on a worker thread (no lazy evaluation here).
     candidates: list[str] = await run_blocking(list, candidate_plan)
     payloads = await _run_lookups_async(lookups, candidates, query=normalized_query)
 

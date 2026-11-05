@@ -1,3 +1,6 @@
+# プロンプトとSkillの下書き作成・書き換えを、モデル呼び出しと入力検証へ接続する。
+# Connects prompt and Skill drafting and rewriting to model calls and input validation.
+
 from __future__ import annotations
 
 import json

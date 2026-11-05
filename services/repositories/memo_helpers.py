@@ -1,3 +1,8 @@
+"""メモ機能で共通して使う小さな純粋関数(タイトルの補完、メモ本文のパース、日付フィルターの変換、セッションからのユーザー ID 取得)。
+
+Small pure helpers shared by the memo feature: title resolution, memo text parsing, date-filter conversion and session user-id extraction.
+"""
+
 from __future__ import annotations
 
 import json
@@ -139,7 +144,7 @@ def date_end(raw: str) -> datetime | None:
         raw (str): YYYY-MM-DD 形式の日付文字列 / An ISO date string format (YYYY-MM-DD).
 
     Returns:
-        datetime | None: 終了時刻의 datetime、無効な場合は None / The end of day datetime, or None if invalid.
+        datetime | None: 終了時刻の datetime、無効な場合は None / The end of day datetime, or None if invalid.
     """
     parsed = parse_date_filter(raw)
     if parsed is None:

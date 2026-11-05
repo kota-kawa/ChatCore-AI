@@ -1,3 +1,13 @@
+"""チャット応答生成ジョブの実体（ChatGenerationJob）と、ジョブの開始・停止・再生を扱うサービス（ChatGenerationService）。
+
+The chat response generation job (ChatGenerationJob) and the service that starts, stops and replays jobs (ChatGenerationService).
+ジョブは生成ループの各フェーズを持つ Mixin を束ねる。サービスはプロセス内のジョブ保持と、Redis を使う
+プロセス間協調（ロック・停止要求・イベント再生）の窓口になる。モジュール関数は既定サービスへの薄い委譲。
+The job assembles the phase mixins of the generation loop. The service owns in-process job retention and fronts
+the Redis-based cross-process coordination (locks, stop requests, event replay). The module-level functions
+are thin delegates to the default service.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -63,13 +73,21 @@ class ChatGenerationAlreadyRunningError(RuntimeError):
 
 
 class ChatGenerationIdConflictError(RuntimeError):
-    """Raised when a room tries to reuse a generation ID still in its retention window."""
+    """ルームが、保持期間内にある生成 ID を再利用しようとしたときに送出する。
+
+    Raised when a room tries to reuse a generation ID still in its retention window.
+    """
 
 
 class ChatGenerationCoordinationError(RuntimeError):
-    """Raised when Redis cannot safely publish or resolve the current generation."""
+    """Redis が現在の生成を安全に公開・解決できないときに送出する。
+
+    Raised when Redis cannot safely publish or resolve the current generation.
+    """
 
 
+# 生成 ID が 32 桁の小文字 16 進文字列（uuid4().hex の形）かを返す
+# Return whether a generation ID is a 32-character lowercase hex string (the shape of uuid4().hex)
 def is_valid_generation_id(value: Any) -> bool:
     return isinstance(value, str) and _GENERATION_ID_PATTERN.fullmatch(value) is not None
 
@@ -320,6 +338,8 @@ class ChatGenerationService:
     def supports_distributed_streaming(self) -> bool:
         return self._coordinator.supports_distributed_streaming()
 
+    # Redis が設定されているのに使えない状態か。この間は生成 ID の予約や再生が安全にできないため、開始を拒否する根拠になる
+    # Whether Redis is configured but unusable; generation IDs cannot be reserved or replayed safely then, so starts are refused
     def generation_store_unavailable(self) -> bool:
         return self._coordinator.redis_is_configured() and not self.supports_distributed_streaming()
 
@@ -409,6 +429,8 @@ class ChatGenerationService:
                 return True
         return self._has_distributed_active_lock(job_key)
 
+    # 生成 ID がまだ使われていないかを返す。プロセス内の保持ジョブと、Redis の予約キーの両方を確認する
+    # Return whether a generation ID is still unused, checking both the in-process retained jobs and the Redis reservation key
     def is_generation_id_available(self, job_key: str, generation_id: str) -> bool:
         if not is_valid_generation_id(generation_id):
             return False
@@ -441,6 +463,8 @@ class ChatGenerationService:
         generation_id = self.resolve_latest_generation_id(job_key)
         return self.has_generation_history(job_key, generation_id)
 
+    # 指定した世代にイベント履歴があるか（プロセス内に保持中、または Redis に再生用の履歴がある）
+    # Whether the given generation has an event history, either retained in this process or replayable from Redis
     def has_generation_history(self, job_key: str, generation_id: str | None) -> bool:
         if not generation_id:
             return False
@@ -456,6 +480,10 @@ class ChatGenerationService:
                 "Chat generation history could not be checked."
             ) from exc
 
+    # ルームの最新の生成 ID を返す。Redis があればそちらを正とする。設定済みで使えないときは None、
+    # 未設定ならプロセス内のジョブから引く。
+    # Return the room's latest generation ID: Redis is authoritative when available, None if it is
+    # configured but unusable, otherwise taken from the in-process job.
     def resolve_latest_generation_id(self, job_key: str) -> str | None:
         self._cleanup_expired_jobs()
         redis_client = self._get_redis_client()
@@ -475,6 +503,10 @@ class ChatGenerationService:
             local_job = self._jobs.get(job_key)
             return local_job.generation_id if local_job is not None else None
 
+    # 指定した世代がいま実行中かを返す。プロセス内のジョブがあればその状態、
+    # 無ければ「最新世代かつ Redis のアクティブロックがある」かどうか。
+    # Whether the given generation is running now: the local job's state if present, otherwise
+    # whether it is the latest generation and an active Redis lock exists.
     def has_generation_active(self, job_key: str, generation_id: str) -> bool:
         with self._jobs_lock:
             local_job = self._jobs.get(job_key)
@@ -661,6 +693,7 @@ class ChatGenerationService:
             job.start()
         except Exception:
             # start に失敗したジョブはリプレイ対象に残さず、分散ロックも即時解放する。
+            # A job that failed to start is not kept for replay and its distributed lock is released at once.
             with self._jobs_lock:
                 self._retained_jobs.pop((job_key, selected_generation_id), None)
                 self._jobs.pop(job_key, None)
@@ -715,8 +748,8 @@ def clear_generation_job_state(*, cancel_running: bool = False) -> None:
     get_chat_generation_service().reset_in_memory_state(cancel_running=cancel_running)
 
 
-# 指定したジョブをキャンセルする
-# Cancel the specified job
+# 指定したジョブをキャンセルする。以降のモジュール関数は、service 未指定なら既定のサービスへ委譲する
+# Cancel the specified job. The module-level functions below delegate to the default service when no service is given
 def cancel_generation_job(
     job_key: str,
     *,
@@ -761,6 +794,8 @@ def get_generation_job(
     return target.get_generation_job(job_key, generation_id)
 
 
+# ルームの最新の生成 ID を返す
+# Return the room's latest generation ID
 def resolve_latest_generation_id(
     job_key: str,
     *,
@@ -774,6 +809,8 @@ def resolve_latest_generation_id(
     return target.resolve_latest_generation_id(job_key)
 
 
+# 生成 ID がまだ使われていないかを返す
+# Return whether the generation ID is still unused
 def is_generation_id_available(
     job_key: str,
     generation_id: str,

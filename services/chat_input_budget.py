@@ -1,9 +1,11 @@
-# 最終回答パスへ送るリクエストの入力量を、送信前に見積もって抑える。
-# 長い調査ターンではツール結果が積み上がるため、プロバイダのコンテキスト超過は
-# 「内部エラー」としてターンごと失われる。超過してから直すのではなく、送る前に縮める。
-# Bounds the request sent to the answer pass. Tool results pile up over a long research
-# turn, and a provider context overflow surfaces as a generic internal error that loses the
-# whole turn, so shrink the request before sending rather than after it fails.
+"""最終回答パスへ送るリクエストの入力量を、送信前に見積もって抑える。
+長い調査ターンではツール結果が積み上がるため、プロバイダのコンテキスト超過は
+「内部エラー」としてターンごと失われる。超過してから直すのではなく、送る前に縮める。
+
+Bounds the request sent to the answer pass. Tool results pile up over a long research
+turn, and a provider context overflow surfaces as a generic internal error that loses the
+whole turn, so shrink the request before sending rather than after it fails.
+"""
 
 from __future__ import annotations
 
@@ -32,6 +34,12 @@ _COMPACTED_TOOL_MESSAGE = (
 
 
 def get_final_answer_input_token_budget() -> int:
+    """最終回答パスの入力トークン上限を返す。環境変数 LLM_FINAL_ANSWER_INPUT_TOKEN_BUDGET が未設定・不正・0 以下なら既定値を
+    使う。
+
+    Return the answer-pass input token budget; falls back to the default when the env var is unset, invalid or not
+    positive.
+    """
     raw = os.environ.get("LLM_FINAL_ANSWER_INPUT_TOKEN_BUDGET")
     if raw is None:
         return DEFAULT_FINAL_ANSWER_INPUT_TOKEN_BUDGET
@@ -43,7 +51,10 @@ def get_final_answer_input_token_budget() -> int:
 
 
 def estimate_messages_tokens(messages: list[dict[str, Any]]) -> int:
-    """Estimate the request size with the same CJK-aware model as the context budget."""
+    """リクエスト全体のトークン数を、コンテキスト予算と同じ日本語対応の見積もりで数える（本文・tool_calls・画像）。
+
+    Estimate the request size with the same CJK-aware model as the context budget.
+    """
     total = 0
     for message in messages:
         content = message.get("content")
@@ -59,6 +70,10 @@ def estimate_messages_tokens(messages: list[dict[str, Any]]) -> int:
 
 
 def estimate_messages_chars(messages: list[dict[str, Any]]) -> int:
+    """メッセージ本文の文字数の合計を返す。
+
+    Return the total number of characters in the message bodies.
+    """
     total = 0
     for message in messages:
         content = message.get("content")
@@ -70,7 +85,10 @@ def estimate_messages_chars(messages: list[dict[str, Any]]) -> int:
 
 
 def _compact_tool_payload(content: str, level: str) -> str | None:
-    """Shrink one serialized tool result by one level, or report that it cannot shrink."""
+    """ツール結果の JSON を指定の段階で 1 つ縮める。それ以上縮められない、または JSON でない場合は None を返す。
+
+    Shrink one serialized tool result by one level, or report that it cannot shrink.
+    """
     try:
         payload = json.loads(content)
     except (TypeError, ValueError):

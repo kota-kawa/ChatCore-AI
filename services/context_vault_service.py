@@ -1,4 +1,10 @@
-"""Async owner-scoped personal context vault use cases."""
+"""個人コンテキスト（Context Vault）の事実を、所有者単位で一覧・取得・作成・更新・廃止・検索・要約（ダイジェスト）する非同期ユースケース。
+永続化は ContextFactRepository に任せ、ここでは入力の正規化、冪等性キーの生成、埋め込み生成の予約を担う。
+
+Async owner-scoped personal context vault use cases (list, get, create, update, deprecate, search, digest).
+Persistence is delegated to ContextFactRepository; this module normalizes input, builds idempotency hashes
+and schedules embedding generation.
+"""
 
 from __future__ import annotations
 
@@ -53,6 +59,8 @@ _CURSOR_SEPARATOR = "~"
 T = TypeVar("T")
 
 
+# search_facts が返す検索結果（件数と事実の一覧）。
+# Search result (count and facts) returned by search_facts.
 class ContextSearchResult(BaseModel):
     total: int = Field(ge=0)
     facts: list[ContextFactResponse]
@@ -62,6 +70,10 @@ def _repository(session: AsyncSession) -> ContextFactRepository:
     return ContextFactRepository(session)
 
 
+# 日本語: session があればそのまま使い、なければ新規トランザクションで実行する。
+# 一時的な DB エラーのときだけバックオフ付きで再試行する。
+# English: Use the given session as is, otherwise run in a new transaction,
+# retrying with backoff only on retryable DB errors.
 async def _transaction(
     session: AsyncSession | None,
     operation: Callable[[AsyncSession], Awaitable[T]],
@@ -81,6 +93,8 @@ async def _transaction(
     raise RuntimeError("Context transaction retry loop exhausted.")
 
 
+# 日本語: DB の行を API 応答に詰め替える。欠けた値は既定値で補い、重要度は 0〜100 に収める。
+# English: Map a DB row to the API response, filling missing values with defaults and clamping importance to 0-100.
 def _to_response(fact: dict[str, Any]) -> ContextFactResponse:
     importance = fact.get("importance")
     return ContextFactResponse(
@@ -99,6 +113,8 @@ def _to_response(fact: dict[str, Any]) -> ContextFactResponse:
     )
 
 
+# 日本語: カーソルは「更新日時~ID」形式（更新日時の降順ページング用）。
+# English: The cursor is "updated_at~id", used for paging in descending updated_at order.
 def _encode_cursor(fact: dict[str, Any]) -> str | None:
     updated_at = fact.get("updated_at")
     return f"{updated_at}{_CURSOR_SEPARATOR}{int(fact['id'])}" if updated_at else None
@@ -133,6 +149,8 @@ async def list_facts(
     cursor: str | None = None,
     session: AsyncSession | None = None,
 ) -> ContextFactListResponse:
+    # 1 件多く取得して次ページの有無を判定し、next_cursor を作る。
+    # Fetch one extra row to detect whether a next page exists, then build next_cursor.
     async def operation(db: AsyncSession) -> ContextFactListResponse:
         safe_limit = _safe_list_limit(limit)
         decoded = _decode_cursor(cursor)
@@ -179,6 +197,10 @@ async def create_fact(
     idempotency_key: str | None = None,
     session: AsyncSession | None = None,
 ) -> ContextFactResponse:
+    # 日本語: 冪等性キーがある場合は、キー自体と内容の 2 つのハッシュを作る。
+    # 同じキーで内容だけ違う再送を、リポジトリ側で検出できるようにするため。
+    # English: With an idempotency key, build two hashes (key and payload) so the repository can
+    # detect a retry that reuses the key with different content.
     normalized_title = title.strip()[:MAX_CONTEXT_FACT_TITLE_LENGTH]
     normalized_content = content.strip()[:MAX_CONTEXT_FACT_CONTENT_LENGTH]
     normalized_importance = max(0, min(int(importance), 100))
@@ -219,6 +241,8 @@ async def create_fact(
             idempotency_payload_hash=payload_hash,
         ),
     )
+    # 日本語: 呼び出し側が session を管理している場合と、冪等な再送の場合は、埋め込みを予約しない。
+    # English: No embedding is scheduled when the caller owns the session or the request was an idempotent replay.
     if session is None and not fact.get("_idempotent_replay"):
         schedule_embedding(
             int(fact["id"]),
@@ -259,6 +283,8 @@ async def update_fact(
             confirmed_by_owner=confirmed_by_owner,
         ),
     )
+    # 日本語: 更新後に有効（active）な事実だけ、埋め込みを作り直す。
+    # English: Regenerate the embedding only if the fact is active after the update.
     if session is None and str(fact.get("status")) == "active":
         schedule_embedding(
             int(fact["id"]),
@@ -293,6 +319,10 @@ async def build_digest(
     max_chars: int = DEFAULT_DIGEST_MAX_CHARS,
     session: AsyncSession | None = None,
 ) -> ContextDigestResponse:
+    # 日本語: 重要度・更新日時の高い順に事実を 1 件ずつ足し、種類ごとの件数上限と全体の文字数予算に
+    # 収まるものだけを採用する。省略した件数は omitted_count / truncated で呼び出し側に伝える。
+    # English: Add facts one by one in order of importance and recency, keeping only those that fit the
+    # per-type cap and the overall character budget; omitted facts are reported via omitted_count / truncated.
     async def operation(db: AsyncSession) -> ContextDigestResponse:
         per_type = max(1, min(int(limit_per_type), MAX_DIGEST_LIMIT_PER_TYPE))
         char_budget = max(MIN_DIGEST_MAX_CHARS, min(int(max_chars), MAX_DIGEST_MAX_CHARS))
@@ -358,6 +388,8 @@ async def search_facts(
     limit: int = DEFAULT_CONTEXT_SEARCH_LIMIT,
     session: AsyncSession | None = None,
 ) -> ContextSearchResult:
+    # 日本語: semantic モードで埋め込みが使えない・失敗・結果ゼロのときは、キーワード検索に切り替える。
+    # English: In semantic mode, fall back to keyword search when embeddings are unavailable, fail or return no rows.
     normalized_query = query.strip()
     if not normalized_query:
         raise ApiServiceError("検索語を指定してください。", 400, status="fail")

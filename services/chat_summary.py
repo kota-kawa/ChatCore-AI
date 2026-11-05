@@ -28,6 +28,7 @@ SUMMARY_BODY_TOKEN_BUDGET = max(1, SUMMARY_TOKEN_BUDGET - 200)
 _HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 
 # 日本語: 古い会話履歴を、後続ターンの回答に必要な事実へ圧縮させる要約用プロンプト。
+# English: Summarization prompt that compresses older history into the facts later turns still need.
 _SUMMARY_SYSTEM_PROMPT = """
 You compress the older part of a chat conversation so the assistant can keep answering accurately after those turns fall out of the context window.
 
@@ -48,13 +49,19 @@ Rules:
 
 
 def _plain_text(value: str) -> str:
-    """Reduce a stored message to plain text for the summarizer."""
+    """保存済みの発話を、要約器に渡すためのプレーンテキストにする（HTML タグを除く）。
+
+    Reduce a stored message to plain text for the summarizer.
+    """
     normalized = normalize_message_text(value or "")
     return _HTML_TAG_PATTERN.sub("", normalized).strip()
 
 
 def _build_summary_input(archived_messages: list[dict[str, str]]) -> str:
-    """Render archived messages into a single transcript within the input budget."""
+    """アーカイブ済みの発話を、入力の上限に収まる 1 本の文字起こしにする。各発話は均等な上限で切り詰める。
+
+    Render archived messages into a single transcript within the input budget.
+    """
     if not archived_messages:
         return ""
 
@@ -76,7 +83,10 @@ def _build_summary_input(archived_messages: list[dict[str, str]]) -> str:
 
 
 def _sanitize_summary_body(raw_summary: str) -> str:
-    """Strip code fences and stray blank lines from the model's summary."""
+    """モデルが返した要約から、コードフェンスと余計な空行を取り除き、要約本文の上限に収める。
+
+    Strip code fences and stray blank lines from the model's summary.
+    """
     body = str(raw_summary or "").strip()
     if not body:
         return ""
@@ -98,7 +108,10 @@ def summarize_archived_messages(
     *,
     model: str,
 ) -> str:
-    """Summarize archived messages with the conversation's model, or "" on failure."""
+    """アーカイブ済みの発話を、会話で使っているモデルで要約する。失敗したときは空文字列を返す。
+
+    Summarize archived messages with the conversation's model, or "" on failure.
+    """
     transcript = _build_summary_input(archived_messages)
     if not transcript:
         return ""
@@ -141,6 +154,10 @@ def build_room_summary_text(
     *,
     model: str | None = None,
 ) -> tuple[str, int]:
+    """履歴から要約文と、要約に含めた（アーカイブした）発話数を返す。
+
+    Return the summary text and the number of archived messages it covers.
+    """
     archived_messages = select_archived_messages(messages)
     if not archived_messages:
         return "", 0

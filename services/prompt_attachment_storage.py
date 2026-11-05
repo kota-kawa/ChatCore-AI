@@ -1,3 +1,4 @@
+# 公開プロンプトの添付画像について、保存パスと公開URLを扱う。
 """Filesystem paths and public URLs for prompt-share media attachments."""
 
 from __future__ import annotations
@@ -51,6 +52,7 @@ PROMPT_ATTACHMENT_ORPHAN_GRACE_SECONDS = 60 * 60
 
 @dataclass(frozen=True)
 class StoredPromptAttachment:
+    # 保存先に依存しない、正規化画像の保存結果。
     """Storage-neutral result of persisting normalized image variants."""
 
     display_filename: str
@@ -60,6 +62,7 @@ class StoredPromptAttachment:
 
 
 class PromptAttachmentStorage(Protocol):
+    # 現在のローカルディスクと将来のオブジェクト保存を隔離する契約。
     """Boundary implemented by local disk today and object storage in the future."""
 
     def save_variants(
@@ -77,6 +80,7 @@ class PromptAttachmentStorage(Protocol):
 
 
 class LocalPromptAttachmentStorage:
+    # 正規化画像を原子的に保存するファイルシステム実装。
     """Atomic filesystem backend for normalized prompt-share image variants."""
 
     def save_variants(
@@ -175,11 +179,13 @@ _local_storage = LocalPromptAttachmentStorage()
 
 
 def get_prompt_attachment_storage() -> PromptAttachmentStorage:
+    # 有効な保存先を返す。保存先移行時はこのfactoryを差し替える。
     """Return the active backend; swap this factory during object-store migration."""
     return _local_storage
 
 
 def get_prompt_attachment_upload_root() -> str:
+    # 設定された添付保存ディレクトリの絶対パスを返す。
     """Return the configured absolute storage directory for prompt attachments."""
     configured = str(os.getenv(PROMPT_ATTACHMENT_UPLOAD_ROOT_ENV, "") or "").strip()
     if not configured:
@@ -194,6 +200,7 @@ def _random_token() -> str:
 
 
 def _atomic_write(destination: str, content: bytes) -> None:
+    # 読み手が書きかけの画像を見ないよう、原子的に書き込む。
     """Write a variant atomically so readers never observe a partial image."""
     directory = os.path.dirname(destination)
     fd, temporary_path = tempfile.mkstemp(prefix=".prompt-upload-", dir=directory)
@@ -211,6 +218,7 @@ def _atomic_write(destination: str, content: bytes) -> None:
 
 @contextmanager
 def _user_quota_lock(root: str, user_id: int):
+    # 同じ利用者の容量検査を、ローカルのUvicornプロセス間で直列化する。
     """Serialize same-user quota checks across local Uvicorn worker processes."""
     lock_path = os.path.join(root, f".prompt-share-user-{user_id}.lock")
     with open(lock_path, "a+b") as lock_file:
@@ -238,6 +246,7 @@ def _local_user_usage_bytes(root: str, user_id: int) -> int:
 
 
 def validate_prompt_attachment_filename(filename: object) -> str:
+    # 保存ルートの下で解決する前に、単一の画像ファイル名を検証する。
     """Validate a single image filename before resolving it below the upload root."""
     value = str(filename or "").strip()
     if (
@@ -251,6 +260,7 @@ def validate_prompt_attachment_filename(filename: object) -> str:
 
 
 def resolve_prompt_attachment_path(filename: object) -> str:
+    # パストラバーサルとsymlinkによる脱出を防いでパスを解決する。
     """Resolve a validated filename while preventing traversal and symlink escapes."""
     safe_filename = validate_prompt_attachment_filename(filename)
     root = os.path.realpath(get_prompt_attachment_upload_root())
@@ -261,6 +271,7 @@ def resolve_prompt_attachment_path(filename: object) -> str:
 
 
 def resolve_legacy_prompt_attachment_path(filename: object) -> str:
+    # 検証済みファイル名を旧frontend/public配下で解決する。
     """Resolve a validated filename below the former frontend/public location."""
     safe_filename = validate_prompt_attachment_filename(filename)
     root = os.path.realpath(
@@ -280,18 +291,21 @@ def resolve_legacy_prompt_attachment_path(filename: object) -> str:
 
 
 def prompt_attachment_content_type(filename: object) -> str:
+    # 検証済み拡張子からContent-Typeを決定する。
     """Return a deterministic image Content-Type from a validated extension."""
     safe_filename = validate_prompt_attachment_filename(filename)
     return _IMAGE_CONTENT_TYPES[os.path.splitext(safe_filename)[1].lower()]
 
 
 def build_prompt_attachment_public_url(filename: object) -> str:
+    # 保存画像をバックエンドで配信する公開URLを構築する。
     """Build the backend-served public URL for a stored attachment."""
     safe_filename = validate_prompt_attachment_filename(filename)
     return f"{PROMPT_ATTACHMENT_PUBLIC_URL_PREFIX}/{safe_filename}"
 
 
 def prompt_attachment_filename_from_url(url: object) -> str | None:
+    # 現行または旧形式の相対URLから安全なファイル名を取り出す。
     """Extract a safe filename from either the current or legacy relative URL."""
     raw_url = str(url or "").strip()
     if not raw_url:
@@ -316,6 +330,7 @@ def prompt_attachment_filename_from_url(url: object) -> str | None:
 
 
 def normalize_prompt_attachment_public_url(url: object) -> str | None:
+    # 認識できる旧形式と現行形式の添付URLを、正規URLへ統一する。
     """Convert a recognized legacy/current attachment URL to its canonical URL."""
     filename = prompt_attachment_filename_from_url(url)
     if filename is None:
@@ -324,10 +339,12 @@ def normalize_prompt_attachment_public_url(url: object) -> str | None:
 
 
 def delete_prompt_attachment(attachment: object) -> int:
+    # 添付情報に含まれる各派生画像をまとめて削除する。
     """Remove every local variant referenced by one attachment descriptor."""
     return get_prompt_attachment_storage().delete_attachment(attachment)
 
 
 def cleanup_unreferenced_prompt_attachments(attachments: list[dict[str, Any]]) -> int:
+    # 有効な投稿の添付情報とローカル保存内容を照合する。
     """Reconcile local storage against attachment descriptors from active prompts."""
     return get_prompt_attachment_storage().cleanup_unreferenced(attachments)

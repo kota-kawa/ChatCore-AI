@@ -1,3 +1,10 @@
+"""CSRF 対策の共通処理。セッションにトークンを保持し、POST 等の変更系リクエストでヘッダーのトークンと照合する。
+FastAPI の依存関係（require_csrf）として各ルートから使われる。
+
+Shared CSRF protection: keeps a token in the session and checks it against the request header on unsafe methods.
+Used by routes as the FastAPI dependency require_csrf.
+"""
+
 from __future__ import annotations
 
 import secrets

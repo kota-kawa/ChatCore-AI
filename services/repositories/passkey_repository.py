@@ -1,4 +1,10 @@
-"""Async SQLAlchemy persistence for WebAuthn credentials."""
+"""WebAuthn の資格情報(Passkey、user_passkeys)の一覧・取得・登録・利用更新・削除を永続化する。
+
+services/passkeys.py から使われる。
+
+Async SQLAlchemy persistence for WebAuthn credentials.
+Used by services/passkeys.py.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.models import UserPasskey
 
 
+# 日本語: Passkey 行を dict にする。user_id は既定で含めず、資格情報 ID から所有者を引く認証処理のときだけ含める。
+# English: Serializes a passkey row. user_id is omitted by default and included only for the sign-in lookup that resolves the owner.
 def _serialize_passkey(passkey: UserPasskey, *, include_user_id: bool = False) -> dict[str, Any]:
     fields = (
         "id",
@@ -31,7 +39,10 @@ def _serialize_passkey(passkey: UserPasskey, *, include_user_id: bool = False) -
 
 
 class PasskeyRepository:
-    """Persistence boundary for credential registration and usage updates."""
+    """資格情報の登録と利用状況の更新を扱う永続化境界。
+
+    Persistence boundary for credential registration and usage updates.
+    """
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -81,6 +92,9 @@ class PasskeyRepository:
         await self.session.refresh(passkey)
         return _serialize_passkey(passkey)
 
+    # 日本語: 認証のたびに sign_count と最終利用時刻を更新する。バックアップ状態/デバイス種別は、値が得られたときだけ上書きする。
+    # English: On each authentication, updates sign_count and last-used time; backup state and device type
+    # are overwritten only when provided.
     async def update_usage(
         self,
         *,
@@ -104,6 +118,8 @@ class PasskeyRepository:
             .values(**values)
         )
 
+    # 日本語: 所有者が一致する Passkey だけを削除する。削除できたかを bool で返す。
+    # English: Deletes a passkey only when it belongs to the user, and reports whether a row was removed.
     async def delete(self, *, user_id: int, passkey_id: int) -> bool:
         result = await self.session.execute(
             delete(UserPasskey).where(

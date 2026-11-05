@@ -1,3 +1,4 @@
+# 添付画像を安全なバイト列へ正規化し、保存先の実装と画像処理を分離する。
 """Safe, deterministic processing for prompt-share image attachments.
 
 The processing boundary deliberately produces transport-neutral byte variants.
@@ -22,6 +23,7 @@ PROMPT_ATTACHMENT_THUMBNAIL_WEBP_QUALITY = 76
 PROMPT_ATTACHMENT_DISPLAY_MAX_BYTES = 2 * 1024 * 1024
 PROMPT_ATTACHMENT_THUMBNAIL_MAX_BYTES = 400 * 1024
 
+# 展開後の画像は圧縮サイズより大きいため、一般I/Oプールとは別にメモリ負荷を制限する。
 # Decoding an image can allocate substantially more memory than its compressed
 # upload size. Keep this bounded independently of the generic blocking-I/O pool.
 _IMAGE_PROCESSING_SEMAPHORE = threading.BoundedSemaphore(value=2)
@@ -29,6 +31,7 @@ _IMAGE_PROCESSING_SEMAPHORE = threading.BoundedSemaphore(value=2)
 
 @dataclass(frozen=True)
 class ProcessedPromptAttachment:
+    # 保存先へ渡す、表示用とカード用の正規化済み画像。
     """Normalized display and card variants ready for a storage backend."""
 
     display_bytes: bytes
@@ -38,6 +41,7 @@ class ProcessedPromptAttachment:
 
 
 def process_prompt_attachment(source: bytes) -> ProcessedPromptAttachment:
+    # 画像を検証・縮小してメタデータを除去しWebPにする。処理量が無制限になる動画画像は拒否する。
     """Decode, validate, resize, strip metadata, and encode a safe WebP pair.
 
     Animated uploads are intentionally rejected. A prompt example is static
@@ -56,6 +60,7 @@ def process_prompt_attachment(source: bytes) -> ProcessedPromptAttachment:
 
 
 def _process_prompt_attachment(source: bytes) -> ProcessedPromptAttachment:
+    # 巨大画像に対するPillowの警告を例外にし、サイズ制限を確実に適用する。
     # Pillow emits a warning (rather than always throwing) for oversized input.
     # Promote it to an exception so the size policy is deterministic.
     with warnings.catch_warnings():
@@ -65,6 +70,7 @@ def _process_prompt_attachment(source: bytes) -> ProcessedPromptAttachment:
                 raise ValueError("アニメーション画像はアップロードできません。")
             if opened.width * opened.height > PROMPT_ATTACHMENT_MAX_PIXELS:
                 raise ValueError("画像の総ピクセル数が上限を超えています。")
+            # 最後までデコードし、切れたデータや破損を検出する。
             opened.load()  # Full decode catches truncated/corrupt image payloads.
 
             image = ImageOps.exif_transpose(opened)
@@ -90,6 +96,7 @@ def _process_prompt_attachment(source: bytes) -> ProcessedPromptAttachment:
 
 
 def _convert_to_webp_compatible_mode(image: Image.Image) -> Image.Image:
+    # 透明度を保ちつつ、パレットやメタデータ専用のモードを除く。
     """Remove palette/metadata-only modes while retaining transparency."""
     if image.mode in {"RGBA", "RGB"}:
         return image.copy()
@@ -125,6 +132,7 @@ def _encode_bounded_webp(
     initial_quality: int,
     maximum_bytes: int,
 ) -> tuple[Image.Image, bytes]:
+    # 配信サイズの予算内で派生画像をエンコードする。
     """Encode a derivative within a predictable delivery-byte budget."""
     dimensions = (
         maximum_dimension,
@@ -143,6 +151,7 @@ def _encode_bounded_webp(
                 return candidate, encoded
     if smallest is None:  # pragma: no cover - dimensions is always non-empty
         raise ValueError("画像を変換できませんでした。")
+    # 難しい画像でも低解像度の派生画像に収め、利用者が渡した原本の直接配信には戻さない。
     # Even difficult photographic/noise images retain a bounded low-resolution
     # derivative. Never fall back to serving the user-supplied original.
     return smallest

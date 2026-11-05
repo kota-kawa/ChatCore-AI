@@ -52,6 +52,7 @@ MAX_EXCERPT_DISPLAY_CHARS = 200
 
 
 class PrivateTextTracker:
+    # 公開投稿との重複検出に使うため、ターン内で読んだ非公開テキストを蓄積する。
     """Accumulates private text read during one turn for public-post overlap checks."""
 
     def __init__(self, *, seed: str = "") -> None:
@@ -70,6 +71,7 @@ class PrivateTextTracker:
             self._texts = self._texts[-MAX_TRACKED_TEXTS:]
 
     def add_chunk(self, group_key: str, start: int, text: str) -> None:
+        # 分割境界をまたぐ一致も検出できるよう、直前チャンクとの継ぎ目も記録する。
         """Track one private read chunk and the seam with its adjacent predecessor."""
         if not text or not text.strip():
             return
@@ -93,6 +95,7 @@ class PrivateTextTracker:
             self._chunk_tails.popitem(last=False)
 
     def find_overlaps(self, candidate: str) -> list[str]:
+        # 候補文に含まれる非公開テキストの抜粋を、報告件数の上限まで返す。
         """Return up to MAX_REPORTED_MATCHES excerpts of candidate that reappear from private text."""
         candidate_text = (candidate or "").strip()
         if len(candidate_text) < MIN_OVERLAP_LENGTH or not self._texts:

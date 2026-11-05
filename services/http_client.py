@@ -1,3 +1,8 @@
+"""外部 HTTP 呼び出し（Web 検索・メール送信など）が共有する requests.Session と薄いラッパーを提供する。
+
+Provides the shared requests.Session and thin wrappers used by outbound HTTP calls such as web search and email sending.
+"""
+
 from __future__ import annotations
 
 import threading
@@ -24,6 +29,8 @@ _session_lock = threading.Lock()
 _session: requests.Session | None = None
 
 
+# コネクションプールの大きさを環境変数 HTTP_POOL_MAXSIZE（既定 32）で決める。接続先ホスト数の上限と同時接続数の上限を同じ値に揃える。
+# Size the connection pool from HTTP_POOL_MAXSIZE (default 32), using one value for both the host-pool count and the per-host cap.
 def _build_adapter() -> HTTPAdapter:
     pool_maxsize = env_int("HTTP_POOL_MAXSIZE", 32)
     return HTTPAdapter(

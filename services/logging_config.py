@@ -1,3 +1,11 @@
+"""アプリ全体のロギング設定（JSON/プレーン形式、コンソールと回転ファイル出力）を組み立てる。
+
+環境変数（LOG_LEVEL、LOG_OUTPUT、LOG_DIR など）から設定を読み、起動時に `configure_logging` がルートロガーへ適用する。
+Builds the application-wide logging setup (JSON or plain format, console and rotating-file output).
+Settings come from environment variables (LOG_LEVEL, LOG_OUTPUT, LOG_DIR, ...);
+`configure_logging` applies them to the root logger at startup.
+"""
+
 from __future__ import annotations
 
 import json

@@ -107,6 +107,7 @@ class WorkspaceToolRunner:
         state.telemetry.record_workspace_tool_result(spec.name, result.get("status"))
         return result
 
+    # 読み取り処理。
     # Reads -------------------------------------------------------------------
 
     def _read(self, state: ChatTurnRunState, spec: ToolSpec, raw_arguments: Any) -> dict[str, Any]:
@@ -237,6 +238,7 @@ class WorkspaceToolRunner:
         if isinstance(context, str) and isinstance(start, int) and not isinstance(start, bool):
             self._private_texts.add_chunk("profile:llm_profile_context", start, context)
 
+    # 書き込み提案の処理。
     # Write proposals -----------------------------------------------------------
 
     def _propose(self, state: ChatTurnRunState, spec: ToolSpec, raw_arguments: Any) -> dict[str, Any]:

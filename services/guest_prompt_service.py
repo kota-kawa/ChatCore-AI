@@ -1,4 +1,9 @@
-"""Persistence and ownership transfer for unauthenticated shared prompts."""
+"""未ログイン（ゲスト）による共有プロンプトの投稿の保存と、ログイン後の所有者の引き継ぎを扱う。
+ゲストはセッション内のランダムなトークン（Cookie）と IP のハッシュで識別し、投稿は 24 時間に 1 件までに制限する。
+
+Persistence and ownership transfer for unauthenticated shared prompts.
+Guests are identified by a random session token (cookie) and a hashed IP, and limited to one post per rolling 24 hours.
+"""
 
 from __future__ import annotations
 
@@ -19,13 +24,18 @@ from services.runtime_config import get_session_secret_key
 
 logger = logging.getLogger(__name__)
 
+# 日本語: ゲストのトークンをセッションに入れるキーと長さ、ハッシュ用の秘密鍵が無い開発環境向けの代替値。
+# English: Session key and length for the guest token, and a fallback hash secret for development when no secret key is configured.
 GUEST_PROMPT_SESSION_KEY = "guest_prompt_token"
 GUEST_PROMPT_TOKEN_BYTES = 32
 _GUEST_PROMPT_HASH_FALLBACK_SECRET = "chatcore-guest-prompt-hash-v1"
 _fallback_secret_warning_logged = False
 
 
+# 日本語: Cookie または IP が、直近の一定期間にすでに投稿していた場合の例外。retry_after は再試行までの秒数。
+# English: Raised when the cookie or IP already posted within the rolling window; retry_after is the seconds to wait.
 class GuestPromptLimitExceededError(ValueError):
+    # CookieまたはIPが時間窓内に投稿済みであることを通知する。
     """Raised when the cookie or IP already posted within the rolling window."""
 
     def __init__(self, retry_after: int) -> None:
@@ -37,7 +47,10 @@ class GuestPromptLimitExceededError(ValueError):
 
 
 def get_or_create_guest_prompt_token(session: dict[str, Any]) -> str:
-    """Keep a random guest identity in the server-side session behind its cookie."""
+    """Cookie に紐づくサーバー側セッションに、ランダムなゲスト識別子を保持して返す（無ければ作る）。
+
+    Keep a random guest identity in the server-side session behind its cookie.
+    """
     existing = session.get(GUEST_PROMPT_SESSION_KEY)
     if isinstance(existing, str) and len(existing) >= 32:
         return existing
@@ -48,7 +61,10 @@ def get_or_create_guest_prompt_token(session: dict[str, Any]) -> str:
 
 
 def get_guest_prompt_token(session: dict[str, Any]) -> str | None:
-    """Return a valid existing guest identity without creating one during login."""
+    """有効なゲスト識別子が既にあれば返す。ログイン時に新しく作ることはしない。
+
+    Return a valid existing guest identity without creating one during login.
+    """
     token = session.get(GUEST_PROMPT_SESSION_KEY)
     if isinstance(token, str) and len(token) >= 32:
         return token
@@ -56,7 +72,12 @@ def get_guest_prompt_token(session: dict[str, Any]) -> str | None:
 
 
 def _hash_guest_identifier(value: str) -> str:
-    """Hash IP and cookie-derived identifiers before they reach the database."""
+    """IP や Cookie 由来の識別子を、DB に渡す前に HMAC-SHA256 でハッシュする。
+    セッション秘密鍵が無い場合は開発用の代替値を使い、その旨を 1 回だけ警告する。
+
+    Hash IP and cookie-derived identifiers before they reach the database.
+    Without a session secret a development fallback is used, with a one-time warning.
+    """
     secret = get_session_secret_key() or _GUEST_PROMPT_HASH_FALLBACK_SECRET
     global _fallback_secret_warning_logged
     if not get_session_secret_key() and not _fallback_secret_warning_logged:
@@ -87,7 +108,12 @@ async def create_guest_shared_prompt(
     repository: SharedContentRepository | None = None,
     session: AsyncSession | None = None,
 ) -> int:
-    """Atomically enforce the guest quota and insert a text-only public prompt."""
+    """ゲストの投稿枠の確認と、テキストのみの公開プロンプトの登録を原子的に行い、プロンプト ID を返す。
+    Cookie と IP の両方のキーを同じ順序でロックして競合を防ぎ、枠を超える場合は GuestPromptLimitExceededError にする。
+
+    Atomically enforce the guest quota and insert a text-only public prompt.
+    Both the cookie and IP keys are locked in a fixed order to avoid races; an exceeded quota raises GuestPromptLimitExceededError.
+    """
     cookie_hash = _guest_cookie_hash(guest_token)
     ip_hash = _guest_ip_hash(client_ip)
     lock_keys = sorted(
@@ -135,7 +161,10 @@ async def claim_guest_prompts_for_user(
     repository: SharedContentRepository | None = None,
     session: AsyncSession | None = None,
 ) -> list[int]:
-    """Assign every unclaimed prompt from this browser cookie to the signed-in user."""
+    """この Cookie でゲスト投稿された、まだ誰のものでもないプロンプトをすべて、ログインしたユーザーのものにする。
+
+    Assign every unclaimed prompt from this browser cookie to the signed-in user.
+    """
     if not guest_token:
         return []
 

@@ -1,4 +1,10 @@
-"""Review-queue use cases for automatically extracted context facts."""
+"""LLM が会話から自動抽出した個人コンテキスト候補のレビューキュー用ユースケース。
+
+候補の保存・一覧・承認・却下と、抽出機能の ON/OFF 設定を扱う。
+
+Review-queue use cases for automatically extracted context facts.
+Covers storing, listing, approving and rejecting candidates, plus the extraction opt-in setting.
+"""
 
 from __future__ import annotations
 
@@ -44,6 +50,8 @@ _CURSOR_SEPARATOR = "~"
 T = TypeVar("T")
 
 
+# LLM が返した候補 1 件の検証モデル。不正な候補は呼び出し側で捨てる（余分なキーは無視）。
+# Validation model for one LLM-returned candidate; invalid ones are dropped by the caller (extra keys ignored).
 class _ExtractedCandidateInput(BaseModel):
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
@@ -68,7 +76,12 @@ async def _transaction(
     session: AsyncSession | None,
     operation: Callable[[AsyncSession], Awaitable[T]],
 ) -> T:
-    """Run one candidate use case in an explicit transaction."""
+    """候補ユースケースを明示的なトランザクションで実行する。session を渡された場合は呼び出し側に任せ、
+    渡されない場合は一時的な DB エラーに限り最大 MAX_DB_WRITE_ATTEMPTS 回までバックオフ付きで再試行する。
+
+    Run one candidate use case in an explicit transaction. A caller-supplied session is used as is;
+    otherwise retryable DB errors are retried with backoff up to MAX_DB_WRITE_ATTEMPTS times.
+    """
     if session is not None:
         return await operation(session)
 
@@ -86,7 +99,10 @@ async def _transaction(
 
 
 def _to_candidate_response(candidate: dict[str, Any]) -> ContextFactCandidateResponse:
-    """Allowlist candidate fields; never expose owner or fingerprint data."""
+    """候補のフィールドを許可リスト方式で詰め直す。所有者やフィンガープリントは返さない。
+
+    Allowlist candidate fields; never expose owner or fingerprint data.
+    """
     return ContextFactCandidateResponse(
         id=int(candidate["id"]),
         fact_type=str(candidate["fact_type"]),
@@ -124,6 +140,8 @@ def _to_fact_response(fact: dict[str, Any]) -> ContextFactResponse:
     )
 
 
+# 正規化（NFKC・空白圧縮・大文字小文字無視）した種別・題名・本文のハッシュ。表記ゆれによる重複候補の抑止に使う。
+# Hash of the normalized type/title/content (NFKC, collapsed whitespace, casefolded), used to suppress duplicate candidates.
 def _fingerprint(candidate: _ExtractedCandidateInput) -> str:
     def normalized(value: str) -> str:
         return " ".join(unicodedata.normalize("NFKC", value).split()).casefold()
@@ -148,7 +166,12 @@ async def store_extracted_candidates(
     source_ref: str,
     session: AsyncSession | None = None,
 ) -> int:
-    """Validate and enqueue unique LLM-extracted facts for an opted-in owner."""
+    """LLM が抽出した事実を検証し、抽出を許可しているユーザーの候補キューへ重複なく登録する。
+    検証に通らない候補は黙って捨て、登録できた件数を返す。
+
+    Validate and enqueue unique LLM-extracted facts for an opted-in owner.
+    Invalid candidates are silently skipped; returns how many were stored.
+    """
     normalized_source_ref = source_ref.strip()[:500] or None
     prepared: list[dict[str, Any]] = []
     for raw_candidate in candidates:
@@ -182,6 +205,8 @@ async def store_extracted_candidates(
     return await _transaction(session, operation)
 
 
+# カーソルは「作成日時~ID」形式。最後の区切りで分割するので、日時側に区切り文字が含まれても壊れない。
+# The cursor is "created_at~id"; splitting on the last separator keeps it valid even if the timestamp part contained one.
 def _decode_cursor(cursor: str | None) -> tuple[datetime, int] | None:
     if not cursor:
         return None
@@ -210,6 +235,8 @@ async def list_candidates(
     cursor: str | None = None,
     session: AsyncSession | None = None,
 ) -> ContextFactCandidateListResponse:
+    # 1 件多く取得して「次ページがあるか」を判定し、next_cursor を作る。
+    # Fetch one extra row to detect whether a next page exists, then build next_cursor.
     async def operation(db: AsyncSession) -> ContextFactCandidateListResponse:
         safe_limit = max(1, min(int(limit), MAX_CONTEXT_CANDIDATE_LIST_LIMIT))
         decoded = _decode_cursor(cursor)

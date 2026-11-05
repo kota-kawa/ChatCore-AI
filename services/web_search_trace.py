@@ -80,7 +80,10 @@ _MAX_DOMAIN_CHIPS = 3
 
 @dataclass(frozen=True)
 class TraceStep:
-    """回答トレースの1ステップ。sources を持つステップは展開できる。"""
+    """回答トレースの1ステップ。sources を持つステップは展開できる。
+
+    One step of the answer trace; a step that carries sources can be expanded.
+    """
 
     title: str
     detail: str = ""
@@ -125,6 +128,8 @@ def _freshness_label(result: WebSearchResult | None) -> str:
     return _FRESHNESS_LABELS.get(result.freshness.strip(), "")
 
 
+# 日本語: 検索結果が持つソースの件数。結果が無ければ 0。
+# English: Number of sources in a result; 0 when there is no result.
 def _source_count(result: WebSearchResult | None) -> int:
     return len(result.sources) if result is not None else 0
 
@@ -274,7 +279,12 @@ def selected_reference_step(
     *,
     query: str = "",
 ) -> TraceStep:
-    """Build a trace step for memo/My Context or shared-prompt lookup."""
+    """メモ／マイコンテキスト、または共有プロンプトの検索に対するトレースのステップを作る。
+
+    status が failed / unavailable なら警告、overview なら保存済み内容を棚卸しとして渡したステップになる。
+
+    Build a trace step for memo/My Context or shared-prompt lookup.
+    """
     status = str(payload.get("status") or "")
     resolved_query = str(payload.get("query") or query)
 
@@ -355,6 +365,8 @@ def selected_reference_step(
     )
 
 
+# 日本語: 選ばれた参照元の検索結果を、それぞれトレースのステップに変換する。
+# English: Convert each selected-reference lookup result into a trace step.
 def selected_reference_steps(
     traces: Sequence[SelectedReferenceLookupTrace] | None,
 ) -> list[TraceStep]:
@@ -388,6 +400,8 @@ def _infer_kind(title: str) -> str:
     return _DEFAULT_STEP_KIND
 
 
+# 日本語: 文字数の上限を適用して正規化する。題名が空のステップは捨てて、未知の種別は既定の種別に寄せる。
+# English: Normalize with the length caps applied; steps without a title are dropped and unknown kinds fall back to the default.
 def _coerce_step(step: Any) -> TraceStep | None:
     # dict形式のステップ（旧呼び出し側・テスト）も受け付けて正規化する
     # Accept and normalize dict-shaped steps from legacy callers and tests.
@@ -446,6 +460,8 @@ def _render_step_chips(chips: Iterable[str]) -> str:
     return '<span class="web-search-sources__step-chips">' + "".join(rendered) + "</span>"
 
 
+# 日本語: ステップ本文の HTML。ユーザー由来の文字列は escape して埋め込む。
+# English: HTML of the step body; user-derived strings are escaped before embedding.
 def _render_step_main(step: TraceStep, *, toggle_count: int = 0) -> str:
     # ステップ本文（見出し・検索語・説明・チップ・展開ボタン）を組み立てる
     # Build the step body: heading, query, description, chips, and the expand affordance.
@@ -567,6 +583,8 @@ def _summary_detail(steps: Sequence[TraceStep], source_total: int) -> str:
     return " · ".join(parts)
 
 
+# 日本語: ステップ一覧とフォールバックの全体で、参照したソースを URL の重複なしで数える。
+# English: Count the referenced sources across all steps and the fallback, deduplicated by URL.
 def _unique_source_total(
     rendered_steps: Sequence[tuple[TraceStep, list[str]]],
     fallback_result: WebSearchResult | None,

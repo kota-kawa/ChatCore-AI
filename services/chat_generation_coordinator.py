@@ -44,7 +44,10 @@ _TERMINAL_EVENTS = {"done", "error", "aborted", "incomplete"}
 
 
 def decode_redis_text(raw: Any) -> str | None:
-    """Return Redis payloads as text regardless of the client's decode settings."""
+    """クライアントのデコード設定に関わらず、Redis の値を文字列として返す。
+
+    Return Redis payloads as text regardless of the client's decode settings.
+    """
     if isinstance(raw, str):
         return raw
     if isinstance(raw, bytes):
@@ -117,8 +120,10 @@ class ChatGenerationCoordinator:
             return self._redis_client_getter()
         return get_redis_client()
 
-    # Redis を設定しているが現在接続できない状態かを確認する。
-    # Distinguish a local-only deployment from a configured Redis outage.
+    # Redis が設定されているか（接続できるかは問わない）を返す。supports_distributed_streaming と
+    # 組み合わせると、ローカル専用の構成と、設定済みの Redis の障害を区別できる。
+    # Return whether Redis is configured, regardless of reachability. Combined with
+    # supports_distributed_streaming it distinguishes a local-only deployment from a configured Redis outage.
     def redis_is_configured(self) -> bool:
         return is_redis_configured()
 
@@ -137,8 +142,8 @@ class ChatGenerationCoordinator:
     def cancel_request_key(self, job_key: str) -> str:
         return f"{_CANCEL_REQUEST_KEY_PREFIX}:{job_key}"
 
-    # Redis に保存するイベントストリームのキーを生成する
-    # Generate the Redis event stream key
+    # ルームの最新の生成 ID を保存する Redis キーを生成する
+    # Generate the Redis key that stores the room's latest generation ID
     def latest_generation_key(self, job_key: str) -> str:
         return f"{_LATEST_GENERATION_KEY_PREFIX}:{job_key}"
 
@@ -147,6 +152,8 @@ class ChatGenerationCoordinator:
     def generation_reservation_key(self, job_key: str, generation_id: str) -> str:
         return f"{_GENERATION_RESERVATION_KEY_PREFIX}:{job_key}:{generation_id}"
 
+    # 再接続時のリプレイ用に、イベントを順に溜める Redis リストのキーを生成する
+    # Generate the key of the Redis list that accumulates events for replay on reconnection
     def event_stream_key(self, job_key: str, generation_id: str) -> str:
         return f"{_EVENT_STREAM_KEY_PREFIX}:{job_key}:{generation_id}"
 
@@ -155,9 +162,12 @@ class ChatGenerationCoordinator:
     def event_channel_name(self, job_key: str, generation_id: str) -> str:
         return f"{_EVENT_CHANNEL_KEY_PREFIX}:{job_key}:{generation_id}"
 
+    # 生成 ID の予約・最新 ID・イベント履歴に共通で使う保持秒数（最低 1 秒）
+    # Retention seconds shared by the generation ID reservation, latest ID and event history (at least 1)
     def generation_retention_ttl_seconds(self) -> int:
         return max(self._job_retention_seconds, 1)
 
+    # イベントを書く前に生成 ID を確保する。ローカル専用（Redis なし）のときは None を返す。
     # Claim a generation ID before any events are written, returning None in local-only mode.
     def reserve_generation_id(self, job_key: str, generation_id: str) -> bool | None:
         redis_client = self.get_redis_client()
@@ -176,6 +186,8 @@ class ChatGenerationCoordinator:
             logger.exception("Failed to reserve a chat generation ID in Redis.")
             raise
 
+    # 確保した生成 ID の予約を解放する（開始に失敗したときの巻き戻し用）
+    # Release a generation ID reservation (used to roll back when starting fails)
     def release_generation_id(self, job_key: str, generation_id: str) -> None:
         redis_client = self.get_redis_client()
         if redis_client is None:
@@ -185,6 +197,8 @@ class ChatGenerationCoordinator:
         except Exception:
             logger.exception("Failed to release a chat generation ID reservation in Redis.")
 
+    # ルームの最新の生成 ID を保存する。保存に失敗したら False（Redis なしは True）
+    # Store the room's latest generation ID; returns False on failure (True when there is no Redis)
     def set_latest_generation_id(self, job_key: str, generation_id: str) -> bool:
         redis_client = self.get_redis_client()
         if redis_client is None:
@@ -200,6 +214,10 @@ class ChatGenerationCoordinator:
             return False
         return True
 
+    # 最新の生成 ID が失敗した世代のままなら、直前の ID に戻す（無ければ消す）。
+    # 他の世代が既に上書きしていたら触らないよう、比較と更新を Lua で不可分に行う。
+    # Put the previous latest generation ID back (or delete it) if it still points at the failed
+    # generation. The compare-and-set runs atomically in Lua so a newer generation is never overwritten.
     def restore_latest_generation_id(
         self,
         job_key: str,
@@ -237,6 +255,8 @@ return 1
             logger.exception("Failed to restore the previous latest chat generation ID.")
             return False
 
+    # 生成中の世代の予約キーと、それが最新ならその最新 ID の保持期間を延ばす
+    # Extend the retention of the running generation's reservation key and, if it is still the latest, the latest-ID key
     def refresh_latest_generation_id(self, job_key: str, generation_id: str) -> bool:
         redis_client = self.get_redis_client()
         if redis_client is None:
@@ -254,6 +274,8 @@ return 1
             logger.exception("Failed to refresh the latest chat generation ID in Redis.")
             return False
 
+    # ルームの最新の生成 ID を Redis から読む。Redis なしは None、読み取り失敗は例外のまま送出する
+    # Read the room's latest generation ID from Redis; None without Redis, read errors propagate
     def get_latest_generation_id(self, job_key: str) -> str | None:
         redis_client = self.get_redis_client()
         if redis_client is None:

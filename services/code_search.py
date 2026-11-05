@@ -1,3 +1,6 @@
+# 日本語の機能名をコード識別子へ展開し、リポジトリ内の関連コード断片を検索する。
+# Expands Japanese feature terms into code identifiers and retrieves related repository snippets.
+
 from __future__ import annotations
 
 import logging

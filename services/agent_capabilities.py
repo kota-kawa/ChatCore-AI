@@ -1,3 +1,9 @@
+"""AI エージェントに伝える ChatCore の機能カタログ（ページ、画面操作、型付きコマンド）を定義する。
+
+Defines the ChatCore capability catalog given to the AI agent (pages, UI actions, typed commands).
+`intent_classifier` / `page_context` build prompt context from it, and `page_actions` validates commands against it.
+"""
+
 from __future__ import annotations
 
 import re
@@ -65,8 +71,8 @@ AGENT_TOOLS: tuple[AgentTool, ...] = (
     AgentTool("memo.save", "メモを保存する。", "{}", "保存ボタンをクリックできる。", risk="medium"),
 )
 
-# 実行可能なエージェントコマンドのセット
-# Set of allowed agent commands
+# 実行可能なエージェントコマンドのセット（page_actions が、モデルの提案したコマンドの検証に使う）
+# Set of allowed agent commands (page_actions uses it to validate commands the model proposes)
 ALLOWED_AGENT_COMMANDS = frozenset(tool.command for tool in AGENT_TOOLS)
 
 # エージェントコマンドのリスクレベルのマップ

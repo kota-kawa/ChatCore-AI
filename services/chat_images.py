@@ -57,7 +57,10 @@ ATTACHED_IMAGES_KEY = "attached_images"
 
 @dataclass(frozen=True)
 class ChatImage:
-    """One stored image as referenced from a chat message."""
+    """チャット発話から参照する、保存済みの画像 1 枚（画像 ID・元のファイル名・寸法）。
+
+    One stored image as referenced from a chat message.
+    """
 
     id: str
     name: str
@@ -82,7 +85,10 @@ def _item_value(item: Any, key: str) -> str:
 
 
 def split_image_attachments(attached_files: Sequence[Any]) -> tuple[list[Any], list[Any]]:
-    """Split request attachments into (text/document files, images) by file extension."""
+    """リクエストの添付を拡張子で、テキスト・文書ファイルと画像に振り分ける。
+
+    Split request attachments into (text/document files, images) by file extension.
+    """
     documents: list[Any] = []
     images: list[Any] = []
     for item in attached_files:
@@ -91,6 +97,10 @@ def split_image_attachments(attached_files: Sequence[Any]) -> tuple[list[Any], l
 
 
 def _decode_image(filename: str, data_base64: str) -> bytes:
+    """base64（data URL 形式も可）の画像データを復号する。空・不正・サイズ超過は添付エラーにする。
+
+    Decode base64 (or data URL) image data; empty, malformed or oversized data raises an attachment error.
+    """
     encoded = "".join(data_base64.split())
     if encoded.lower().startswith("data:") and "," in encoded:
         encoded = encoded.split(",", 1)[1]
@@ -111,7 +121,10 @@ def _decode_image(filename: str, data_base64: str) -> bytes:
 
 
 def prepare_chat_images(image_items: Sequence[Any], owner_key: str | None) -> list[ChatImage]:
-    """Validate, normalize (EXIF orientation, metadata removal, WebP) and store each image."""
+    """各画像を検証し、EXIF の向き補正・メタデータ除去・WebP 化をしてから保存する。
+
+    Validate, normalize (EXIF orientation, metadata removal, WebP) and store each image.
+    """
     if not image_items:
         return []
     if not owner_key:
@@ -134,13 +147,20 @@ def prepare_chat_images(image_items: Sequence[Any], owner_key: str | None) -> li
 
 
 def encode_chat_images_for_storage(images: Sequence[ChatImage] | None) -> list[dict[str, Any]] | None:
+    """履歴へ保存する形（画像 ID と寸法だけの dict のリスト）に直す。画像が無ければ None。
+
+    Convert to the stored history form (id and dimensions only); None when there are no images.
+    """
     if not images:
         return None
     return [image.to_storage() for image in images[:MAX_ATTACHED_FILES]]
 
 
 def decode_chat_images_from_storage(raw_payload: Any) -> list[ChatImage]:
-    """Restore image references, skipping entries that do not carry a valid id."""
+    """保存済みの画像参照を復元する。有効な画像 ID を持たない要素は読み飛ばす。
+
+    Restore image references, skipping entries that do not carry a valid id.
+    """
     if not isinstance(raw_payload, list):
         return []
     images: list[ChatImage] = []
@@ -162,7 +182,10 @@ def decode_chat_images_from_storage(raw_payload: Any) -> list[ChatImage]:
 
 
 def estimate_image_input_tokens(image_inputs: Any) -> int:
-    """Estimate the input tokens of the images carried by one message."""
+    """1 発話に付いた画像の入力トークン数を、32px パッチ数から多めに見積もる。
+
+    Estimate the input tokens of the images carried by one message.
+    """
     total = 0
     for image in decode_chat_images_from_storage(image_inputs):
         width = max(1, image.width)

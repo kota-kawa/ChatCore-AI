@@ -1,3 +1,10 @@
+"""ユーザー発話の意図（画面操作・ページ情報・検索・直接回答）を軽量モデルで分類する。
+分類はすべて LLM に任せ、失敗したときは "unknown" を返す。
+
+Classifies a user message's intent (action, page info, search or direct answer) with a lightweight model.
+Classification is delegated entirely to the LLM and falls back to "unknown" on failure.
+"""
+
 from __future__ import annotations
 
 import json
@@ -59,6 +66,11 @@ def classify_intent(message: str, current_page: str = "") -> Intent:
     """
     ユーザーメッセージの意図をLLMで1回分類して返す。
     失敗時は "unknown"（操作・検索なし）にフォールバックする。
+    ページ URL が無いときは画面操作の対象が無いので、action / page_info は search に読み替える。
+
+    Classify the user message's intent once with the LLM.
+    Falls back to "unknown" (no action or search) on failure.
+    Without a page URL there is nothing to operate on, so action / page_info are mapped to search.
     """
     # ユーザーメッセージとコンテキスト情報（現在のページ、エージェント機能等）を元に、LLMへ送信するプロンプトを構築します。
     # Construct prompt messages to send to the LLM, including user message and context details (current page, capabilities).

@@ -1,4 +1,8 @@
-"""Preselect enabled Skills and the Generative UI mode for one chat turn."""
+"""1 回のチャットターンについて、有効な Skill のうち今回適用するものと、生成 UI のモード（NONE / 2D / 3D）を事前に選ぶ。
+分類用の LLM 呼び出しが失敗・超過・不確実なときは、適用できる Skill を全部残す側に倒す（fail open）。
+
+Preselect enabled Skills and the Generative UI mode for one chat turn.
+"""
 
 from __future__ import annotations
 
@@ -34,6 +38,10 @@ UI_MODES = frozenset({"NONE", "2D", "3D"})
 UiMode = Literal["NONE", "2D", "3D"]
 logger = logging.getLogger(__name__)
 
+# 「いつも」「常に」「always answer」などで始まる段落は、回答全般に効く指示とみなす候補。
+# _unconditional_response_style_prefix が、Skill の一部が選ばれなかったときも残す段落を判定するのに使う。
+# Paragraphs starting with phrases such as "always answer" count as instructions for every reply;
+# _unconditional_response_style_prefix uses these tables to keep them even when the Skill is not selected.
 _GLOBAL_RESPONSE_PREFIXES = (
     "always answer",
     "always respond",
@@ -117,6 +125,10 @@ _JAPANESE_TOPIC_REFERENCE_PATTERN = re.compile(
 )
 _UNSCOPED_TOPIC_QUALIFIERS = frozenset({"すべて", "全て", "あらゆる", "all", "every", "any", "user", "users", "ユーザー", "利用者"})
 
+# Skill の適用要否と生成 UI のモードを JSON で判定させる分類用のシステムプロンプト。
+# Skill の本文は引用された非信頼データとして扱わせる。
+# System prompt for the classifier that returns the applicable Skills and the Generative UI mode as JSON.
+# Skill bodies are quoted, untrusted data.
 _CLASSIFIER_SYSTEM_PROMPT = """You classify which enabled Skills should be applied to one chat response and which
 Generative UI mode the latest user request asks for.
 
@@ -153,6 +165,9 @@ conversation does not provide enough information to make a reliable selection. R
 Markdown."""
 
 
+# Skill 選択の結果。選択後の Skill 文脈、生成 UI のモード（判定できなかったときは None）、本文を含まないテレメトリを持つ。
+# Result of Skill selection: the selected Skill context, the Generative UI mode (None when it could not be decided) and
+# metadata-only telemetry.
 @dataclass(frozen=True)
 class ChatSkillSelection:
     context: ChatSkillsContext
@@ -170,7 +185,10 @@ def select_chat_skills(
     llm_json_response: Callable[[list[dict[str, Any]], str], str | None] | None = None,
     generative_ui_forbidden: bool = False,
 ) -> ChatSkillSelection:
-    """Select Skills and record a metadata-only event for one chat turn."""
+    """1 ターン分の Skill を選び、本文を含まないメタデータだけのイベントを記録する。処理時間もテレメトリに加える。
+
+    Select Skills and record a metadata-only event for one chat turn.
+    """
     started_at = time.perf_counter()
     selection = _select_chat_skills(
         context,
@@ -203,7 +221,11 @@ def _select_chat_skills(
     llm_json_response: Callable[[list[dict[str, Any]], str], str | None] | None = None,
     generative_ui_forbidden: bool = False,
 ) -> ChatSkillSelection:
-    """Select eligible Skills with the conversation model, failing open to the eligible set.
+    """会話モデルで該当する Skill を選ぶ。失敗したときは適用できる Skill をすべて残す（fail open）。
+    分類器は適用できる全 Skill の正規化済み本文を見る。そのリクエスト全体が、
+    固定の上限と選択モデルの入力上限の小さい方に収まらない場合は LLM を呼ばず、適用できる Skill を残す。
+
+    Select eligible Skills with the conversation model, failing open to the eligible set.
 
     The classifier sees the full normalized bodies of every eligible Skill. If that complete
     request does not fit the smaller of the fixed classifier cap and the selected model's
@@ -238,6 +260,8 @@ def _select_chat_skills(
             input_budget_tokens=0,
         )
 
+    # 分類に渡す履歴は、user / assistant の本文だけに絞る（ツール呼び出しやツール結果は除く）。
+    # Only user and assistant text goes to the classifier; tool calls and tool results are dropped.
     clean_history = [
         message
         for message in conversation_messages or []
@@ -266,6 +290,10 @@ def _select_chat_skills(
         task_text,
         ui_allowed=ui_is_eligible,
     )
+    # 入力の見積もりが上限を超える・上限を求められない・LLM が失敗する・応答が不正または不確実なときは、
+    # いずれも _fallback で適用できる Skill を残す。
+    # Every failure path below (budget error, overflow, LLM error, invalid or uncertain answer) goes through _fallback and
+    # keeps the eligible Skills.
     input_tokens = estimate_messages_tokens(messages)
     try:
         input_budget_tokens = min(
@@ -357,6 +385,12 @@ def _build_classifier_messages(
     *,
     ui_allowed: bool,
 ) -> list[dict[str, str]]:
+    """分類器へ渡すメッセージを作る。履歴・プロジェクト指示・Task 指示・候補 Skill は JSON のデータとして user メッセージに
+    入れ、指示として実行させない。
+
+    Build the classifier messages; the history, instructions and candidate Skills travel as quoted JSON data in the user
+    message, not as instructions.
+    """
     payload = {
         "project_instructions": project_instructions,
         "task_instructions": task_prompt,
@@ -382,11 +416,19 @@ def _parse_decision(
     *,
     ui_allowed: bool,
 ) -> dict[str, Any] | None:
+    """分類器の JSON 応答を検証する。キー・型・Skill ID の重複や範囲、
+    ui_mode と生成 UI Skill の整合が崩れていれば None（不正な応答）を返す。
+
+    Validate the classifier JSON; return None for a wrong shape or type, unknown or duplicate Skill ids, or a ui_mode
+    that disagrees with the Generative UI Skill.
+    """
     if not isinstance(raw_response, str):
         return None
     try:
         payload = json.loads(raw_response)
     except (ValueError, RecursionError):
+        # プロバイダの出力は、JSON に見えても Python の整数やネストの上限を超えることがある。これはチャットの失敗ではなく、
+        # 不正な判定として扱う。
         # Provider output can exceed Python's integer or nesting limits while still
         # looking like JSON; these are invalid decisions, not failed chat requests.
         return None
@@ -414,6 +456,7 @@ def _parse_decision(
         return None
     if ui_mode == "NONE" and has_ui_skill:
         return None
+    # モデルが返した順序は信用せず、候補の正規の並びで ID を返す。
     # Return IDs in canonical candidate order rather than trusting model ordering.
     ordered_selected = [candidate.id for candidate in candidates if candidate.id in set(selected)]
     return {
@@ -432,6 +475,12 @@ def _fallback(
     input_tokens: int,
     input_budget_tokens: int,
 ) -> ChatSkillSelection:
+    """分類できなかったときの結果。候補（と常に適用する Skill）をすべて選んだ扱いにする。
+    生成 UI が使える場合のモードは None（未決定）、使えない場合は NONE。
+
+    Result when classification could not be used: every candidate stays selected; the UI mode is None (undecided) when
+    Generative UI is eligible, otherwise NONE.
+    """
     selected_ids = _effective_selected_ids(context, tuple(candidate.id for candidate in candidates))
     excluded_ids = {GENERATIVE_UI_SYSTEM_SKILL_ID} if ui_forbidden else set()
     selected_context = _selected_context(context, selected_ids, excluded_ids=excluded_ids)
@@ -461,6 +510,12 @@ def _selected_context(
     excluded_ids: set[int] | None = None,
     partial_skill_ids: tuple[int, ...] = (),
 ) -> ChatSkillsContext:
+    """選ばれた Skill だけで、プロンプトと各ツールの有効フラグを作り直した ChatSkillsContext を返す。
+    選ばれなかった Skill でも、回答全般に効く段落（_unconditional_response_style_prefix）は残す。
+
+    Rebuild the ChatSkillsContext with only the selected Skills; a paragraph that applies to every reply is kept even
+    from a Skill that was not selected.
+    """
     selected_set = set(selected_ids)
     excluded_set = excluded_ids or set()
     partial_set = set(partial_skill_ids)
@@ -494,12 +549,20 @@ def _selected_context(
 
 
 def _effective_selected_ids(context: ChatSkillsContext, selected_ids: tuple[int, ...]) -> tuple[int, ...]:
+    """モデルが選んだ ID に、常に適用する Skill の ID を足して、候補の並びで返す。
+
+    Add the always-applicable Skill ids to the model-selected ids and return them in candidate order.
+    """
     selected_set = set(selected_ids)
     selected_set.update(_always_applicable_skill_ids(context))
     return tuple(candidate.id for candidate in context.candidates if candidate.id in selected_set)
 
 
 def _always_applicable_skill_ids(context: ChatSkillsContext) -> tuple[int, ...]:
+    """個人 Skill のうち、冒頭の段落が回答全般に効く指示になっているものの ID を返す。
+
+    Return the ids of personal Skills whose first paragraph is a universal response-style instruction.
+    """
     prompt_skills = dict(context._prompt_skills_by_id)
     return tuple(
         candidate.id
@@ -510,7 +573,11 @@ def _always_applicable_skill_ids(context: ChatSkillsContext) -> tuple[int, ...]:
 
 
 def _unconditional_response_style_prefix(instructions: Any) -> str | None:
-    """Keep a clearly universal response-style paragraph from a mixed-scope Skill."""
+    """複数の用途が混ざった Skill から、回答全般に効くことが明らかな冒頭の段落だけを取り出す。
+    「常に」などで始まり、特定の話題に限定する言い回しを含まず、回答の書き方に関する語を含む場合だけ採用する。
+
+    Keep a clearly universal response-style paragraph from a mixed-scope Skill.
+    """
     if not isinstance(instructions, str):
         return None
     normalized_instructions = normalize_user_skill_instructions(instructions)
@@ -569,6 +636,11 @@ def _result(
     input_tokens: int,
     input_budget_tokens: int,
 ) -> ChatSkillSelection:
+    """選択結果とテレメトリ（理由・fallback か・選ばれた Skill ID・入力トークン数など）を ChatSkillSelection にまとめる。
+
+    Bundle the selection and its telemetry (reason, fallback flag, selected ids, input tokens and so on) into a
+    ChatSkillSelection.
+    """
     return ChatSkillSelection(
         context=context,
         ui_mode=ui_mode,

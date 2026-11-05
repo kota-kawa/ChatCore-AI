@@ -1,4 +1,9 @@
-"""Rewrite a chat turn into search queries for selected chat references.
+"""チャットで選択された参照(メモ・My Context・共有プロンプト)向けに、ユーザーの発話を検索クエリへ書き換える。
+
+直近の発話と一つ前のユーザー発話から LLM が構造化クエリを作り、相対的な日付も解決する。
+検索が空振りに終わったときだけ呼ばれ、LLM が使えなければ呼び出し側(services.selected_reference_context)が原文のまま続ける。
+
+Rewrite a chat turn into search queries for selected chat references.
 
 The query planner reads the latest turn and the previous user turn instead of splitting on
 Japanese particles or applying a fixed stop-word list. It returns structured queries that
@@ -21,6 +26,8 @@ from services.llm import LIGHTWEIGHT_TASK_MODEL, get_llm_json_response
 
 logger = logging.getLogger(__name__)
 
+# 書き換え後のクエリ数と 1 件あたりの長さの上限(LLM の出力を検索にそのまま使うための歯止め)
+# Caps on the number and length of rewritten queries, so LLM output can be used for search as is.
 MAX_REWRITTEN_QUERIES = 2
 MAX_REWRITTEN_QUERY_CHARS = 120
 
@@ -42,6 +49,8 @@ _SYSTEM_PROMPT = (
 )
 
 
+# 日付と前のユーザー発話を添えて渡す。前の発話は「それ」など追質問の省略された話題を補うため。
+# Passes today's date and the previous user turn so relative dates and elliptical follow-ups can be resolved.
 def _build_messages(query: str, previous_query: str, now: datetime) -> list[dict[str, Any]]:
     lines = [f"Today's date: {now.strftime('%Y-%m-%d')}"]
     if previous_query:
@@ -53,6 +62,10 @@ def _build_messages(query: str, previous_query: str, now: datetime) -> list[dict
     ]
 
 
+# LLM 応答から queries を取り出す。JSON 以外の前置きが付くことがあるため、最外の {...} を切り出して再試行する。
+# 解析できない場合は空リストを返し、書き換えなしとして扱わせる。
+# Extracts "queries" from the LLM reply. If extra text surrounds the JSON, retry on the outermost {...} block;
+# unparseable output yields an empty list so the caller treats it as "no rewrite".
 def _parse_queries(raw: str) -> list[str]:
     text = (raw or "").strip()
     if not text:
@@ -74,6 +87,8 @@ def _parse_queries(raw: str) -> list[str]:
     if not isinstance(loaded, dict):
         return []
 
+    # 空白を畳み、長さを切り詰め、重複を除いて上限件数までに絞る。
+    # Collapse whitespace, truncate, drop duplicates and stop at the query cap.
     queries: list[str] = []
     for candidate in loaded.get("queries") or []:
         if not isinstance(candidate, str):
@@ -92,6 +107,7 @@ def rewrite_reference_query(
     previous_query: str = "",
     now: datetime | None = None,
 ) -> list[str]:
+    # LLMが作ったクエリを返し、利用できなければ空リストにする。
     """Return LLM-produced queries, or an empty list when the rewrite is unusable."""
     normalized = " ".join(str(query or "").split())
     if not normalized:
@@ -106,6 +122,8 @@ def rewrite_reference_query(
         logger.warning("Reference query rewrite failed.", exc_info=True)
         return []
 
+    # 原文と同じクエリは再検索しても結果が変わらないので除く。
+    # A query identical to the original turn would repeat the empty lookup, so it is dropped.
     queries = [candidate for candidate in _parse_queries(raw) if candidate != normalized]
     if not queries:
         logger.info("Reference query rewrite returned nothing usable.")

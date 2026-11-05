@@ -1,3 +1,6 @@
+# 生成UIのpayload・コード・参照画像を検証し、保存形式と後続ターンの文脈へ変換する。
+# Validates generated UI payloads, code and images and adapts them for storage and later turns.
+
 from __future__ import annotations
 
 import json
@@ -141,6 +144,7 @@ _ARTIFACT_LIBRARY_ALIASES = {
 # Detect THREE usage in JS so the three dependency is inferred even when the
 # model forgets to declare "libraries".
 _THREE_USAGE_RE = re.compile(r"\bTHREE\s*[.\[(]")
+# 生成物はローカルTHREEを使う通常スクリプトなので、一般的なmodule形式を変換する。
 # Some providers return browser-module imports even though artifacts execute as
 # classic scripts with a local THREE global. These patterns let us fold the
 # common core/OrbitControls forms into that supported runtime.
@@ -282,6 +286,7 @@ class GenerativeUiValidationError(ValueError):
 
 
 def _coerce_generative_ui_mode(value: Any) -> GenerativeUiMode | None:
+    # 判断モデルが返すモードを、許可された語彙へ正規化する。
     """Normalize the finite mode vocabulary returned by the decision model."""
     if not isinstance(value, str):
         return None
@@ -342,6 +347,7 @@ class GenerativeUiArtifactV1(BaseModel):
         _validate_javascript_safety(sanitized)
         return sanitized
 
+    # HTML、CSS、JavaScriptの合計文字数が上限以内か検証する。
     # HTML、CSS、JavaScript of the total character length.
     # Validate that the combined character length of HTML, CSS, and JS does not exceed the limit.
     @model_validator(mode="after")
@@ -367,6 +373,7 @@ class NormalizedGenerativeResponse:
     repair_attempted: bool = False
 
     def status_payload(self) -> dict[str, str] | None:
+        # クライアントへ返す状態と理由コードの組を構築する。
         """Render the client-facing ``{state, reason_code}`` pair for this response."""
         return artifact_status_payload(
             self.artifact_status,
@@ -834,6 +841,7 @@ def _repair_truncated_json(source: str) -> str | None:
                 stack.pop()
 
     if not stack and not in_string:
+        # 括弧が既に釣り合う入力は、呼び出し元の専用経路に任せる。
         # Already balanced; the caller's balanced-object path handles this.
         return None
 
@@ -937,6 +945,7 @@ def _extract_artifact_candidates(
         candidates.append(candidate)
         occupied_spans.append(candidate.span)
 
+    # 明示された生成UI依頼だけを救済し、通常会話のコード例をUIへ変換しない。
     # A requested generated UI occasionally arrives as an otherwise-valid JSON
     # block or as separate HTML/CSS/JS blocks. Recover only those explicit UI
     # requests: applying this to ordinary chat would turn code examples into UI.
@@ -966,6 +975,7 @@ def _extract_malformed_artifact_fence_spans(
     text: str,
     occupied_spans: list[tuple[int, int]],
 ) -> list[tuple[int, int]]:
+    # チャット本文へ漏らさない不正なartifactフェンスの範囲を返す。
     """Return malformed artifact fence ranges that must not reach chat prose."""
     spans: list[tuple[int, int]] = []
     for match in MALFORMED_ARTIFACT_FENCE_RE.finditer(text):
@@ -1167,6 +1177,7 @@ def _sanitize_html(value: str) -> str:
 # libraries指定の表記ゆれを正規化し、JS本文からの推定も合わせてライブラリ一覧を組み立てます。
 # Normalize library declarations (folding aliases) and infer dependencies from the JS body.
 def _declared_library_names(value: Any) -> list[str]:
+    # 別名を統合する前の、モデルが記述したライブラリ名を返す。
     """Return the library names as the model wrote them, before alias folding."""
     if value is None:
         raw_items: list[Any] = []
@@ -1191,6 +1202,7 @@ def _normalize_artifact_libraries(value: Any, js: str) -> list[str]:
 
 
 def _normalize_three_module_imports(js: str) -> str:
+    # よくあるThree.jsのimportを、ローカルのグローバル実行環境へ適合させる。
     """Convert common Three.js module imports to the local global runtime."""
     source = _coerce_string(js)
 
@@ -1202,6 +1214,7 @@ def _normalize_three_module_imports(js: str) -> str:
         clause = match.group("clause").strip()
         prefix = match.group("prefix")
         is_addon_module = "/examples/" in module_source or "/addons/" in module_source
+        # ローカルUMDが既にTHREEを公開するため、名前空間とdefault importは不要になる。
         # The local UMD build already exposes THREE. Namespace/default imports
         # therefore become no-ops.
         if re.fullmatch(r"(?:\*\s+as\s+THREE|THREE)", clause, re.IGNORECASE):
@@ -1218,6 +1231,7 @@ def _normalize_three_module_imports(js: str) -> str:
                 imported = parts[0].strip()
                 local = parts[1].strip() if len(parts) == 2 else imported
                 if imported == "OrbitControls":
+                    # iframe側が小さな互換コントロールを提供する。
                     # The iframe supplies a small local compatibility control.
                     saw_orbit_controls = True
                     continue
@@ -1235,6 +1249,7 @@ def _normalize_three_module_imports(js: str) -> str:
             )
             return f"{prefix}{replacement}"
 
+        # 未対応のmodule構文は検証で拒否させ、壊れたコードを実行せず決定的な3D代替へ進む。
         # Keep unrecognized module syntax so validation rejects it and the
         # deterministic 3D fallback is used instead of executing broken code.
         return match.group(0)
@@ -1345,6 +1360,7 @@ def validate_artifact_payload(payload: Any) -> dict[str, Any]:
 
 
 def validate_web_search_image_payload(payload: Any) -> dict[str, Any]:
+    # サーバーが選んだ外部画像を、ブラウザーへ渡す前に検証する。
     """Validate a server-selected external image before it reaches the browser."""
     if not isinstance(payload, dict):
         raise GenerativeUiValidationError("Web search image payload must be an object.")
@@ -1446,6 +1462,7 @@ def decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
 
 
 def build_message_parts_context(raw_parts: Any) -> str:
+    # 生成UIやカードのラベルをコード抜きで要約し、後続ターンで指示対象を参照できるようにする。
     """Return a compact, code-free summary of generated UI, choice-button, approval-card and image parts.
 
     The visible response deliberately stores artifacts separately from prose.
@@ -1530,6 +1547,7 @@ def encode_message_parts(parts: list[dict[str, Any]] | None) -> str | None:
 
 
 def _validation_reason_code(error: str) -> str:
+    # 検証エラーを、固定の理由コードへまとめる。
     """Fold one validation error message into the fixed reason vocabulary."""
     return (
         REASON_ARTIFACT_MALFORMED
@@ -1595,6 +1613,7 @@ def normalize_response_with_artifacts(
     Choice buttons are a standard chat part, so they survive any generated-UI decision
     or refusal; only the artifact extraction below depends on them.
     """
+    # 旧呼び出しとの互換性のための引数。UI合成の廃止後は値によって挙動が変わらない。
     # Kept as a public keyword for older callers. Fallback UI synthesis was
     # intentionally removed, so its value no longer changes behavior.
     _ = allow_fallback
@@ -1786,6 +1805,7 @@ def _repair_reason_codes(
     normalized: NormalizedGenerativeResponse,
     issues: list[str],
 ) -> list[str]:
+    # 修復プロンプトに渡すため、検出した問題を固定の理由コードへまとめる。
     """Fold the detected problems into the fixed reason vocabulary for the repair prompt."""
     codes = list(normalized.artifact_reason_codes)
     if not codes:
@@ -1800,6 +1820,7 @@ def _repair_failure(
     reason_codes: list[str],
     failure_code: str,
 ) -> NormalizedGenerativeResponse:
+    # 使えるartifactが得られなかった修復を、成功とせず報告する。
     """Report a repair that did not produce a usable artifact, without inventing success."""
     keeps_artifact = normalized.has_artifact()
     return dataclass_replace(
@@ -1935,6 +1956,7 @@ def _normalize_artifacts_with_retry(
 
 
 def _latest_user_request(conversation_messages: list[dict[str, Any]] | None) -> str:
+    # 修復で話題が変わらないよう、最新のユーザー入力を返す。
     """Return the latest user prompt so a repair keeps the original subject."""
     for message in reversed(conversation_messages or []):
         if message.get("role") != "user":

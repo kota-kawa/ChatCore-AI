@@ -1,4 +1,11 @@
-"""MCP tools for discovering public prompts and SKILL posts."""
+"""公開プロンプトと SKILL の投稿を探して読み取る MCP ツール（一覧・検索・取得・SKILL リソース・カテゴリ）。
+
+出力は件数や文字数に上限があり、本文は信頼できない外部データとして扱うようクライアントへ伝える。
+実際の取得は `SharedContentService` に委ね、`mcp_server.py` が `register_shared_content_tools` で登録する。
+MCP tools for discovering and reading public prompts and SKILL posts (list, search, get, SKILL resources, categories).
+Output is bounded in count and length, and clients are told to treat the bodies as untrusted external data.
+Fetching is delegated to `SharedContentService`; `mcp_server.py` registers these via `register_shared_content_tools`.
+"""
 
 from __future__ import annotations
 
@@ -26,17 +33,23 @@ from services.shared_content_service import (
 logger = logging.getLogger(__name__)
 
 
+# カテゴリ1件（キーと表示名）。
+# One category (key and display label).
 class PromptCategoryInfo(BaseModel):
     key: str
     label: str
 
 
+# 検索に使えるカテゴリ・コンテンツ形式・メディア種別の一覧。
+# The categories, content formats and media types usable for searching.
 class PromptCategoryList(BaseModel):
     categories: list[PromptCategoryInfo]
     content_formats: list[str]
     media_types: list[str]
 
 
+# 公開投稿1件の詳細のうち1つの区間（本文など）。offset と next_offset で長い本文を分割して取得する。
+# One section (body and so on) of a public post; a long body is read in parts via offset and next_offset.
 class PublicSharedContentSection(BaseModel):
     prompt_id: int
     title: str
@@ -58,11 +71,15 @@ class PublicSharedContentSection(BaseModel):
     public_url: AnyHttpUrl
 
 
+# 公開 SKILL に添付されたファイルの一覧（本文は含まない）。
+# The files attached to a public SKILL, without their bodies.
 class PublicSkillResourceList(BaseModel):
     prompt_id: int
     resources: list[PublicSkillResourceMetadata] = Field(default_factory=list)
 
 
+# 公開 SKILL の添付ファイルの本文のうち1つの区間。offset と next_offset で分割して取得する。
+# One section of a public SKILL resource's body, read in parts via offset and next_offset.
 class PublicSkillResourceSection(PublicSkillResourceMetadata):
     prompt_id: int
     text: str
@@ -71,6 +88,8 @@ class PublicSkillResourceSection(PublicSkillResourceMetadata):
     next_offset: int | None = Field(default=None, ge=0)
 
 
+# 読み取り専用のツール(副作用なし・再実行しても同じ)であることをクライアントに伝えるヒント。openWorld は外部の公開データを扱うため。
+# Hint that these tools are read-only and repeatable; openWorld because they return public, externally authored data.
 READ_ANNOTATIONS = ToolAnnotations(
     readOnlyHint=True,
     destructiveHint=False,
@@ -80,10 +99,15 @@ READ_ANNOTATIONS = ToolAnnotations(
 
 
 def register_shared_content_tools(mcp: FastMCP) -> None:
-    """Register bounded public-content discovery tools on the MCP server."""
+    """出力量に上限を設けた、公開コンテンツ探索用のツールを MCP サーバーに登録する。
+
+    Register bounded public-content discovery tools on the MCP server.
+    """
     service = SharedContentService()
 
     async def load_page(**kwargs) -> PublicSharedContentPage:
+        # 一覧取得と検索の共通処理。scope と回数制限を確かめ、カーソル不正や入力エラーは利用者向けの文言にして返す。
+        # Shared by list and search: check scope and rate limit, and turn bad cursors or input errors into client-facing messages.
         actor = require_actor(MCP_PROMPTS_READ_SCOPE)
         await consume_tool_limit(actor, "shared_content_read", limit=120, window_seconds=60)
         try:
@@ -183,6 +207,8 @@ def register_shared_content_tools(mcp: FastMCP) -> None:
             raise ToolError("公開コンテンツを取得できませんでした。") from exc
         if result is None:
             raise ToolError("公開中の投稿が見つかりません。")
+        # "auto" は SKILL なら SKILL.md、それ以外は本文を指す。長い本文は offset/limit で切り出して返す。
+        # "auto" means SKILL.md for a SKILL and the body otherwise; a long text is returned as an offset/limit slice.
         resolved_section = section
         if resolved_section == "auto":
             resolved_section = "skill_markdown" if result.content_format == "skill" else "content"

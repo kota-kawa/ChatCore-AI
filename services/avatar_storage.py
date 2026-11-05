@@ -1,4 +1,6 @@
-"""Storage layout and public URL shape for uploaded user avatars.
+"""アップロードされたユーザーのアバター画像について、保存先の配置と公開 URL の形を定める。
+
+Storage layout and public URL shape for uploaded user avatars.
 
 アバター画像はアプリ（FastAPI）が所有する永続ボリューム配下に置き、
 ``/api/user/avatars/<filename>`` としてバックエンドから配信する。以前は
@@ -69,7 +71,10 @@ _IMAGE_CONTENT_TYPES = {
 
 
 def get_avatar_upload_root() -> str:
-    """Return the configured absolute storage directory for avatar images."""
+    """アバター画像の保存先として設定された絶対パスのディレクトリを返す。
+
+    Return the configured absolute storage directory for avatar images.
+    """
     configured = str(os.getenv(AVATAR_UPLOAD_ROOT_ENV, "") or "").strip()
     if not configured:
         return os.path.abspath(_DEFAULT_AVATAR_UPLOAD_ROOT)
@@ -79,12 +84,18 @@ def get_avatar_upload_root() -> str:
 
 
 def get_legacy_avatar_upload_root() -> str:
-    """Return the former frontend-served directory kept only for reads."""
+    """以前 frontend が配信していたディレクトリを返す。読み取り専用の互換用。
+
+    Return the former frontend-served directory kept only for reads.
+    """
     return os.path.abspath(os.path.join(BASE_DIR, "frontend", "public", "static", "uploads"))
 
 
 def validate_avatar_filename(filename: object) -> str:
-    """Validate a single avatar filename before resolving it below the upload root."""
+    """保存先の下で解決する前に、アバターのファイル名 1 つを検証する。
+
+    Validate a single avatar filename before resolving it below the upload root.
+    """
     value = str(filename or "").strip()
     if (
         not value
@@ -96,6 +107,8 @@ def validate_avatar_filename(filename: object) -> str:
     return value
 
 
+# root の下に収まるパスだけを返す。シンボリックリンクを解決した後で root 配下か確かめ、外へ出る場合は ValueError にする
+# Return a path only if it stays below root, checked after resolving symlinks; otherwise raise ValueError
 def _resolve_below(root: str, filename: object, message: str) -> str:
     safe_filename = validate_avatar_filename(filename)
     resolved_root = os.path.realpath(root)
@@ -106,29 +119,44 @@ def _resolve_below(root: str, filename: object, message: str) -> str:
 
 
 def resolve_avatar_path(filename: object) -> str:
-    """Resolve a validated filename while preventing traversal and symlink escapes."""
+    """検証済みのファイル名を、パス traversal やシンボリックリンクでの逸脱を防いで解決する。
+
+    Resolve a validated filename while preventing traversal and symlink escapes.
+    """
     return _resolve_below(get_avatar_upload_root(), filename, "Invalid avatar path.")
 
 
 def resolve_legacy_avatar_path(filename: object) -> str:
-    """Resolve a validated filename below the former frontend/public location."""
+    """検証済みのファイル名を、旧 frontend/public の保存先の下で解決する。
+
+    Resolve a validated filename below the former frontend/public location.
+    """
     return _resolve_below(get_legacy_avatar_upload_root(), filename, "Invalid legacy avatar path.")
 
 
 def avatar_content_type(filename: object) -> str:
-    """Return a deterministic image Content-Type from a validated extension."""
+    """検証済みの拡張子から、画像の Content-Type を一意に決めて返す。
+
+    Return a deterministic image Content-Type from a validated extension.
+    """
     safe_filename = validate_avatar_filename(filename)
     return _IMAGE_CONTENT_TYPES[os.path.splitext(safe_filename)[1].lower()]
 
 
 def build_avatar_public_url(filename: object) -> str:
-    """Build the backend-served public URL for a stored avatar image."""
+    """保存済みアバター画像の、バックエンドが配信する公開 URL を組み立てる。
+
+    Build the backend-served public URL for a stored avatar image.
+    """
     safe_filename = validate_avatar_filename(filename)
     return f"{AVATAR_PUBLIC_URL_PREFIX}/{safe_filename}"
 
 
 def avatar_filename_from_url(url: object) -> str | None:
-    """Extract a safe filename from either the current or legacy relative URL."""
+    """現行または旧形式の相対 URL から、安全なファイル名を取り出す。
+
+    Extract a safe filename from either the current or legacy relative URL.
+    """
     raw_url = str(url or "").strip()
     if not raw_url:
         return None
@@ -152,6 +180,9 @@ def normalize_avatar_url(avatar_url: str | None) -> str:
 
     旧 ``/static/uploads/<file>`` はバックエンドに届かないため、読み書きの両方で
     現行の接頭辞へ読み替える。判別できない値は既定アイコンへ落とす。
+
+    Legacy ``/static/uploads/<file>`` URLs never reach the backend, so they are rewritten
+    to the current prefix on both read and write. Empty or over-long values fall back to the default icon.
     """
     normalized = (avatar_url or "").strip()
     if not normalized or len(normalized) > AVATAR_URL_MAX_LENGTH:
@@ -166,7 +197,12 @@ def cleanup_unreferenced_avatars(avatar_urls: list[str]) -> int:
     """Delete stored avatars no active user row still references.
 
     アップロードのたびに新しいファイル名を作るため、古いファイルが残り続ける。
-    プロンプト添付と同じく DB を正とした照合で孤児を削除する。
+    プロンプト添付と同じく DB を正とした照合で孤児を削除する。猶予時間内の新しいファイルは、
+    保存直後でまだ DB に反映されていない可能性があるため消さない。
+
+    Every upload gets a new filename, so replaced files accumulate. Orphans are deleted by
+    reconciling against the database, as for prompt attachments. Files newer than the grace
+    period are kept because they may not be recorded in the database yet.
     """
     referenced = {
         filename

@@ -30,6 +30,8 @@ from services.users import copy_default_tasks_for_user, create_user
 
 logger = logging.getLogger(__name__)
 
+# 日本語: 初回利用からデモ用ユーザーが使える期間と、デモ用ユーザーの表示名、ラベルの最大文字数。
+# English: How long a demo user stays usable after first use, its display name, and the maximum label length.
 DEMO_ACCESS_PERIOD = timedelta(days=30)
 DEMO_USERNAME = "デモユーザー"
 MAX_DEMO_LABEL_LENGTH = 120
@@ -40,13 +42,19 @@ DEMO_PURGE_BATCH_SIZE = 50
 # 読み間違えやすい i・l・o・0・1 を除いた 31 文字。12 文字で約 59 ビット。
 # 31 characters without the easily confused i, l, o, 0 and 1; 12 of them give about 59 bits.
 _CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+# 日本語: コードの形式は「demo-xxxx-xxxx-xxxx」（4 文字 × 3 グループ）。
+# English: Codes look like "demo-xxxx-xxxx-xxxx" (three groups of four characters).
 _CODE_PREFIX = "demo"
 _CODE_GROUPS = 3
 _CODE_GROUP_LENGTH = 4
 
+# 日本語: コードの状態。unused=未使用、active=利用中、ended=期限切れ（またはユーザー削除済み）、revoked=管理者が停止。
+# English: Code status: unused, active, ended (expired or user deleted) and revoked (stopped by the admin).
 DemoCodeStatus = Literal["unused", "active", "ended", "revoked"]
 
 
+# 日本語: 管理画面に表示するコード 1 件の要約（コード本体は含まない）。
+# English: Summary of one code for the admin screen (never includes the code itself).
 @dataclass(frozen=True, slots=True)
 class DemoCodeSummary:
     id: int
@@ -60,12 +68,16 @@ class DemoCodeSummary:
     used_nano_usd: int | None
 
 
+# 日本語: 発行直後の結果。コード本体を含むのはこの 1 回だけで、以後は digest しか残らない。
+# English: Result right after issuing; this is the only place the raw code appears, afterwards only its digest remains.
 @dataclass(frozen=True, slots=True)
 class IssuedDemoCode:
     code: str
     summary: DemoCodeSummary
 
 
+# 日本語: コード入力でサインインさせるデモ用ユーザーの情報と、その有効期限。
+# English: The demo user to sign in as for a redeemed code, and when access expires.
 @dataclass(frozen=True, slots=True)
 class DemoSignIn:
     user_id: int
@@ -73,6 +85,8 @@ class DemoSignIn:
     expires_at: datetime
 
 
+# 日本語: 紛らわしい文字を除いた文字種から、暗号論的乱数で新しいコードを作る。
+# English: Generate a new code from the unambiguous alphabet using a cryptographically secure random source.
 def generate_demo_code() -> str:
     groups = [
         "".join(secrets.choice(_CODE_ALPHABET) for _ in range(_CODE_GROUP_LENGTH))
@@ -82,12 +96,17 @@ def generate_demo_code() -> str:
 
 
 def demo_code_digest(raw_code: str) -> str:
-    """Digest the code as entered, ignoring case, spaces and hyphens so a retyped code still matches."""
+    """入力されたコードの digest を返す。大文字小文字・空白・ハイフンは無視するので、打ち直したコードでも一致する。
+
+    Digest the code as entered, ignoring case, spaces and hyphens so a retyped code still matches.
+    """
 
     canonical = "".join(character for character in raw_code.lower() if character.isalnum())
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+# 日本語: 行の内容と現在時刻からコードの状態を決める。判定の優先順は 停止 → 未使用 → 終了 → 利用中。
+# English: Derive the code status from the row and the current time; precedence is revoked, unused, ended, active.
 def demo_code_status(row: DemoAccessCode, now: datetime) -> DemoCodeStatus:
     if row.revoked_at is not None:
         return "revoked"
@@ -118,10 +137,14 @@ def _summary(row: DemoAccessCode, now: datetime, used: dict[str, int]) -> DemoCo
     )
 
 
+# 日本語: テストで時刻を差し替えられるよう、now を渡されなければ現在時刻（UTC）を使う。
+# English: Use the current UTC time unless a now value is injected, which lets tests control the clock.
 def _now(now: datetime | None) -> datetime:
     return now or datetime.now(UTC)
 
 
+# 日本語: ラベル付きの新しいコードを発行する。保存するのは digest だけで、コード本体は戻り値でしか返らない。
+# English: Issue a new labeled code. Only the digest is stored; the raw code is available only in the return value.
 async def issue_demo_code(label: str, *, now: datetime | None = None) -> IssuedDemoCode:
     normalized_label = label.strip()[:MAX_DEMO_LABEL_LENGTH]
     if not normalized_label:
@@ -140,6 +163,8 @@ async def issue_demo_code(label: str, *, now: datetime | None = None) -> IssuedD
     return IssuedDemoCode(code=code, summary=summary)
 
 
+# 日本語: 全コードの要約を返す。利用中のコードに限り、まとめて取得した利用額を付ける。
+# English: Return summaries of all codes; usage cost is attached only to active codes, fetched in one query.
 async def list_demo_codes(*, now: datetime | None = None) -> list[DemoCodeSummary]:
     moment = _now(now)
     async with session_scope() as session:
@@ -154,7 +179,12 @@ async def list_demo_codes(*, now: datetime | None = None) -> list[DemoCodeSummar
 
 
 async def revoke_demo_code(code_id: int, *, now: datetime | None = None) -> DemoCodeSummary | None:
-    """Stop a code and delete its demo user; ``None`` when no such code exists."""
+    """コードを停止し、そのデモ用ユーザーを削除する。該当するコードがなければ ``None`` を返す。
+    行をロックして処理するので、利用開始や削除の処理とは競合しない。
+
+    Stop a code and delete its demo user; ``None`` when no such code exists.
+    The row is locked, so this cannot race with a redemption or purge of the same code.
+    """
 
     moment = _now(now)
     async with session_scope() as session:
@@ -172,7 +202,12 @@ async def revoke_demo_code(code_id: int, *, now: datetime | None = None) -> Demo
 
 
 async def redeem_demo_code(raw_code: str, *, now: datetime | None = None) -> DemoSignIn | None:
-    """Return the demo user to sign in as, creating it on first use; ``None`` for an unusable code."""
+    """サインインさせるデモ用ユーザーを返す。初回利用なら、その場でユーザーとサンプルデータを作る。
+    存在しない・停止・期限切れなど、使えないコードは ``None``。digest の行をロックして二重作成を防ぐ。
+
+    Return the demo user to sign in as, creating it on first use; ``None`` for an unusable code.
+    The digest's row is locked so concurrent first uses cannot create two users.
+    """
 
     moment = _now(now)
     async with session_scope() as session:
@@ -209,7 +244,10 @@ async def redeem_demo_code(raw_code: str, *, now: datetime | None = None) -> Dem
 
 
 async def purge_expired_demo_accounts(*, now: datetime | None = None) -> int:
-    """Delete demo users whose period has ended, in one bounded batch."""
+    """期間が終わったデモ用ユーザーを、上限件数までの 1 バッチで削除し、削除した件数を返す。
+
+    Delete demo users whose period has ended, in one bounded batch.
+    """
 
     moment = _now(now)
     async with session_scope() as session:

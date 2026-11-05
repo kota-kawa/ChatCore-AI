@@ -123,6 +123,9 @@ class ChatGenerationLlmStreamMixin(ChatGenerationJobBase):
             attempt_chunks: list[str] = []
             leak_guard = ProtocolLeakGuard()
             try:
+                # ストリームを開く前に、プロバイダへ送るリクエスト全体が収まるか確認する。
+                # 旧来の圧縮処理は Web ツールの JSON しか数えず、system 文脈・ツールスキーマ・
+                # assistant のツール呼び出しメタデータを見落とすことがあった。
                 # Check the complete provider request before opening a stream.  The legacy
                 # compactor only counted Web tool JSON and could miss system context, tool
                 # schemas, or assistant tool-call metadata.

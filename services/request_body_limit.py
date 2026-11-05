@@ -1,4 +1,10 @@
-"""Streaming request-body limits for narrow, high-risk upload endpoints."""
+"""アップロード系の限られたエンドポイント向けに、リクエストボディのサイズ上限を受信中に強制するミドルウェア。
+
+app.py が /prompt_share/api/prompts(添付画像)と /api/user/profile(アバター)に登録する。
+
+Streaming request-body limits for narrow, high-risk upload endpoints.
+Registered by app.py for /prompt_share/api/prompts (attachments) and /api/user/profile (avatars).
+"""
 
 from __future__ import annotations
 
@@ -8,7 +14,12 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 
+# 日本語: 指定パスの POST だけを対象にする ASGI ミドルウェア。マルチパート解析が一時ファイルを書く前に、
+# 宣言サイズ(Content-Length)と実受信量の両方で上限を超えた要求を打ち切る。
+# English: ASGI middleware limited to POST on one path. It rejects oversize requests, by declared Content-Length
+# and by bytes actually received, before multipart parsing writes temp files.
 class RequestBodySizeLimitMiddleware:
+    # multipart解析が一時ファイルを作る前に、巨大なリクエストストリームを拒否する。
     """Reject oversize request streams before multipart parsing writes temp files."""
 
     def __init__(
@@ -31,6 +42,8 @@ class RequestBodySizeLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # 日本語: まず宣言サイズで早期に弾く(本文を読まずに済む)。
+        # English: Reject early on the declared size so the body is never read.
         content_length = Headers(scope=scope).get("content-length")
         if content_length:
             try:
@@ -47,6 +60,8 @@ class RequestBodySizeLimitMiddleware:
                 )(scope, receive, send)
                 return
 
+        # 日本語: Content-Length を偽る/省略(chunked)する要求に備え、受信したバイト数を数えて超過時に 413 にする。
+        # English: Content-Length can be omitted (chunked) or understated, so count received bytes and raise 413 on overflow.
         received_bytes = 0
 
         async def limited_receive() -> Message:

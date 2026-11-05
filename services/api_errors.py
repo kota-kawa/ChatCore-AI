@@ -1,3 +1,8 @@
+"""サービス層が投げる API エラー例外と、再試行待ち秒数の解析をまとめる。
+
+API error exceptions raised by the service layer, plus parsing of retry-after seconds.
+"""
+
 from __future__ import annotations
 
 import re
@@ -43,6 +48,8 @@ class ApiServiceError(Exception):
 
         message = translate_text(self.message)
         if self.message_key:
+            # 遅延 import にして、起動時やリクエストのロケール文脈を用意しない単体テストでも
+            # サービス層の例外を使えるようにする。
             # Import lazily so service-layer exceptions stay usable during
             # startup and in isolated unit tests that do not install request
             # locale context.

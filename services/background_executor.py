@@ -1,3 +1,8 @@
+"""バックグラウンド処理用の共有スレッドプールを提供する。
+
+Provides the shared thread pool used for background work.
+"""
+
 from __future__ import annotations
 
 import atexit
@@ -14,6 +19,8 @@ _executor_lock = threading.Lock()
 _executor: ThreadPoolExecutor | None = None
 
 
+# 環境変数 BACKGROUND_WORKER_THREADS（既定 8）のスレッド数でプールを作る
+# Create the pool sized by BACKGROUND_WORKER_THREADS (default 8)
 def _create_executor() -> ThreadPoolExecutor:
     max_workers = env_int("BACKGROUND_WORKER_THREADS", 8)
     return ThreadPoolExecutor(

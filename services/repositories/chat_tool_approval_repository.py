@@ -1,4 +1,8 @@
-"""Async SQLAlchemy persistence boundary for chat write-tool approvals and their grants.
+"""チャットの書き込みツールの承認カード(chat_tool_approvals)と「常に許可」の付与(chat_tool_auto_approvals)を永続化する。
+
+検索は必ず所有ユーザーで絞るため、他人の承認 ID は見つからない扱いになる。services/chat_tool_approval_service.py から使われる。
+
+Async SQLAlchemy persistence boundary for chat write-tool approvals and their grants.
 
 This repository owns the chat_tool_approvals rows (one per approval card) and the
 chat_tool_auto_approvals rows ("always approve" grants).  Every lookup is scoped
@@ -20,7 +24,11 @@ from services.models import ChatToolApproval, ChatToolAutoApproval
 
 
 class ChatToolApprovalRepository:
-    """Repository for approval cards and "always approve" grants.
+    """承認カードと「常に許可」の付与を扱うリポジトリ。
+
+    commit はせず、トランザクションは Service 側が持つ(1 つの作業単位ごとに独立した AsyncSession を渡す)。
+
+    Repository for approval cards and "always approve" grants.
 
     The repository never commits.  Services own the transaction and pass an
     isolated AsyncSession for one unit of work.
@@ -29,6 +37,7 @@ class ChatToolApprovalRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    # 承認カード
     # Approvals --------------------------------------------------------------
 
     async def insert_approval(
@@ -85,6 +94,9 @@ class ChatToolApprovalRepository:
             statement = statement.with_for_update()
         return (await self.session.execute(statement)).scalar_one_or_none()
 
+    # 日本語: 承認の決定結果(状態・判断・実行結果・決定日時)を行へ反映する。呼び出し側が get_actionable(for_update=Tr
+    # ue) で取得した行を渡す。
+    # English: Records the outcome (status, decision, result, decided_at) on a row the caller loaded via get_actionable(for_update=True).
     async def settle(
         self,
         row: ChatToolApproval,
@@ -198,6 +210,7 @@ class ChatToolApprovalRepository:
         )
         return int(result.rowcount or 0)
 
+    # 「常に許可」の付与
     # "Always approve" grants -----------------------------------------------
 
     async def has_grant(self, user_id: int, tool_name: str) -> bool:

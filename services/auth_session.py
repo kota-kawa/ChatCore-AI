@@ -1,3 +1,8 @@
+"""認証成功時にセッションを確立する（旧セッションの破棄または待機化、ロケールの反映）。
+
+Establishes the session after a successful login (parks or discards the old one, applies the locale).
+"""
+
 from __future__ import annotations
 
 from fastapi import Request

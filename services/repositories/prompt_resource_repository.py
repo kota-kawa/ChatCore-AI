@@ -1,4 +1,7 @@
-"""SQLAlchemy persistence for resources bundled with shared SKILL posts."""
+"""共有 SKILL 投稿に同梱されるリソース(補助ファイル)の保存・置き換え・一覧・パス指定の取得。
+
+SQLAlchemy persistence for resources bundled with shared SKILL posts.
+"""
 
 from __future__ import annotations
 
@@ -17,8 +20,13 @@ from services.prompt_resources import (
 
 
 class PromptResourceRepository:
-    """Persist prompt resources inside the caller-owned transaction."""
+    """プロンプトのリソースを、呼び出し側が持つトランザクションの中で保存する。
 
+    Persist prompt resources inside the caller-owned transaction.
+    """
+
+    # 日本語: リソースが dict でもオブジェクトでも同じ名前で文字列として取り出し、None や欠落は既定値にする。
+    # English: Reads a field as a string from either a mapping or an object, using the default for missing or None values.
     @staticmethod
     def _field(resource: object, name: str, default: str = "") -> str:
         value = (
@@ -34,7 +42,12 @@ class PromptResourceRepository:
         prompt_id: int,
         resources: Iterable[object],
     ) -> None:
-        """Insert resources without committing the caller's transaction."""
+        """呼び出し側のトランザクションを commit せずにリソースを挿入する。
+
+        渡された順を sort_order にし、パスは validate_resource_path で検証し、サイズとハッシュは本文から計算して保存する。
+
+        Insert resources without committing the caller's transaction.
+        """
         rows = []
         for sort_order, resource in enumerate(resources):
             content = self._field(resource, "content")
@@ -62,7 +75,10 @@ class PromptResourceRepository:
         prompt_id: int,
         resources: Iterable[object],
     ) -> None:
-        """Atomically replace all resources using the caller's transaction."""
+        """呼び出し側のトランザクションで、プロンプトの全リソースを削除して入れ替える。
+
+        Atomically replace all resources using the caller's transaction.
+        """
         await session.execute(
             delete(PromptResource).where(PromptResource.prompt_id == int(prompt_id))
         )
@@ -92,7 +108,10 @@ class PromptResourceRepository:
         session: AsyncSession,
         prompt_id: int,
     ) -> list[dict[str, Any]]:
-        """List resources in stable package order."""
+        """リソースを同梱時の順序(sort_order、同順位は id)で返す。
+
+        List resources in stable package order.
+        """
         result = await session.execute(
             select(PromptResource)
             .where(PromptResource.prompt_id == int(prompt_id))
@@ -106,7 +125,10 @@ class PromptResourceRepository:
         prompt_id: int,
         path: str,
     ) -> dict[str, Any] | None:
-        """Get one resource by its canonical, case-insensitive path."""
+        """正規化したパスで 1 件のリソースを取得する(大文字小文字は区別しない)。
+
+        Get one resource by its canonical, case-insensitive path.
+        """
         normalized_path = validate_resource_path(path)
         result = await session.execute(
             select(PromptResource)

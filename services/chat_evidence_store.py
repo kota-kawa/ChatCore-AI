@@ -1,4 +1,9 @@
-"""One-turn, out-of-prompt storage for raw chat search evidence.
+"""チャット検索で得た生の根拠（Web 検索結果、メモ・共有プロンプトの検索結果）を、プロンプトの外に1ターン分だけ保存する。
+
+`TurnState` には短い根拠参照だけを載せ、モデルは `get_evidence` ツールで必要なレコードだけを後から取り出す。
+インスタンスは1回の回答生成に限定され、ターンをまたぐ永続化はしない。
+
+One-turn, out-of-prompt storage for raw chat search evidence.
 
 The chat loop only needs compact evidence references in its ``TurnState``.  Raw web
 sources and reference-search payloads live here instead, and the model can retrieve
@@ -53,11 +58,17 @@ _REFERENCE_GROUPS = (
 
 
 class EvidenceRequestError(ValueError):
-    """Raised when a get-evidence request is malformed or exceeds its limit."""
+    """get_evidence の要求が不正、または上限を超えているときに送出する。
+
+    Raised when a get-evidence request is malformed or exceeds its limit.
+    """
 
 
 def get_evidence_tool_definition() -> dict[str, Any]:
-    """Return the OpenAI-style tool definition used by the main chat model."""
+    """メインのチャットモデルに渡す、OpenAI 形式の get_evidence ツール定義を返す。
+
+    Return the OpenAI-style tool definition used by the main chat model.
+    """
     return {
         "type": "function",
         "function": {
@@ -89,12 +100,17 @@ def get_evidence_tool_definition() -> dict[str, Any]:
 
 
 def _clean_metadata_text(value: Any) -> str:
-    """Normalize metadata only; evidence bodies remain byte-for-byte untrimmed."""
+    """メタデータだけを正規化する。根拠の本文は1バイトも変えずそのまま残す。
+
+    Normalize metadata only; evidence bodies remain byte-for-byte untrimmed.
+    """
     if value is None:
         return ""
     return str(value).strip()
 
 
+# 参照レコードの安定した ID を作る。種別・グループ・元の ID（無ければ全体の正規化 JSON）のハッシュで、結果の並び順に依存しない
+# Build a stable ID for a reference record from a hash of type, group and original ID (or the canonical JSON), independent of result order
 def _reference_identity(
     source_type: str,
     group: str,
@@ -104,6 +120,8 @@ def _reference_identity(
     if identifier is None:
         identifier = item.get("prompt_id")
     if identifier is None:
+        # ID を持たないペイロードは少ないが、全体の正規化した値も安定した識別子になり、
+        # 結果の並び順に依存しない。
         # ID-less payloads are uncommon, but their canonical full value is still a stable
         # identity and is independent of result order.
         identifier = json.dumps(
@@ -131,6 +149,8 @@ def _reference_url(item: Mapping[str, Any]) -> str:
     return _clean_metadata_text(item.get("public_url") or item.get("url"))
 
 
+# モデルが渡した evidence_ids を検証する。文字列の配列であること・空でないこと・長さと件数の上限を確かめ、重複を除く
+# Validate the evidence_ids the model passed: a non-empty array of strings within length and count limits, with duplicates removed
 def _validate_evidence_ids(
     evidence_ids: Any,
     *,
@@ -162,7 +182,10 @@ def _validate_evidence_ids(
 
 
 def _largest_trimmable_text(record: dict[str, Any]) -> tuple[dict[str, Any], str] | None:
-    """Return the biggest non-identifying text field inside one evidence record."""
+    """1件の根拠レコードのうち、識別に使わない最も長い文字列フィールドを返す。
+
+    Return the biggest non-identifying text field inside one evidence record.
+    """
     best: tuple[dict[str, Any], str, int] | None = None
     for container in (record, record.get("source"), record.get("item")):
         if not isinstance(container, dict):
@@ -176,7 +199,12 @@ def _largest_trimmable_text(record: dict[str, Any]) -> tuple[dict[str, Any], str
 
 
 def _fit_evidence_payload(payload: dict[str, Any], max_chars: int) -> bool:
-    """Shrink a retrieval payload into ``max_chars``; report whether content was removed."""
+    """取得結果のペイロードを ``max_chars`` に収まるまで縮める。内容を削ったかどうかを返す。
+
+    後ろのレコードから順に、最も長い本文フィールドを落とす。落とせる本文が無くなったらレコードごと外す。
+
+    Shrink a retrieval payload into ``max_chars``; report whether content was removed.
+    """
 
     def serialized_length() -> int:
         return len(json.dumps(payload, ensure_ascii=False))
@@ -205,7 +233,10 @@ def _fit_evidence_payload(payload: dict[str, Any], max_chars: int) -> bool:
 
 
 class EvidenceStore:
-    """In-memory raw evidence store scoped to a single normal-chat turn."""
+    """通常チャット1ターン分に限定した、生の根拠をメモリ上に持つストア。
+
+    In-memory raw evidence store scoped to a single normal-chat turn.
+    """
 
     def __init__(self, *, max_ids_per_call: int = MAX_EVIDENCE_IDS_PER_CALL) -> None:
         normalized_limit = int(max_ids_per_call)
@@ -213,6 +244,8 @@ class EvidenceStore:
             raise ValueError("max_ids_per_call must be at least 1.")
         self.max_ids_per_call = normalized_limit
         self._records: dict[str, dict[str, Any]] = {}
+        # 検索の元の値は完全な形でプロンプトの外に保持する。下の個別レコードは選択的に
+        # 取り出すための索引であり、元データの代わりではない。
         # Keep complete original search values outside the prompt as required.  Individual
         # records below are an index for selective retrieval, not a replacement for raw data.
         self._web_results: list[WebSearchResult] = []
@@ -222,11 +255,17 @@ class EvidenceStore:
         return len(self._records)
 
     def has_web_records(self) -> bool:
-        """Return whether this turn contains at least one readable web source."""
+        """このターンに、読み取り可能な Web ソースが1件以上あるかを返す。
+
+        Return whether this turn contains at least one readable web source.
+        """
         return any(record.get("source_type") == "web" for record in self._records.values())
 
     def add_web_result(self, result: WebSearchResult | None) -> tuple[dict[str, Any], ...]:
-        """Store every full source and return compact references for ``TurnState``."""
+        """すべてのソースを完全な形で保存し、``TurnState`` に載せる短い参照を返す。
+
+        Store every full source and return compact references for ``TurnState``.
+        """
         if result is None:
             return ()
         raw_result = deepcopy(result)
@@ -251,7 +290,9 @@ class EvidenceStore:
         snippet: str = "",
         fetched_at: str = "",
     ) -> dict[str, Any] | None:
-        """Index a page the user pasted into the chat so ``read_web_page`` can serve it.
+        """ユーザーがチャットに貼り付けたページを索引に入れ、``read_web_page`` が扱えるようにする。
+
+        Index a page the user pasted into the chat so ``read_web_page`` can serve it.
 
         検索で見つけたページと同じ ``web`` レコード形状で持つ。本文そのものはここに入れず、
         ページ読み取り側のキャッシュが持つ（本文は範囲指定でしかプロンプトへ入らない）。
@@ -305,7 +346,10 @@ class EvidenceStore:
         source_type: str,
         query: str = "",
     ) -> tuple[dict[str, Any], ...]:
-        """Store a complete memo/shared-prompt payload and index each contained item."""
+        """メモ・共有プロンプトの検索結果を丸ごと保存し、含まれる各項目を索引に入れる。
+
+        Store a complete memo/shared-prompt payload and index each contained item.
+        """
         if not isinstance(payload, Mapping):
             return ()
         normalized_type = _clean_metadata_text(source_type) or "reference"
@@ -328,6 +372,8 @@ class EvidenceStore:
                     continue
                 evidence_id = _reference_identity(normalized_type, group, item)
                 stored_item = deepcopy(dict(item))
+                # 合成した ID は索引用のコピーにだけ付ける。呼び出し側のペイロードと、
+                # 別に保持している元のペイロードは変更しない。
                 # Attach the synthesized ID to the indexed copy.  The caller's payload and
                 # the separately retained raw payload are never mutated.
                 stored_item["evidence_id"] = evidence_id
@@ -343,6 +389,8 @@ class EvidenceStore:
                 references.append(self._reference_record_metadata(record))
         return tuple(references)
 
+    # 検索結果1件のソースから、索引に保存する Web 根拠レコードを作る
+    # Build the web evidence record stored in the index from one source of a search result
     @staticmethod
     def _web_record(result: WebSearchResult, source: WebSearchSource) -> dict[str, Any]:
         return {
@@ -361,6 +409,10 @@ class EvidenceStore:
             ],
         }
 
+    # 同じ URL の既存レコードと新しいレコードを統合する。ページ本文は長いほうを残し、
+    # 検索コンテキストは両方を重複なく集める。
+    # Merge an existing and an incoming record for the same URL: keep the longer page body and
+    # gather both search contexts without duplicates.
     @staticmethod
     def _merge_web_record(
         existing: Mapping[str, Any],
@@ -369,6 +421,8 @@ class EvidenceStore:
         merged = deepcopy(incoming)
         existing_source = existing.get("source")
         incoming_source = incoming.get("source")
+        # 同じ URL が繰り返し現れたときは、削っていない最も長いページ本文を残し、
+        # 検索コンテキストにはそのページを見つけた全クエリを残す。
         # Repeated URLs keep the richest untrimmed page body while the search contexts
         # retain every query that found the page.
         if (
@@ -388,6 +442,8 @@ class EvidenceStore:
         merged["search_contexts"] = contexts
         return merged
 
+    # Web レコードから、TurnState に載せる短い参照（ID・題名・URL・検索条件）を作る
+    # Build the compact reference (ID, title, URL, search conditions) for TurnState from a web record
     @staticmethod
     def _web_reference(record: Mapping[str, Any]) -> dict[str, Any]:
         source = record.get("source")
@@ -402,6 +458,8 @@ class EvidenceStore:
             "freshness": _clean_metadata_text(record.get("freshness")),
         }
 
+    # メモ・共有プロンプトのレコードから、TurnState に載せる短い参照を作る
+    # Build the compact reference for TurnState from a memo / shared-prompt record
     @staticmethod
     def _reference_record_metadata(record: Mapping[str, Any]) -> dict[str, Any]:
         item = record.get("item")
@@ -416,14 +474,20 @@ class EvidenceStore:
         }
 
     def get(self, evidence_id: str) -> dict[str, Any] | None:
-        """Return one defensive copy, or ``None`` when the ID is unknown."""
+        """防御的コピーを1件返す。ID が未知なら ``None``。
+
+        Return one defensive copy, or ``None`` when the ID is unknown.
+        """
         if not isinstance(evidence_id, str):
             return None
         record = self._records.get(evidence_id.strip())
         return deepcopy(record) if record is not None else None
 
     def get_many(self, evidence_ids: Any) -> tuple[dict[str, Any], ...]:
-        """Validate a bounded ID list and return known records in requested order."""
+        """件数を制限した ID 一覧を検証し、存在するレコードを要求順に返す。
+
+        Validate a bounded ID list and return known records in requested order.
+        """
         normalized_ids = _validate_evidence_ids(
             evidence_ids,
             max_ids=self.max_ids_per_call,
@@ -440,7 +504,9 @@ class EvidenceStore:
         *,
         max_chars: int = 0,
     ) -> dict[str, Any]:
-        """Validate model tool arguments and return a JSON-serializable result payload.
+        """モデルのツール引数を検証し、JSON にできる結果ペイロードを返す。
+
+        Validate model tool arguments and return a JSON-serializable result payload.
 
         ``max_chars`` は呼び出し側の根拠予算。超える場合は本文から順に落とし、最後は
         レコードごと外して ``evidence_truncated`` を返す。IDは必ず残す。
@@ -494,6 +560,8 @@ class EvidenceStore:
             payload["message"] = EVIDENCE_TRUNCATED_MESSAGE
         return payload
 
+    # 引数が不正なときの結果ペイロード。根拠は空で返す
+    # Result payload for invalid arguments, with no evidence
     @staticmethod
     def _invalid_request(message: str) -> dict[str, Any]:
         return {

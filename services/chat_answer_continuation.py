@@ -1,4 +1,9 @@
-"""Bounded recovery for interrupted user-facing answer streams."""
+"""利用者に見せる回答ストリームが途中で切れたとき、回数を制限して続きを生成させる回復処理。
+
+Bounded recovery for interrupted user-facing answer streams.
+続きの先頭に重複する境界の除去、最初から書き直された続きの検出と接合、進まない続きの打ち切りを扱う。
+Handles removing boundary overlap, detecting and splicing restarted continuations, and stopping stalled ones.
+"""
 
 from __future__ import annotations
 
@@ -33,7 +38,10 @@ FINAL_ANSWER_RESTART_ANCHOR_CHARS = (320, 200, 120, 64)
 
 
 class FinalAnswerContinuationStalledError(LlmOutputLimitError):
-    """A continuation completed without adding any user-visible answer text."""
+    """続きの生成が完了したが、利用者に見える回答テキストが1文字も増えなかったことを表す。
+
+    A continuation completed without adding any user-visible answer text.
+    """
 
     def __init__(self) -> None:
         super().__init__(
@@ -42,6 +50,8 @@ class FinalAnswerContinuationStalledError(LlmOutputLimitError):
         )
 
 
+# 回復処理の結果。error が None なら完了。継続回数・理由・停滞/書き直し補正の有無を呼び出し側のテレメトリに渡す
+# Outcome of recovery: error is None on completion; carries continuation count, reasons and stalled/restart flags for telemetry
 @dataclass(frozen=True)
 class FinalAnswerRecoveryResult:
     error: LlmServiceError | None
@@ -53,7 +63,10 @@ class FinalAnswerRecoveryResult:
 
 @dataclass
 class _ContinuationPass:
-    """Per-pass buffering state for one continuation attempt."""
+    """続きの生成1回分のバッファ状態。
+
+    Per-pass buffering state for one continuation attempt.
+    """
 
     # 先頭だけを貯めて境界の重複を除去し、それ以降はそのまま流す。
     # Buffer only the opening so the boundary overlap can be removed, then stream the rest.
@@ -69,6 +82,8 @@ class _ContinuationPass:
         return "".join(self.buffer)
 
 
+# 続きの生成回数の上限。環境変数 LLM_FINAL_ANSWER_MAX_CONTINUATIONS（既定 3、0 以上）
+# Continuation limit from LLM_FINAL_ANSWER_MAX_CONTINUATIONS (default 3, minimum 0)
 def get_final_answer_max_continuations() -> int:
     raw = os.environ.get("LLM_FINAL_ANSWER_MAX_CONTINUATIONS")
     if raw is None:
@@ -81,7 +96,10 @@ def get_final_answer_max_continuations() -> int:
 
 
 def strip_continuation_overlap(existing: str, continuation: str) -> str:
-    """Remove only an exact suffix/prefix overlap from a continuation response."""
+    """続きの応答の先頭から、既存本文の末尾と完全に一致する重複部分だけを取り除く。
+
+    Remove only an exact suffix/prefix overlap from a continuation response.
+    """
     max_overlap = min(
         len(existing),
         len(continuation),
@@ -94,7 +112,10 @@ def strip_continuation_overlap(existing: str, continuation: str) -> str:
 
 
 def looks_like_restarted_answer(existing: str, continuation: str) -> bool:
-    """Report whether a continuation restarted the answer from the beginning."""
+    """続きが回答を最初から書き直したものかどうかを返す。
+
+    Report whether a continuation restarted the answer from the beginning.
+    """
     prefix_length = min(
         len(existing),
         len(continuation),
@@ -106,7 +127,7 @@ def looks_like_restarted_answer(existing: str, continuation: str) -> bool:
 
 
 def splice_restarted_answer(existing: str, continuation: str) -> str | None:
-    """Return only the text a rewritten continuation adds after the existing answer.
+    """書き直された続きのうち、既存本文の後ろに加わる部分だけを返す。
 
     既存本文の末尾を錨として書き直し本文の中を探し、その先だけを採用する。錨が
     見つからない場合は None を返し、本文の二重化を避けるためパスごと破棄させる。
@@ -124,6 +145,8 @@ def splice_restarted_answer(existing: str, continuation: str) -> str | None:
     return None
 
 
+# 途中までの回答を assistant 発話として足し、続きだけを出力させる依頼を末尾に付けたメッセージ列を作る
+# Build the messages that append the partial answer as an assistant turn plus a request to output only the continuation
 def build_final_answer_continuation_messages(
     base_messages: list[dict[str, Any]],
     partial_answer: str,
@@ -143,6 +166,8 @@ def build_final_answer_continuation_messages(
     ]
 
 
+# 例外から継続の理由を取り出す。reason 属性があればそれ、無ければ例外クラス名
+# Extract the continuation reason from an exception: its reason attribute, else the class name
 def _continuation_reason(exc: BaseException) -> str:
     reason = getattr(exc, "reason", None)
     if isinstance(reason, str) and reason:
@@ -165,7 +190,13 @@ def stream_final_answer_with_recovery(
     published_answer_text: str = "",
     published_answer_error: LlmServiceError | None = None,
 ) -> FinalAnswerRecoveryResult:
-    """Stream every pass live, buffering only enough of a continuation to de-duplicate it.
+    """回答を最後までストリーミングし、途中で切れたら制限回数まで続きを生成する。
+
+    各パスはそのまま配信し、続きだけは重複を取り除くために先頭を少しバッファする。
+    `adopt_buffer` は続きの各パスのバッファを受け取り、停止や切断のときに未配信の本文も保存できるようにする。
+    `adopt_buffer_mode` は、そのバッファが通常の続きではなく回答全体の書き直しを含むときに知らせる。
+
+    Stream every pass live, buffering only enough of a continuation to de-duplicate it.
 
     `adopt_buffer` receives the live buffer list for each continuation pass so a stop or a
     disconnect can still persist text that has not been published yet. `adopt_buffer_mode`
@@ -215,7 +246,10 @@ def stream_final_answer_with_recovery(
         return result(error)
 
     def flush_pass(state: _ContinuationPass) -> None:
-        """Publish a buffered opening (or a spliced rewrite) exactly once."""
+        """バッファした先頭（または接合した書き直し）を1度だけ配信する。
+
+        Publish a buffered opening (or a spliced rewrite) exactly once.
+        """
         nonlocal restart_trimmed
         if state.head_flushed:
             return
@@ -247,7 +281,10 @@ def stream_final_answer_with_recovery(
         publish_text(strip_continuation_overlap(existing, segment))
 
     def begin_continuation(reason_source: BaseException) -> None:
-        """Enter the next continuation pass for an interrupted answer."""
+        """途切れた回答の次の続きパスに入る。回数を数え、続き用のメッセージと段階へ切り替える。
+
+        Enter the next continuation pass for an interrupted answer.
+        """
         nonlocal continuation_count, request_messages, phase
         continuation_count += 1
         logger.warning(

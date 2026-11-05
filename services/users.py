@@ -1,4 +1,13 @@
-"""User use cases backed by the async SQLAlchemy repositories."""
+"""非同期 SQLAlchemy のリポジトリを使う、ユーザー関連のユースケース。
+
+ユーザーの検索・作成、Google アカウントの紐付け、プロフィール補完、確認済みフラグ、アカウント削除を扱う。
+認証に関わる永続化は AuthIdentityRepository、それ以外は UserRepository に任せる。
+
+User use cases backed by the async SQLAlchemy repositories.
+
+Covers looking up and creating users, linking a Google account, filling in the profile, the verified flag and account deletion.
+Authentication persistence goes through AuthIdentityRepository; everything else goes through UserRepository.
+"""
 
 from __future__ import annotations
 
@@ -20,6 +29,8 @@ GOOGLE_AUTH_PROVIDER = "google"
 ACCOUNT_DELETE_CONFIRMATION_TEXT = "DELETE ACCOUNT"
 
 
+# 日本語: 認証プロバイダ側の ID とメールを正規化する。メール認証では、プロバイダ側に別の ID が無いので登録メールで補う。
+# English: Normalize the provider-side user ID and email; for email auth there is no separate provider ID, so fall back to the email.
 def _normalize_provider_metadata(
     auth_provider: str,
     email: str,
@@ -34,6 +45,8 @@ def _normalize_provider_metadata(
     return normalized_provider_user_id, normalized_provider_email
 
 
+# 日本語: セッションが渡されていればそれをそのまま使い（呼び出し側が管理する）、無ければここで開いて閉じる。
+# English: Use the given session as is (the caller owns it), otherwise open and close one here.
 @asynccontextmanager
 async def _managed_session(
     session: AsyncSession | None,
@@ -45,6 +58,10 @@ async def _managed_session(
         yield owned_session
 
 
+# 日本語: UserRepository に対する操作を実行する。session を自前で開いた場合だけ、commit の指定に従ってここで確定する。
+# commit が True なら常に確定、関数なら結果を見て判断し、確定しない場合は rollback する。False（既定）は何もしない。
+# English: Run an operation on UserRepository. Only when the session was opened here, commit as `commit` says:
+# True always commits, a callable decides from the result and a falsy outcome rolls back, False (default) does nothing.
 async def _run(
     operation: Callable[[UserRepository], Awaitable[Any]],
     *,
@@ -68,7 +85,10 @@ async def _run_auth(
     session: AsyncSession | None,
     commit: bool = False,
 ) -> Any:
-    """Run authentication persistence through its dedicated schema boundary."""
+    """認証に関する永続化を、専用のスキーマ境界（AuthIdentityRepository）経由で実行する。
+
+    Run authentication persistence through its dedicated schema boundary.
+    """
 
     async with _managed_session(session) as db_session:
         result = await operation(AuthIdentityRepository(db_session))
@@ -82,7 +102,10 @@ async def copy_default_tasks_for_user(
     *,
     session: AsyncSession | None = None,
 ) -> None:
-    """Copy the bundled tasks under the same transaction advisory lock."""
+    """同梱の既定タスクを、同じトランザクションの advisory lock の下でユーザーにコピーする。
+
+    Copy the bundled tasks under the same transaction advisory lock.
+    """
 
     await _run(
         lambda repository: repository.copy_default_tasks(int(user_id)),
@@ -124,6 +147,8 @@ async def get_user_by_id(
     )
 
 
+# 日本語: ユーザーを作成して ID を返す。ユーザー名とアバターを正規化し、未対応のロケールは ValueError で拒否する。
+# English: Create a user and return its ID. Normalizes the username and avatar and rejects an unsupported locale with ValueError.
 async def create_user(
     email: str,
     username: str | None = None,
@@ -185,6 +210,8 @@ async def link_google_account(
     )
 
 
+# 日本語: Google のプロフィールで、ユーザー名とアバターが既定値のままの場合だけ上書きする（利用者が変えた値は残す）。
+# English: Overwrite the username and avatar from the Google profile only while they still hold the defaults (user edits are kept).
 async def update_user_profile_from_google_if_unset(
     user_id: int,
     name: str | None = None,
@@ -209,6 +236,8 @@ async def update_user_profile_from_google_if_unset(
     )
 
 
+# 日本語: アカウントを削除する。削除できた（結果が真の）ときだけ commit する。
+# English: Delete the account; commit only when the deletion actually happened (truthy result).
 async def delete_user_account(
     user_id: int,
     *,

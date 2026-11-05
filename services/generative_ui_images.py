@@ -29,6 +29,8 @@ from services.web_search_image_proxy import (
 )
 from services.web_search_images import build_web_search_image_parts
 
+# 日本語: モデルが画像として書く参照の接頭辞（`web-image:1` 形式）と、ツール結果に載せる画像一覧のキー。
+# English: Prefix of the image reference the model writes (`web-image:1`) and the key under which the image list goes in the tool result.
 WEB_IMAGE_REFERENCE_SCHEME = "web-image:"
 GENERATED_UI_IMAGES_TOOL_KEY = "generated_ui_images"
 
@@ -36,7 +38,10 @@ _WEB_IMAGE_REFERENCE_RE = re.compile(rf"{WEB_IMAGE_REFERENCE_SCHEME}(\d{{1,2}})(
 _ARTIFACT_SOURCE_FIELDS = ("html", "css", "js")
 
 
+# 日本語: 生成 UI が読み込んでよい Web 検索画像 1 件の検証モデル。url は署名付きの中継パスに限る。
+# English: Validation model for one web-search image a generated UI may load; url must be a signed relay path.
 class GenerativeUiImageV1(BaseModel):
+    # 生成UIに読み込みを許可するWeb検索画像。
     """One web-search image a generated UI is allowed to load."""
 
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
@@ -68,12 +73,18 @@ class GenerativeUiImageV1(BaseModel):
 
 
 def is_web_image_reference(value: str) -> bool:
-    """Whether *value* is exactly one numbered image reference."""
+    """*value* が、番号付き画像参照ちょうど 1 つかどうか。
+
+    Whether *value* is exactly one numbered image reference.
+    """
     return _WEB_IMAGE_REFERENCE_RE.fullmatch(value) is not None
 
 
 def valid_generated_ui_images(raw_images: Any) -> list[dict[str, Any]]:
-    """Keep the stored image entries that still validate, one per reference number."""
+    """保存済みの画像エントリのうち、検証を通るものだけを参照番号ごとに 1 件ずつ残す。
+
+    Keep the stored image entries that still validate, one per reference number.
+    """
     if not isinstance(raw_images, list):
         return []
     images: list[dict[str, Any]] = []
@@ -90,6 +101,8 @@ def valid_generated_ui_images(raw_images: Any) -> list[dict[str, Any]]:
     return images
 
 
+# 日本語: そのターンで選ばれた検索画像に、1 から始まる参照番号を振る。
+# English: Number the search images selected for this turn, starting from 1.
 def _numbered_selected_images(selections: Any) -> dict[int, dict[str, Any]]:
     return {
         index: image_part["image"]
@@ -98,7 +111,10 @@ def _numbered_selected_images(selections: Any) -> dict[int, dict[str, Any]]:
 
 
 def build_generated_ui_image_catalog(selections: Any) -> list[dict[str, str]]:
-    """List the selected images for the model, by reference number and without URLs."""
+    """選ばれた画像を、参照番号つき・URL なしでモデル向けの一覧にする。URL を渡さないのでモデルは実 URL を書けない。
+
+    List the selected images for the model, by reference number and without URLs.
+    """
     return [
         {
             "ref": f"{WEB_IMAGE_REFERENCE_SCHEME}{ref}",
@@ -109,6 +125,8 @@ def build_generated_ui_image_catalog(selections: Any) -> list[dict[str, str]]:
     ]
 
 
+# 日本語: Artifact の html / css / js から、参照されている画像番号を重複なしで昇順に集める。
+# English: Collect the image numbers referenced in the artifact's html / css / js, deduplicated and sorted.
 def _referenced_image_numbers(artifact: dict[str, Any]) -> list[int]:
     numbers: set[int] = set()
     for field_name in _ARTIFACT_SOURCE_FIELDS:
@@ -122,7 +140,12 @@ def attach_web_search_images_to_artifacts(
     parts: list[dict[str, Any]] | None,
     selections: Any,
 ) -> list[dict[str, Any]] | None:
-    """Give each generated UI the signed relay paths of the selected images it references."""
+    """各生成 UI に、参照している選択済み画像の署名付き中継パスを `images` として添える。
+    画像が選ばれていない、または参照が無ければ、元の parts をそのまま返す。
+
+    Give each generated UI the signed relay paths of the selected images it references.
+    Parts are returned unchanged when no images were selected or none is referenced.
+    """
     if not parts or not selections:
         return parts
     numbered_images = _numbered_selected_images(selections)

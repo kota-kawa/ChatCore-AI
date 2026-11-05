@@ -1,3 +1,10 @@
+"""新規環境に最初から用意しておく共有プロンプト（日本語・英語の各 4 種）の定義と、その DB への投入処理。
+アプリ起動時（app.py の startup）に、不足分だけを運営サンプルのアカウント配下へ登録する。
+
+Definitions of the built-in shared prompts (four each in Japanese and English) and the seeding step that
+inserts them into the database. Run at app startup (app.py); only missing ones are added under the sample owner account.
+"""
+
 import asyncio
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -8,6 +15,8 @@ from services.repositories.default_seed_repository import (
     seed_default_shared_prompts,
 )
 
+# 日本語: 既定の共有プロンプトを所有させる「運営サンプル」ユーザー（固定のメールと表示名）。
+# English: The fixed "sample" owner account (fixed email and display name) that owns the built-in shared prompts.
 SAMPLE_PROMPT_OWNER_EMAIL = "sample-prompts@chat-core.local"
 SAMPLE_PROMPT_OWNER_NAME = "運営サンプル"
 
@@ -152,14 +161,16 @@ DEFAULT_SHARED_PROMPTS = [
         ),
     },
 ]
+# 日本語: シード時の DB 書き込みを、一時的なエラーに限って再試行する回数と待ち時間の基準（秒）。
+# English: Retry count and base backoff (seconds) for seed writes on transient DB errors.
 DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
 
 
-# サンプルの所有者ユーザー（運営サンプル）が存在することを保証し、そのIDを返す
-# Ensure the sample owner user exists, creating it if necessary, and return its ID
-# デフォルトの共有プロンプトがデータベースに存在することを保証（不足分のみシード）する
-# Ensure default shared prompts are seeded into the database, adding only missing ones
+# サンプルの所有者ユーザー（運営サンプル）の存在を保証したうえで、デフォルトの共有プロンプトを不足分だけ投入し、追加した件数を返す
+# Ensure the sample owner user exists, then seed only the missing default shared prompts and return the number inserted
+# 一時的な DB エラーのときだけ、トランザクションをやり直して再試行する
+# Retries the whole transaction only on transient DB errors
 async def ensure_default_shared_prompts() -> int:
     # サンプル投稿者配下に標準公開プロンプトを不足分だけ投入する
     # Seed missing public sample prompts under the sample owner account.

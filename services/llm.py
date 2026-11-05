@@ -96,6 +96,7 @@ LLM_MAX_TOKENS = env_int("LLM_MAX_TOKENS", 16384)
 # The decision loop and its continuations write the body itself, so they need room to finish
 # a long research answer in a single pass.
 LLM_ANSWER_MAX_TOKENS = env_int("LLM_MAX_TOKENS_ANSWER", 32768)
+# プロバイダー固有の上限はモデル別関数で適用し、他モデルの共通回答予算は減らさない。
 # Provider-specific maximums, such as Qwen's smaller Groq output cap, are applied by
 # max_output_tokens_for_model without reducing the shared answer budget for other models.
 
@@ -121,6 +122,7 @@ def max_output_tokens_for_model(
     model_name: str | None,
     generation_phase: str = "default",
 ) -> int:
+    # フェーズ予算を、プロバイダーのモデル上限以内に収める。
     """Return the configured phase budget bounded by the provider's model cap."""
 
     configured = max_output_tokens_for_phase(generation_phase)
@@ -265,6 +267,7 @@ class LlmRetryableProviderError(LlmProviderError):
 
 
 class LlmOutputLimitError(LlmServiceError):
+    # 正常なストリームが出力予算に達して終了したことを示す。
     """The provider ended a valid stream because its output budget was exhausted."""
 
     def __init__(self, message: str, *, reason: str = "output_limit") -> None:
@@ -348,6 +351,7 @@ class LlmToolSchemaError(LlmProviderError):
 
 
 class LlmRequestValidationError(LlmProviderError):
+    # 生成開始前にプロバイダーがリクエスト引数を拒否したことを示す。
     """The provider rejected request parameters before generation started."""
 
 
@@ -406,6 +410,7 @@ _INPUT_LIMIT_ERROR_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# 出力引数の不正説明に文脈長が出ても、入力超過とは限らないので根拠サイズのエラーにしない。
 # A provider can mention its context window while explaining that a request
 # parameter such as max_completion_tokens is invalid. That is not an input
 # overflow and must not be shown as an evidence-size error to the user.
@@ -702,6 +707,7 @@ def _openai_responses_reasoning_kwargs(
     *,
     generation_phase: str = "default",
 ) -> dict[str, Any]:
+    # Lunaの回答と補助処理はmediumを使い、軽いSkill選択だけlowにする。noneは内部形式が本文へ漏れる。
     """Keep medium reasoning for Luna answers as well as auxiliary tasks, except light Skill selection.
 
     Luna's `none` leaks its internal format into the body (#771), so selection uses `low`.
@@ -722,6 +728,7 @@ def _groq_reasoning_kwargs(
     reasoning_effort: Literal["low", "medium", "high"] | None = None,
     reasoning_format: Literal["hidden", "parsed"] | None = None,
 ) -> dict[str, Any]:
+    # Groq専用の推論設定をOpenAI SDKの拡張bodyへ渡す。
     """Return Groq-only reasoning options through the OpenAI SDK extension body."""
     reasoning_options: dict[str, Any] = {}
     is_answer_phase = generation_phase in ANSWER_GENERATION_PHASES
@@ -754,6 +761,7 @@ def _groq_reasoning_kwargs(
         else:
             reasoning_options = {"include_reasoning": False}
 
+    # Groq固有の値はSDKの通常引数では受け付けないため、対応する拡張bodyへ渡す。
     # The application uses the OpenAI SDK against Groq's compatible endpoint.
     # Groq-specific fields are not accepted as top-level SDK keyword arguments,
     # so pass them through its supported extension body instead.
@@ -993,6 +1001,7 @@ _CLAUDE_CACHE_CONTROL = {"type": "ephemeral"}
 
 
 def _prompt_cache_breakpoint_indexes(messages: ConversationMessages) -> list[int]:
+    # リクエスト間で変わらない接頭部分の終端位置を返す。
     """Return the indexes that end a prefix which stays identical across requests."""
     indexes: list[int] = []
     if messages and messages[0].get("role") in _SYSTEM_ROLES:
@@ -1019,6 +1028,7 @@ def _with_openai_cache_breakpoints(
     *,
     responses_api: bool,
 ) -> ConversationMessages:
+    # 明示的なキャッシュ境界に対応するOpenAIモデルへ、安定した接頭部分の境界を設定する。
     """Mark the stable-prefix seams for OpenAI models that take explicit breakpoints."""
     if model_name not in OPENAI_CACHE_BREAKPOINT_MODELS:
         return messages
@@ -1372,6 +1382,7 @@ def _append_claude_text_message(
 
 
 def _mark_claude_cache_breakpoint(message: dict[str, Any]) -> None:
+    # 変換済みClaudeメッセージの最後のcontentブロックへキャッシュ境界を付ける。
     """Put a cache breakpoint on the last content block of a converted Claude message."""
     content = message.get("content")
     if isinstance(content, str):

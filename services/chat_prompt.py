@@ -1,4 +1,8 @@
-"""Central definitions and builders for normal-chat system prompt content.
+"""通常チャットのシステムプロンプトの文言と、その組み立て関数を一箇所にまとめる。
+プロンプト文言はこのモジュールに置き、文脈の並びやトークン予算は services.chat_context、
+機能ごとの動的な根拠は各機能モジュールが担う。
+
+Central definitions and builders for normal-chat system prompt content.
 
 Keep prompt wording in this module. Context ordering and token budgets remain in
 services.chat_context, while feature modules provide only their dynamic evidence.
@@ -20,7 +24,10 @@ def insert_after_leading_system_messages(
     messages: list[dict[str, Any]],
     context_message: dict[str, str],
 ) -> list[dict[str, Any]]:
-    """Insert fixed context after the leading system-message block."""
+    """先頭に連続する system メッセージの直後へ、固定の文脈メッセージを差し込む。
+
+    Insert fixed context after the leading system-message block.
+    """
     insert_at = 0
     while insert_at < len(messages) and messages[insert_at].get("role") == "system":
         insert_at += 1
@@ -39,7 +46,11 @@ def insert_before_latest_user_message(
     messages: list[dict[str, Any]],
     context_message: dict[str, str],
 ) -> list[dict[str, Any]]:
-    """Insert per-turn context just before the latest user message."""
+    """ターンごとに変わる文脈を、最新のユーザー発話の直前へ差し込む。
+    ユーザー発話が無ければ先頭の system メッセージの後ろへ入れる。
+
+    Insert per-turn context just before the latest user message.
+    """
     for index in range(len(messages) - 1, -1, -1):
         if messages[index].get("role") == "user":
             return [*messages[:index], context_message, *messages[index:]]
