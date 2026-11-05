@@ -1,3 +1,13 @@
+"""メモ機能の FastAPI ルーター（/memo）を組み立てるパッケージ。
+
+各機能別モジュール（memos・collections・share・trash など）が共有の memo_bp にハンドラを登録する。
+リポジトリ関数やサービスはここで import し、各ルートは `_memo_attr` で本パッケージ経由で参照する（テストで差し替えやすくするため）。
+
+Package that assembles the memo FastAPI router (/memo).
+The feature modules (memos, collections, share, trash, ...) register their handlers on the shared memo_bp.
+Repository functions and services are imported here, and each route looks them up through this package via `_memo_attr`
+so that tests can patch them in one place.
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -86,6 +96,10 @@ memo_bp = APIRouter(prefix="/memo", dependencies=[Depends(require_csrf)])
 # 共有状態を表すレスポンス用ペイロードを作成する関数
 # Construct the response payload for a memo sharing state.
 def _share_payload(share_state: dict[str, Any]) -> dict[str, Any]:
+    """共有状態に、公開用の共有URL（有効なときだけ設定、無効なら空文字）を加えたレスポンスを返す。
+
+    Return the share state plus a public share URL (set only while sharing is active, otherwise an empty string).
+    """
     share_token = str(share_state.get("share_token") or "")
     share_url = ""
     # 有効なトークンがあり、共有状態がアクティブであれば共有URLを設定
@@ -128,7 +142,10 @@ from .share import (  # noqa: E402
 from .suggest import api_suggest_memo  # noqa: E402
 from .trash import api_empty_memo_trash, api_purge_memo, api_restore_memo  # noqa: E402
 
-# 外部に公開されるモジュールAPIの定義
+# 外部に公開されるモジュールAPIの定義。先頭が "_" のリポジトリ関数・サービスも、各ルートが `_memo_attr` 経由で
+# パッケージ側の名前を引くため（テストで差し替えられるように）ここで再エクスポートしている。
+# Exported module API components. The underscore-prefixed repository/service names are re-exported here too, because
+# the route modules look them up on this package via `_memo_attr` (so tests can patch them).
 # Exported module API components.
 __all__ = [
     "_build_csv_export",

@@ -1,3 +1,15 @@
+"""Google OAuth ログイン(認可 URL への誘導とコールバック処理)。
+
+開始時に state・PKCE の code_verifier・戻り先を短命のトランザクションとして保存し、Cookie には state だけを持たせる。
+コールバックではそれを突き合わせて Google からトークンとプロフィールを取得し、既存ユーザーへの紐づけか新規作成のうえログインを確立する。
+ルートへの結び付けは blueprints/auth.py、共通の補助関数は blueprints/auth_common.py にある。
+
+Google OAuth login: redirect to the authorization URL and handle the callback.
+At start, the state, PKCE code verifier and return URL are stored as a short-lived transaction and only the state goes in a cookie.
+The callback matches them, fetches the token and profile from Google, links or creates the user and establishes the login.
+Routes are bound in blueprints/auth.py; shared helpers are in blueprints/auth_common.py.
+"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -19,6 +31,8 @@ from blueprints.auth_common import (
 from blueprints.auth_support import call_dependency, dep
 
 
+# 環境変数から Google OAuth のクライアント設定(client_id / client_secret など)を組み立てる。リダイレクト URI は呼び出し側で入れる。
+# Build the Google OAuth client config from environment variables; the caller fills in the redirect URIs.
 def _google_client_config() -> dict[str, Any]:
     return {
         "web": {
@@ -34,6 +48,8 @@ def _google_client_config() -> dict[str, Any]:
     }
 
 
+# クライアント設定に client_id と client_secret が揃っているか確認し、問題があればその説明を、無ければ None を返す。
+# Check that client_id and client_secret are present; return a description of the problem, or None when valid.
 def _validate_google_oauth_settings(client_config: dict[str, Any]) -> str | None:
     web_config = client_config.get("web") if isinstance(client_config, dict) else None
     if not isinstance(web_config, dict):
@@ -54,6 +70,10 @@ def _validate_google_oauth_settings(client_config: dict[str, Any]) -> str | None
     return None
 
 
+# Google から戻ってきたリクエストを、設定済みの redirect_uri のホスト・パスに合わせた URL に直す(トークン交換に渡す
+# authorization_response 用)。
+# Rewrite the incoming callback URL onto the host and path of the configured redirect_uri, for the authorization_response passed to the
+# token exchange.
 def _build_google_authorization_response(request: Request, redirect_uri: str) -> str:
     redirect_parts = urlsplit(redirect_uri)
     if redirect_parts.scheme and redirect_parts.netloc:
@@ -69,6 +89,9 @@ def _build_google_authorization_response(request: Request, redirect_uri: str) ->
     return str(request.url)
 
 
+# リクエストのホストが設定済みの redirect_uri のホストと違うときだけ、正規のホストへの 302 を返す。同じ、または判断できないときは None。
+# Return a 302 to the canonical host only when the request host differs from the configured redirect_uri host; None when it matches or
+# cannot be judged.
 def _build_google_login_host_redirect(request: Request, redirect_uri: str) -> Any | None:
     redirect_parts = urlsplit(redirect_uri)
     if not redirect_parts.scheme or not redirect_parts.netloc:
@@ -93,6 +116,9 @@ def _build_google_login_host_redirect(request: Request, redirect_uri: str) -> An
     return dep("RedirectResponse")(canonical_url, status_code=302)
 
 
+# アクセストークンで Google のユーザー情報 API からプロフィールを取得する。HTTP エラーや JSON でない応答は requests の例外にそろえて送出
+# する。
+# Fetch the profile from Google's userinfo API with the access token; HTTP errors and non-JSON bodies are raised as requests exceptions.
 def _fetch_google_user_info(access_token: str) -> dict[str, Any]:
     response = dep("requests").get(
         "https://www.googleapis.com/oauth2/v2/userinfo",
@@ -106,6 +132,8 @@ def _fetch_google_user_info(access_token: str) -> dict[str, Any]:
         raise dep("requests").RequestException(f"Invalid JSON response: {e}") from e
 
 
+# ユーザー情報の項目を前後の空白を除いた文字列で返す。無ければ空文字。
+# Return a user-info field as a trimmed string, or an empty string when absent.
 def _clean_google_field(user_info: dict[str, Any], key: str) -> str:
     value = user_info.get(key)
     if value is None:
@@ -113,6 +141,8 @@ def _clean_google_field(user_info: dict[str, Any], key: str) -> str:
     return str(value).strip()
 
 
+# OAuth の初期化・トークン交換で起こりうる例外の組をまとめる(except 節で一括して受けるため)。
+# Group the exceptions that OAuth initialization and token exchange can raise, so one except clause can catch them.
 def _oauth_error_classes() -> tuple[type[BaseException], ...]:
     return (
         dep("GoogleAuthError"),
@@ -122,6 +152,8 @@ def _oauth_error_classes() -> tuple[type[BaseException], ...]:
     )
 
 
+# OAuth トランザクション用の Cookie を削除する指示をレスポンスに付ける。
+# Attach the instruction to delete the OAuth transaction cookie to the response.
 def _clear_google_oauth_transaction_cookie(response: Any) -> Any:
     response.delete_cookie(
         dep("GOOGLE_OAUTH_TRANSACTION_COOKIE_NAME"),
@@ -130,6 +162,8 @@ def _clear_google_oauth_transaction_cookie(response: Any) -> Any:
     return response
 
 
+# Google ログインの失敗時の共通応答。ログイン画面へ戻し、OAuth の途中状態とトランザクション Cookie を片付ける。
+# Common response for Google login failures: send the user back to the login page and clear the OAuth state and transaction cookie.
 def _google_oauth_failure_response(
     request: Request,
     session: dict[str, Any],
@@ -149,6 +183,10 @@ def _google_oauth_failure_response(
     return _clear_google_oauth_transaction_cookie(response)
 
 
+# Google ログインの開始。認可 URL を作り、state と PKCE の code_verifier を短命トランザクションとして保存し、state を入れた Cookie を付
+# けて Google へ 302 する。
+# Start Google login: build the authorization URL, store the state and PKCE code verifier as a short-lived transaction, and 302 to
+# Google with a state cookie.
 async def google_login(request: Request):
     if dep("Flow") is None:
         dep("logger").error(
@@ -237,6 +275,10 @@ async def google_login(request: Request):
     return response
 
 
+# Google からのコールバック処理。state の突き合わせ → トークン交換 → プロフィール取得 → ユーザーの紐づけ/作成 → ログイン確立の順に進み、
+# どこで失敗してもログイン画面へ戻す。
+# Handle Google's callback: match state, exchange the token, fetch the profile, link or create the user and establish the login; any
+# failure returns to the login page.
 async def google_callback(request: Request):
     session = request.session
     transaction_cookie = request.cookies.get(dep("GOOGLE_OAUTH_TRANSACTION_COOKIE_NAME"))
@@ -267,6 +309,8 @@ async def google_callback(request: Request):
     redirect_uri: str | None = None
     next_path: str | None = None
 
+    # Cookie に state が入っていれば新方式(サーバー側トランザクション)。無ければ旧セッション方式で処理する。
+    # A state cookie means the new server-side transaction; without it, fall back to the legacy session form.
     if dedicated_transaction:
         if (
             not isinstance(transaction_cookie, str)
@@ -364,6 +408,8 @@ async def google_callback(request: Request):
             dedicated_transaction=dedicated_transaction,
         )
 
+    # 以降の失敗はすべて、同じ引数でログイン画面へ戻す応答にそろえる。
+    # From here on every failure returns to the login page with the same arguments.
     def failure_response() -> Any:
         return _google_oauth_failure_response(
             request,
@@ -443,6 +489,10 @@ async def google_callback(request: Request):
         )
         return failure_response()
 
+    # ユーザーの特定: Google ID で見つかれば紐づけを更新し、無ければメールで既存ユーザーを探して紐づけ、どちらも無ければ新規作成する。
+    # 別の Google ID が既に紐づいたメールは乗っ取りを避けるため失敗にする。
+    # Resolve the user: by Google ID (refresh the link), else by email (link it), else create one.
+    # An email already linked to a different Google ID fails, to avoid account takeover.
     try:
         user = await call_dependency("get_user_by_google_id", google_user_id)
         should_mark_verified = False
@@ -518,6 +568,8 @@ async def google_callback(request: Request):
     except Exception:
         dep("logger").exception("Google OAuth callback: failed to refresh email for user %s", user_id)
 
+    # 遷移先(next)が無いときだけ auth=success を付けて戻し、フロント側でログイン完了を判別できるようにする。
+    # Only when there is no next path, append auth=success so the frontend can tell the login just completed.
     _clear_google_oauth_session(session)
     if next_path:
         return _clear_google_oauth_transaction_cookie(

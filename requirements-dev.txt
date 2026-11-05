@@ -1,3 +1,5 @@
+# 日本語: 開発と CI で使うツール（カバレッジ、型検査、依存の脆弱性監査、Lint、未使用コード検出）の固定バージョン。
+# English: Pinned versions of the tools used in development and CI (coverage, type checking, dependency audit, linting, dead-code detection).
 coverage==7.15.0
 mypy==2.3.1
 pip-audit==2.10.1

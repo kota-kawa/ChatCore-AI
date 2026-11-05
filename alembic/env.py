@@ -1,3 +1,8 @@
+"""Alembic のマイグレーション実行環境。DB URL を環境変数から解決し、オンライン/オフライン両モードで revision を適用する。
+
+Alembic migration environment: resolves the DB URL from environment variables and applies revisions in online and offline modes.
+"""
+
 from __future__ import annotations
 
 import os
@@ -20,7 +25,10 @@ if config.config_file_name is not None:
 
 
 def _resolve_database_url() -> str:
-    """Resolve DB URL from env vars used in this project."""
+    """このプロジェクトで使う環境変数から DB の URL を解決する。
+
+    Resolve DB URL from env vars used in this project.
+    """
     # 環境変数からデータベースURLを解決する
     # Resolve database URL from environment variables
     database_url = os.getenv("DATABASE_URL")
@@ -46,13 +54,20 @@ def _resolve_database_url() -> str:
 # Overwrite the SQLAlchemy URL setting with the dynamically resolved value
 config.set_main_option("sqlalchemy.url", _resolve_database_url())
 
+# autogenerate は、リポジトリ層と同じモデル定義（Base.metadata）を現在のスキーマと比較する。既存の revision は書き換えない。
 # Alembic autogenerate compares the current schema against the same model
 # registry used by repositories.  Existing revisions remain immutable.
 target_metadata = Base.metadata
 
 
 class _OfflineInspector:
-    """Catalog view for legacy revisions that conditionally inspect the database.
+    """過去の revision がテーブルの有無を調べるための、オフライン用の代替カタログ。
+
+    オフライン実行の bind はモック接続でカタログを持たず、変更不可の過去 revision が ``sa.inspect(op.get_bind())``
+    を呼ぶと失敗する。オフラインで使えるスキーマ情報はマップ済みテーブルだけなので、それを返す。
+    オンライン実行では本物の PostgreSQL inspector を使い続ける。
+
+    Catalog view for legacy revisions that conditionally inspect the database.
 
     Several immutable historical revisions use ``sa.inspect(op.get_bind())`` before
     emitting their SQL. Alembic's offline bind is a mock connection and has no catalog.
@@ -65,7 +80,9 @@ class _OfflineInspector:
 
 
 class _OfflineExecutionResult:
-    """Empty result for immutable data migrations during SQL-only rendering."""
+    """SQL 出力だけのオフライン実行で、データ移行 revision が受け取る空の結果。
+
+    Empty result for immutable data migrations during SQL-only rendering."""
 
     def mappings(self) -> "_OfflineExecutionResult":
         return self
@@ -75,6 +92,7 @@ class _OfflineExecutionResult:
 
 
 def run_migrations_offline() -> None:
+    # DBへ接続せず、適用用SQLだけを生成する。
     """Run migrations in 'offline' mode."""
     # オフラインモードでマイグレーションを実行する
     # Run migrations in 'offline' mode
@@ -88,6 +106,8 @@ def run_migrations_offline() -> None:
         compare_server_default=True,
     )
 
+    # 変更不可の過去 revision は op.get_bind() を検査するため、オフラインの SQL 生成中だけマップ済みカタログを差し込み、
+    # 終了後に SQLAlchemy 本来の inspector と execute へ戻す。
     # Immutable historical revisions inspect op.get_bind().  Provide the mapped
     # catalog only for offline SQL rendering, then restore SQLAlchemy's inspector.
     original_inspect = sa.inspect
@@ -106,6 +126,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    # DBへ接続してマイグレーションを実行する。
     """Run migrations in 'online' mode."""
     # オンラインモードでマイグレーションを実行する（エンジンを作成して接続）
     # Run migrations in 'online' mode (create an engine and connect)

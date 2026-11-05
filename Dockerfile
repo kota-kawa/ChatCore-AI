@@ -1,3 +1,7 @@
+# アプリ本体（FastAPI/uvicorn）の本番用コンテナイメージ。依存を固定版で入れ、非 root ユーザーで起動する。
+# Production container image for the app (FastAPI/uvicorn): installs pinned dependencies and runs as a non-root user.
+# 依存は requirements.lock を制約にして再現可能にする。コード（COPY . .）より先に入れ、変更が無ければ層キャッシュを再利用する。
+# Dependencies are pinned through requirements.lock and installed before the source copy so the layer cache is reused.
 FROM python:3.14.6-slim
 
 WORKDIR /app

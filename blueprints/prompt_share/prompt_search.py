@@ -1,4 +1,7 @@
-"""Public prompt search endpoints."""
+"""公開プロンプトの検索 API（/search/prompts）。文字一致に、埋め込みベクトルによる意味検索を組み合わせる。
+
+Public prompt search endpoints (/search/prompts). Combines lexical matching with embedding-based semantic search.
+"""
 
 from __future__ import annotations
 
@@ -20,9 +23,13 @@ from services.prompt_types import (
 from services.shared_content_service import SharedContentService
 from services.web import jsonify, log_and_internal_server_error
 
+# 公開プロンプト検索用のルーター（ログイン不要。ログイン中ならいいね等の状態も付与する）。
+# Router for public prompt search (no login required; per-user flags such as "liked" are included when signed in).
 search_bp = APIRouter(prefix="/search")
 logger = logging.getLogger(__name__)
 
+# ページング既定値と上限、および許可する旧プロンプト種別。
+# Paging defaults and limits, and the allowed legacy prompt types.
 SEARCH_DEFAULT_PAGE = 1
 SEARCH_DEFAULT_PER_PAGE = 20
 SEARCH_MAX_PER_PAGE = 100
@@ -36,6 +43,10 @@ SEARCH_RANKING_COLUMNS = ("lexical_rank", "semantic_distance")
 
 
 def _parse_positive_int(raw_value: str | None, default: int) -> int:
+    """クエリ文字列を正の整数に変換する。変換できない・0 以下なら既定値を返す。
+
+    Parse a query-string value as a positive int, falling back to the default when invalid or not positive.
+    """
     try:
         value = int(str(raw_value or "").strip())
     except (TypeError, ValueError):
@@ -44,6 +55,13 @@ def _parse_positive_int(raw_value: str | None, default: int) -> int:
 
 
 def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
+    """検索結果の DB 行を API 出力用に整える。
+
+    日時は ISO 文字列、カウントは整数、フラグは bool にそろえ、スキルのスクリプトを補い、並び替え専用の列は取り除く。
+
+    Normalize a search-result DB row for API output: ISO datetimes, int counts, bool flags, a filled-in skill script,
+    and ranking-only columns removed.
+    """
     prompt = dict(row)
     created_at = prompt.get("created_at")
     if hasattr(created_at, "isoformat"):
@@ -76,7 +94,9 @@ def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _embed_search_query(query: str) -> list[float] | None:
-    """Turn the query into a vector off the event loop, or None to stay lexical.
+    """検索語をイベントループの外でベクトルに変換する。短すぎる語や埋め込みが使えない場合は None を返し、文字一致だけで探す。
+
+    Turn the query into a vector off the event loop, or None to stay lexical.
 
     ``generate_embedding`` already logs and latches provider failures, so a None here
     simply means the search falls back to word matching for this request.
@@ -88,11 +108,19 @@ async def _embed_search_query(query: str) -> list[float] | None:
 
 
 def _normalize_prompt_type_filter(value: str | None) -> str | None:
+    """旧 prompt_type の絞り込み値を検証し、未知の値は None（絞り込みなし）にする。
+
+    Validate the legacy prompt_type filter value; unknown values become None (no filter).
+    """
     normalized = str(value or "").strip().lower()
     return normalized if normalized in SEARCH_PROMPT_TYPES else None
 
 
 def _normalize_content_format_filter(value: str | None) -> str | None:
+    """content_format の絞り込み値を検証し、空・"all"・未知の値は None（絞り込みなし）にする。
+
+    Validate the content_format filter; empty, "all" and unknown values become None (no filter).
+    """
     raw = str(value or "").strip().lower()
     if not raw or raw == "all":
         return None
@@ -100,6 +128,10 @@ def _normalize_content_format_filter(value: str | None) -> str | None:
 
 
 def _normalize_media_type_filter(value: str | None) -> str | None:
+    """media_type の絞り込み値を検証し、空・"all"・未知の値は None（絞り込みなし）にする。
+
+    Validate the media_type filter; empty, "all" and unknown values become None (no filter).
+    """
     raw = str(value or "").strip().lower()
     if not raw or raw == "all":
         return None
@@ -117,6 +149,16 @@ async def _search_public_prompts(
     include_total: bool = True,
     locale: str = "ja",
 ) -> dict[str, Any]:
+    """公開プロンプトを検索し、ページ情報つきの結果を返す。
+
+    空の検索語は検索せず空の結果を返す。旧 prompt_type は、新しい 2 軸（content_format / media_type）の指定が無いときだけ軸へ変換する。
+    include_total が False の場合は総数を数えないため total と total_pages は None になりうる。
+
+    Search public prompts and return results with pagination.
+
+    An empty query returns an empty result without searching. The legacy prompt_type is converted to the two newer axes
+    (content_format / media_type) only when neither axis is given. With include_total False, total and total_pages may be None.
+    """
     page = max(int(page), SEARCH_DEFAULT_PAGE)
     per_page = max(1, min(int(per_page), SEARCH_MAX_PER_PAGE))
     if not str(query or "").strip():
@@ -165,6 +207,9 @@ async def _search_public_prompts(
 
 @search_bp.get("/prompts", name="search.search_prompts")
 async def search_prompts(request: Request):
+    # クエリ文字列（q・page・per_page・各種フィルタ）から公開プロンプトを検索して JSON で返す。
+    #
+    # Search public prompts from the query string (q, page, per_page and filters) and return JSON.
     query = request.query_params.get("q", "").strip()
     include_total = request.query_params.get("include_total", "1").strip().lower() not in {"0", "false", "no"}
     page = _parse_positive_int(request.query_params.get("page"), SEARCH_DEFAULT_PAGE)

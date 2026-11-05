@@ -1,3 +1,13 @@
+"""チャット機能のルーター(chat_bp)の定義と、未ログイン(ゲスト)用の一時チャットの状態管理。
+
+ゲストのルーム ID はセッションに持ち、中身はメモリ上の EphemeralChatStore に期限付きで保持する。
+下部の import で各ルートモジュール(rooms / messages / tasks など)を chat_bp に登録する。
+
+Defines the chat router (chat_bp) and the state handling for signed-out (guest) ephemeral chats.
+Guest room ids live in the session and their content in the in-memory EphemeralChatStore with an expiry.
+The import at the bottom registers every route module (rooms / messages / tasks and so on) on chat_bp.
+"""
+
 import uuid
 
 from fastapi import APIRouter, Depends
@@ -5,11 +15,15 @@ from fastapi import APIRouter, Depends
 from services.csrf import require_csrf
 from services.ephemeral_store import EphemeralChatStore
 
+# チャット系の全ルートに CSRF 検証を掛けたルーター。
+# Router that applies CSRF verification to every chat route.
 chat_bp = APIRouter(dependencies=[Depends(require_csrf)])
 
 # エフェメラルチャットの有効期限（秒）
 # Expiration time for guest ephemeral chats (seconds).
 EXPIRATION_TIME = 3600  # 1時間
+# ゲストが作成した一時ルームの ID 一覧を入れるセッションキー。
+# Session key holding the ids of the ephemeral rooms the guest created.
 GUEST_ROOM_IDS_SESSION_KEY = "guest_room_ids"
 
 # 未ログインユーザー用のエフェメラルチャットを保持するストア

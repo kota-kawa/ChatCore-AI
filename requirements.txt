@@ -1,3 +1,5 @@
+# 日本語: アプリの実行に必要な Python 依存の固定バージョン（== 指定のみ）。requirements.lock と一致させる（scripts/check_version_locks.py が検証）。
+# English: Pinned versions of the Python dependencies the app needs at runtime (== only). Must match requirements.lock (verified by scripts/check_version_locks.py).
 fastapi==0.139.0
 uvicorn==0.51.0
 mcp==1.30.0

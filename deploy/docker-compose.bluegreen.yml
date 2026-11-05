@@ -1,3 +1,5 @@
+# [JP] 本番の blue/green デプロイ用 Docker Compose 定義（db・redis・色ごとの app/frontend）。deploy/blue_green_deploy.sh から使われる。
+# [EN] Docker Compose definition for production blue/green deploys (db, redis, and per-color app/frontend); used by deploy/blue_green_deploy.sh.
 name: chatcore-ai
 
 # [JP] 既定の json-file ドライバは無制限に肥大化する。Blue/Green は常時2色分の
@@ -10,7 +12,15 @@ x-default-logging: &default_logging
     max-size: "10m"
     max-file: "3"
 
+# [JP] 各サービスの役割は次のとおり。
+#      db / redis: 共有の DB とキャッシュ。nginx_bootstrap: 初回に nginx の upstream ファイルを作る一度きりのジョブ。
+#      app_blue / app_green と frontend_blue / frontend_green: 色ごとのバックエンドとフロントエンド。
+# [EN] Services:
+#      db / redis: shared database and cache. nginx_bootstrap: a run-once job that creates the nginx upstream files on first use.
+#      app_blue / app_green and frontend_blue / frontend_green: the per-color backend and frontend.
 services:
+  # PostgreSQL（pgvector 入り）。blue と green が共有する。
+  # PostgreSQL with pgvector, shared by blue and green.
   db:
     image: pgvector/pgvector:0.8.5-pg18
     container_name: ${POSTGRES_CONTAINER_NAME:-postgres_db}
@@ -40,6 +50,7 @@ services:
       - -c
       - log_min_duration_statement=${POSTGRES_LOG_MIN_DURATION_MS:-500}
     volumes:
+      # PostgreSQL 18 以降は、メジャーバージョンごとのクラスターを /var/lib/postgresql の下に置く。
       # PostgreSQL 18+ stores major-specific clusters below /var/lib/postgresql.
       - db_data_pg18:/var/lib/postgresql
     healthcheck:
@@ -50,6 +61,8 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  # セッションやレート制限などに使う Redis。blue と green が共有する。
+  # Redis for sessions, rate limits and similar state, shared by blue and green.
   redis:
     image: redis:7.4.7
     container_name: redis_cache
@@ -78,6 +91,8 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  # 初回起動用。ホスト側 nginx の upstream ファイルを、指定した色のポートで作る（一度きり、再起動しない）。
+  # First-run helper: writes the host nginx upstream files for the chosen color's ports (run once, never restarted).
   nginx_bootstrap:
     image: alpine:3.24.1
     logging: *default_logging
@@ -109,6 +124,8 @@ services:
         printf 'server 127.0.0.1:%s;\n' "$$frontend_port" > "$$NGINX_UPSTREAM_DIR/frontend_active.conf"
     restart: "no"
 
+  # blue 側のバックエンド（FastAPI）。app_green はこの定義を &app_service で引き継ぐ。
+  # Backend (FastAPI) for blue. app_green inherits this definition through &app_service.
   app_blue: &app_service
     build:
       context: ..
@@ -146,6 +163,7 @@ services:
       - GOOGLE_JS_ORIGIN=${GOOGLE_JS_ORIGIN:-https://chatcore-ai.com}
       - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      # リモート MCP サーバーと OAuth の設定。
       # Remote MCP server and OAuth configuration.
       - MCP_ENABLED=${MCP_ENABLED:-false}
       - MCP_PUBLIC_BASE_URL=${MCP_PUBLIC_BASE_URL:-https://chatcore-ai.com}
@@ -183,6 +201,7 @@ services:
       - PROMPT_SHARE_UPLOAD_DIR=/app/data/uploads/prompt_share
       - AVATAR_UPLOAD_DIR=/app/data/uploads/avatars
       - CHAT_IMAGE_UPLOAD_DIR=/app/data/uploads/chat_images
+      # ユーザーごとの、正規化済みの表示用とカード用の画像の合計上限（既定 100 MiB）。
       # Per-user total of normalized display + card variants (100 MiB default).
       - PROMPT_SHARE_ATTACHMENT_USER_QUOTA_BYTES=${PROMPT_SHARE_ATTACHMENT_USER_QUOTA_BYTES:-104857600}
     ports:
@@ -190,6 +209,7 @@ services:
       # Bind to loopback only; the host nginx is the sole external consumer.
       - "127.0.0.1:5004:5004"
     volumes:
+      # 両方の色が、切り替えをまたいで同じ永続アップロード領域を共有する。
       # Both colors share one persistent upload store across traffic switches.
       - prompt_share_uploads:/app/data/uploads/prompt_share
       - avatar_uploads:/app/data/uploads/avatars
@@ -214,12 +234,16 @@ services:
     stop_grace_period: 30s
     restart: unless-stopped
 
+  # green 側のバックエンド。app_blue と同じ設定で、コンテナ名とホスト側ポート（5005）だけが異なる。
+  # Backend for green: same settings as app_blue, differing only in container name and host port (5005).
   app_green:
     <<: *app_service
     container_name: chatcore_app_green
     ports:
       - "127.0.0.1:5005:5004"
 
+  # blue 側のフロントエンド（Next.js）。frontend_green はこの定義を &frontend_service で引き継ぐ。
+  # Frontend (Next.js) for blue. frontend_green inherits this definition through &frontend_service.
   frontend_blue: &frontend_service
     build:
       context: ../frontend
@@ -261,6 +285,8 @@ services:
     stop_grace_period: 30s
     restart: unless-stopped
 
+  # green 側のフロントエンド。接続先のバックエンド、イメージのタグ、ホスト側ポート（3001）が blue と異なる。
+  # Frontend for green: differs from blue in its backend target, image tag and host port (3001).
   frontend_green:
     <<: *frontend_service
     build:
@@ -276,6 +302,8 @@ services:
       - "127.0.0.1:3001:3000"
 
 volumes:
+  # PostgreSQL 15 のデータは chatcore-ai_db_data にアーカイブとして残る。デプロイのガードが
+  # それをこの別の PostgreSQL 18 用ボリュームへ一度だけ復元する。
   # PostgreSQL 15 remains archived in chatcore-ai_db_data. The deployment guard
   # restores it into this separate PostgreSQL 18 volume exactly once.
   db_data_pg18:

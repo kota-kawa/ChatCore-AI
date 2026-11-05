@@ -1,3 +1,14 @@
+"""Passkey(WebAuthn)の API。登録済み Passkey の一覧・削除、登録(オプション生成と検証)、Passkey でのログイン(オプション生成と検証)を扱う。
+
+WebAuthn の challenge(儀式)はセッションに短時間だけ保存し、検証後に必ず片付ける。
+WebAuthn ライブラリが無い環境では 503 を返す。ルートへの結び付けは blueprints/auth.py が行う。
+
+Passkey (WebAuthn) APIs: list and delete registered passkeys, register one (options and verification)
+and sign in with one (options and verification).
+The WebAuthn challenge (ceremony) is kept in the session only briefly and always cleared after verification.
+Without the WebAuthn library these answer 503. Routes are bound in blueprints/auth.py.
+"""
+
 from __future__ import annotations
 
 import json
@@ -16,6 +27,8 @@ from blueprints.auth_support import call_dependency, dep, get_auth_limit_service
 from services.error_messages import ERROR_PASSKEY_USAGE_UPDATE_FAILED
 
 
+# ログイン中ユーザーが登録した Passkey の一覧を返す。
+# List the passkeys registered by the signed-in user.
 async def api_list_passkeys(request: Request):
     user_id = _user_id_from_session(request.session)
     if user_id is None:
@@ -25,6 +38,8 @@ async def api_list_passkeys(request: Request):
     return dep("jsonify")({"status": "success", "passkeys": passkeys})
 
 
+# 指定した Passkey を、ログイン中ユーザー自身のものに限って削除する。
+# Delete the given passkey, only if it belongs to the signed-in user.
 async def api_delete_passkey(request: Request):
     user_id = _user_id_from_session(request.session)
     if user_id is None:
@@ -46,7 +61,13 @@ async def api_delete_passkey(request: Request):
     return dep("jsonify")({"status": "success"})
 
 
+# Passkey 登録用の WebAuthn オプションを作る。登録済みの認証器は exclude_credentials に入れて二重登録を防ぎ、challenge はセッションに保
+# 存する。
+# Create WebAuthn registration options; existing credentials go into exclude_credentials to prevent duplicates, and the challenge is
+# saved in the session.
 async def api_passkey_register_options(request: Request):
+    # WebAuthn ライブラリが任意依存のため、必要な部品が揃わない環境では機能ごと無効として 503 を返す。
+    # The WebAuthn library is optional; when any required piece is missing, answer 503 for the whole feature.
     if (
         dep("generate_registration_options") is None
         or dep("options_to_json") is None
@@ -99,6 +120,10 @@ async def api_passkey_register_options(request: Request):
     return dep("jsonify")(json.loads(dep("options_to_json")(options)))
 
 
+# ブラウザが返した登録結果を、保存済みの challenge・RP ID・オリジンに対して検証し、成功したら Passkey を保存する。成否にかかわらずセッシ
+# ョンの儀式は消す。
+# Verify the browser's registration response against the stored challenge, RP ID and origins, then save the passkey; the session
+# ceremony is cleared either way.
 async def api_passkey_register_verify(request: Request):
     if (
         dep("verify_registration_response") is None
@@ -169,6 +194,8 @@ async def api_passkey_register_verify(request: Request):
     return dep("jsonify")({"status": "success", "passkey": passkey})
 
 
+# Passkey ログイン用の WebAuthn オプションを作り、challenge をセッションに保存する。呼び出し回数は IP などで制限する。
+# Create WebAuthn authentication options and save the challenge in the session; call frequency is rate-limited.
 async def api_passkey_authenticate_options(
     request: Request,
     auth_limit_service: Any | None = Depends(get_auth_limit_service_dependency),
@@ -207,6 +234,10 @@ async def api_passkey_authenticate_options(
     return dep("jsonify")(json.loads(dep("options_to_json")(options)))
 
 
+# ブラウザが返した認証結果を検証してログインを確立する。回数制限 → 儀式の有効期限 → 認証器の特定 → 署名検証 → 署名カウンタの更新の順に進
+# む。
+# Verify the browser's authentication response and establish the login: rate limit, ceremony expiry, credential lookup, signature check,
+# then sign-count update.
 async def api_passkey_authenticate_verify(
     request: Request,
     auth_limit_service: Any | None = Depends(get_auth_limit_service_dependency),

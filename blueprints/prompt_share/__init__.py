@@ -1,4 +1,7 @@
-# prompt_share.py
+"""プロンプト共有機能のルーター（/prompt_share）。画面は Next.js 側にあり、ここは旧 URL からのリダイレクトだけを受け持つ。
+
+Router for the prompt-sharing feature (/prompt_share). The screens live in Next.js; this only redirects legacy URLs to them.
+"""
 from fastapi import APIRouter, Request
 from starlette.responses import RedirectResponse
 

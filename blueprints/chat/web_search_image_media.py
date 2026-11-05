@@ -20,6 +20,8 @@ from services.web_search_image_proxy import load_web_search_image, resolve_web_s
 from . import chat_bp
 
 
+# 署名つき URL の Web 検索画像を取得して中継する。署名が不正、または取得できなければ 404。
+# Fetch and relay a signed web-search image URL; 404 when the signature is invalid or the fetch fails.
 @chat_bp.get("/api/chat/web-images/{signature}/{token}", name="chat.get_web_search_image")
 async def get_web_search_image(signature: str, token: str):
     image_url = resolve_web_search_image_proxy_url(signature, token)

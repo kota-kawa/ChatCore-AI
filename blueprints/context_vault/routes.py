@@ -1,3 +1,7 @@
+"""パーソナル・コンテキスト金庫の事実・抽出候補・インポート/エクスポートを扱う HTTP API（/api/context-facts）。
+
+HTTP API for the personal context vault: facts, extraction candidates, and import/export (/api/context-facts).
+"""
 from __future__ import annotations
 
 import json
@@ -68,6 +72,8 @@ from .constants import (
 context_vault_bp = APIRouter(prefix="/api/context-facts", dependencies=[Depends(require_csrf)])
 logger = logging.getLogger("blueprints.context_vault")
 
+# 入力検証に使う許可値と、インポート本文の上限（32MiB）。
+# Allowed values for input validation, and the import body size cap (32 MiB).
 _VALID_FACT_TYPES = {"preference", "profile", "project", "decision", "reference"}
 _VALID_STATUSES = {"active", "deprecated"}
 _VALID_CANDIDATE_STATUSES = {"pending", "approved", "rejected"}
@@ -76,7 +82,10 @@ _MAX_CONTEXT_VAULT_IMPORT_REQUEST_BYTES = 32 * 1024 * 1024
 
 
 async def _require_bounded_import_json(request: Request):
-    """Read an import wrapper with a hard cap for fixed and chunked bodies."""
+    """Content-Length 付きでもチャンク転送でも、上限を超える本文を読み込む前に打ち切ってインポート用 JSON を読む。
+
+    Read an import wrapper with a hard cap for fixed and chunked bodies.
+    """
     content_length = request.headers.get("content-length")
     if content_length:
         try:
@@ -125,6 +134,8 @@ async def api_list_context_facts(
     limit: int = DEFAULT_CONTEXT_LIST_LIMIT,
     cursor: str | None = None,
 ):
+    # コンテキスト事実の一覧を取得する（種類・状態でフィルタ、keyset ページング）。
+    # List context facts, filtered by type and status, with keyset paging.
     """コンテキスト事実の一覧を取得する（種類・状態でフィルタ、keyset ページング）。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:
@@ -151,6 +162,8 @@ async def api_list_context_facts(
 
 @context_vault_bp.get("/export", name="context_vault.api_export")
 async def api_export_context_vault(request: Request, format: str = "json"):
+    # 所有者の全事実を、バージョン付きの JSON または Markdown としてダウンロードさせる。
+    #
     """Download every owner fact in a safe versioned JSON or Markdown document."""
     user_id = user_id_from_session(request.session)
     if user_id is None:
@@ -183,6 +196,8 @@ async def api_export_context_vault(request: Request, format: str = "json"):
 
 @context_vault_bp.post("/import/preview", name="context_vault.api_import_preview")
 async def api_preview_context_vault_import(request: Request):
+    # 移行用ドキュメントを検証し、短時間だけ有効な確認トークンを発行する（ドライラン）。
+    #
     """Validate a portability document and issue a short-lived confirmation token."""
     user_id = user_id_from_session(request.session)
     if user_id is None:
@@ -213,6 +228,8 @@ async def api_preview_context_vault_import(request: Request):
 
 @context_vault_bp.post("/import", name="context_vault.api_import")
 async def api_import_context_vault(request: Request):
+    # 直前のドライランで受理された内容と同一のドキュメントだけを、既存の事実へ追記する。
+    #
     """Append only the exact document accepted by a preceding dry-run."""
     user_id = user_id_from_session(request.session)
     if user_id is None:
@@ -253,6 +270,8 @@ async def api_list_context_fact_candidates(
     limit: int = DEFAULT_CONTEXT_CANDIDATE_LIST_LIMIT,
     cursor: str | None = None,
 ):
+    # ユーザー確認待ちの抽出候補をkeysetページングで取得する。
+    # List extraction candidates awaiting user review, using keyset paging.
     """ユーザー確認待ちの抽出候補をkeysetページングで取得する。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:
@@ -281,6 +300,8 @@ async def api_list_context_fact_candidates(
     name="context_vault.api_approve_candidate",
 )
 async def api_approve_context_fact_candidate(request: Request, candidate_id: int):
+    # 候補を必要に応じて編集し、activeなコンテキスト事実へ昇格する。
+    # Promote a candidate to an active context fact, optionally with edits.
     """候補を必要に応じて編集し、activeなコンテキスト事実へ昇格する。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:
@@ -319,6 +340,8 @@ async def api_approve_context_fact_candidate(request: Request, candidate_id: int
     name="context_vault.api_reject_candidate",
 )
 async def api_reject_context_fact_candidate(request: Request, candidate_id: int):
+    # 候補をrevision競合安全に却下する。
+    # Reject a candidate, guarded against revision conflicts.
     """候補をrevision競合安全に却下する。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:
@@ -353,6 +376,8 @@ async def api_reject_context_fact_candidate(request: Request, candidate_id: int)
     name="context_vault.api_get_extraction_settings",
 )
 async def api_get_context_extraction_settings(request: Request):
+    # 現在の会話コンテキスト自動抽出opt-in設定を取得する。
+    # Get the current opt-in setting for automatic context extraction from conversations.
     """現在の会話コンテキスト自動抽出opt-in設定を取得する。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:
@@ -371,6 +396,8 @@ async def api_get_context_extraction_settings(request: Request):
     name="context_vault.api_update_extraction_settings",
 )
 async def api_update_context_extraction_settings(request: Request):
+    # 会話コンテキスト自動抽出をユーザーの明示操作で有効・無効化する。
+    # Enable or disable automatic context extraction through an explicit user action.
     """会話コンテキスト自動抽出をユーザーの明示操作で有効・無効化する。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:
@@ -395,6 +422,8 @@ async def api_update_context_extraction_settings(request: Request):
 
 @context_vault_bp.post("", name="context_vault.api_create")
 async def api_create_context_fact(request: Request):
+    # コンテキスト事実を新規作成する。
+    # Create a new context fact.
     """コンテキスト事実を新規作成する。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:
@@ -430,6 +459,8 @@ async def api_create_context_fact(request: Request):
 
 @context_vault_bp.put("/{fact_id:int}", name="context_vault.api_update")
 async def api_update_context_fact(request: Request, fact_id: int):
+    # コンテキスト事実を更新する（無効化・復元も status で行う、revision で競合検出）。
+    # Update a context fact; deprecating or restoring is done via status, and revision detects conflicts.
     """コンテキスト事実を更新する（無効化・復元も status で行う、revision で競合検出）。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:

@@ -1,3 +1,11 @@
+"""利用上限の使用状況(日次・週次・月次予算・デモ枠)を返す API。
+
+金額ではなく上限に対する割合だけを返し、画面の使用量メーターに使われる。
+
+API returning the usage status against the limits (daily, weekly, monthly budget and demo allowance).
+It returns only ratios of each limit, never amounts, for the usage meter in the UI.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -27,6 +35,8 @@ def _serialize_window(window: UsageWindow | None) -> dict[str, object] | None:
     }
 
 
+# デモ利用枠を割合と期限だけの形にする。デモ枠が無ければ None。
+# Shape the demo allowance as a ratio and an expiry only; None when there is no demo allowance.
 def _serialize_demo(demo: DemoAllowance | None) -> dict[str, object] | None:
     if demo is None:
         return None
@@ -36,6 +46,8 @@ def _serialize_demo(demo: DemoAllowance | None) -> dict[str, object] | None:
     return {"used_ratio": used_ratio, "expires_at": serialize_datetime_iso(demo.expires_at)}
 
 
+# ログイン中ユーザーの現在の利用状況を返す。未ログインは 401。
+# Return the signed-in user's current usage status; 401 when signed out.
 @chat_bp.get("/api/user/usage-limits", name="chat.get_usage_limits")
 async def get_usage_limits(request: Request):
     user_id = request.session.get("user_id")

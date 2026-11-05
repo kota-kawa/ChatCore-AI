@@ -1,6 +1,10 @@
 #!/bin/sh
+# [JP] アプリコンテナの起動スクリプト。DB の起動を待ち、本番以外のときだけマイグレーションを適用して uvicorn を起動する。
+# [EN] App container entrypoint: waits for the DB, applies migrations only outside production, then starts uvicorn.
 set -eu
 
+# [JP] DB（db:5432）が接続を受け付けるまで最大 60 秒待つ。
+# [EN] Wait up to 60 seconds for the DB (db:5432) to accept connections.
 /wait-for-it.sh db:5432 --timeout=60 --strict --
 
 # [JP] 本番環境（Blue/Greenデプロイ）では、デプロイスクリプト側でマイグレーションを制御するため

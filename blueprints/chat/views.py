@@ -1,3 +1,8 @@
+"""チャットのトップ画面・設定画面へのアクセスを、フロントエンドの同じ画面へ転送するだけのルート。
+
+Routes that only forward visits to the chat top and settings pages to the same pages on the frontend.
+"""
+
 from fastapi import Request
 
 from services.web import redirect_to_frontend

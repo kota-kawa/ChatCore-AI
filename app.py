@@ -1,4 +1,7 @@
-# app.py
+# FastAPI アプリのエントリーポイント。環境変数の読み込み、ミドルウェアと各ブループリントの登録、
+# 起動時のシード・定期クリーンアップ・終了処理（lifespan）、ヘルスチェックと例外ハンドラーを定義する。
+# Entry point of the FastAPI app: loads env vars, registers middlewares and blueprints, runs startup seeding,
+# periodic cleanup and shutdown (lifespan), and defines health checks and exception handlers.
 import asyncio
 import logging
 import os
@@ -59,6 +62,8 @@ from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, jsonify  # noqa: E402
 configure_logging()
 logger = logging.getLogger(__name__)
 
+# MCP クライアントが機械的に呼ぶ OAuth/MCP のパス。ブラウザ向けのセッション・ロケール処理を通さない。
+# OAuth/MCP paths called by MCP clients, not browsers; they bypass the session and locale middlewares.
 MCP_MACHINE_PATHS = (
     "/mcp",
     "/authorize",
@@ -219,6 +224,7 @@ async def lifespan(app_instance: FastAPI):
     # クリーンアップタスク用の停止シグナルイベントを作成
     # Create a stop signal event for the periodic cleanup task
     cleanup_stop_event = asyncio.Event()
+    # 定期クリーンアップは asyncio のタスクとして起動する。
     # Start the periodic cleanup as a native asyncio task.
     cleanup_task = asyncio.create_task(periodic_cleanup(cleanup_stop_event))
 
@@ -374,6 +380,8 @@ app.include_router(context_vault_bp)
 app.include_router(mcp_oauth_bp)
 
 
+# MCP が有効なときだけ、OAuth の探索用メタデータ（/.well-known）と MCP 本体のエンドポイントを追加する。
+# Only when MCP is enabled, add the OAuth discovery metadata (/.well-known) and the MCP endpoint itself.
 if is_mcp_enabled():
     from services.mcp_server import (
         get_mcp_asgi_app,
@@ -381,6 +389,8 @@ if is_mcp_enabled():
         get_oauth_protected_resource_metadata,
     )
 
+    # 探索メタデータは外部の MCP クライアントが取得するため、CORS を許可して1時間キャッシュさせる。
+    # Discovery metadata is fetched by external MCP clients, so allow CORS and cache it for an hour.
     discovery_headers = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -446,6 +456,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 # アプリケーションを直接実行する場合のエントリーポイント
+# Entry point when the app is run directly (python3 app.py).
 if __name__ == "__main__":
     import uvicorn
 

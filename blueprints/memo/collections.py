@@ -1,7 +1,9 @@
+"""メモのコレクション（分類用フォルダ）の一覧・作成・更新・削除を行う API（/memo/api/collections）。
+
+API endpoints for listing, creating, updating and deleting memo collections at /memo/api/collections.
+"""
 from __future__ import annotations
 
-# コレクションの一覧・作成・更新・削除
-# Collection list, create, update and delete endpoints
 import logging
 
 from fastapi import Request

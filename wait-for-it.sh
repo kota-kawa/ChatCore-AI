@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
+# 指定した TCP のホストとポートに接続できるようになるまで待つスクリプト。docker/app-entrypoint.sh が DB の起動待ちに使う。
 # Use this script to test if a given TCP host/port are available
 
 WAITFORIT_cmdname=${0##*/}
 
+# --quiet でなければ標準エラーに出力する。
+# Print to stderr unless --quiet was given.
 echoerr() { if [[ $WAITFORIT_QUIET -ne 1 ]]; then echo "$@" 1>&2; fi }
 
 usage()
@@ -22,6 +25,8 @@ USAGE
     exit 1
 }
 
+# 1 秒間隔で接続を試し、成功するまで繰り返す（タイムアウトは外側の wait_for_wrapper が担う）。
+# Retry the connection every second until it succeeds (the timeout is enforced by wait_for_wrapper).
 wait_for()
 {
     if [[ $WAITFORIT_TIMEOUT -gt 0 ]]; then
@@ -49,6 +54,8 @@ wait_for()
     return $WAITFORIT_result
 }
 
+# 自分自身を --child で timeout 経由で起動して待つ。タイムアウトを効かせつつ、待機中の Ctrl-C（SIGINT）も子へ伝えるため。
+# Run this script again as a --child under timeout. This enforces the timeout while still forwarding Ctrl-C (SIGINT) to the child.
 wait_for_wrapper()
 {
     # In order to support SIGINT during timeout: http://unix.stackexchange.com/a/57692
@@ -67,6 +74,7 @@ wait_for_wrapper()
     return $WAITFORIT_RESULT
 }
 
+# 引数を解釈する（host:port、-h/-p/-t、--strict、--quiet、-- 以降は待機後に実行するコマンド）。
 # process arguments
 while [[ $# -gt 0 ]]
 do
@@ -141,6 +149,7 @@ WAITFORIT_STRICT=${WAITFORIT_STRICT:-0}
 WAITFORIT_CHILD=${WAITFORIT_CHILD:-0}
 WAITFORIT_QUIET=${WAITFORIT_QUIET:-0}
 
+# timeout コマンドが busybox 版かを調べる（Alpine では接続確認の方法とオプションが違うため）。
 # Check to see if timeout is from busybox?
 WAITFORIT_TIMEOUT_PATH=$(type -p timeout)
 WAITFORIT_TIMEOUT_PATH=$(realpath $WAITFORIT_TIMEOUT_PATH 2>/dev/null || readlink -f $WAITFORIT_TIMEOUT_PATH)
@@ -148,6 +157,7 @@ WAITFORIT_TIMEOUT_PATH=$(realpath $WAITFORIT_TIMEOUT_PATH 2>/dev/null || readlin
 WAITFORIT_BUSYTIMEFLAG=""
 if [[ $WAITFORIT_TIMEOUT_PATH =~ "busybox" ]]; then
     WAITFORIT_ISBUSY=1
+    # busybox の timeout が -t フラグを使うかを調べる（最近の Alpine は -t に対応しない）。
     # Check if busybox timeout uses -t flag
     # (recent Alpine versions don't support -t anymore)
     if timeout &>/dev/stdout | grep -q -e '-t '; then
@@ -157,6 +167,8 @@ else
     WAITFORIT_ISBUSY=0
 fi
 
+# 子プロセスなら待機だけ行う。親ならタイムアウトの有無に応じて待ち、結果を終了コードにする。
+# A child just waits. The parent waits with or without a timeout and turns the result into its exit code.
 if [[ $WAITFORIT_CHILD -gt 0 ]]; then
     wait_for
     WAITFORIT_RESULT=$?
@@ -171,6 +183,8 @@ else
     fi
 fi
 
+# コマンドが指定されていれば実行する。--strict で待機に失敗した場合は実行しない。
+# Run the given command, unless --strict is set and the wait failed.
 if [[ $WAITFORIT_CLI != "" ]]; then
     if [[ $WAITFORIT_RESULT -ne 0 && $WAITFORIT_STRICT -eq 1 ]]; then
         echoerr "$WAITFORIT_cmdname: strict mode, refusing to execute subprocess"

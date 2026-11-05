@@ -1,3 +1,11 @@
+"""ユーザーの表示言語(ロケール)設定の取得・更新 API。
+
+DB を正としつつ、セッションとロケール Cookie にも同じ値を持たせて、リクエストごとの言語判定に使えるようにする。
+
+API to read and update the user's display-language (locale) preference.
+The DB is the source of truth; the session and locale cookie mirror it so per-request language resolution can use it.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -23,6 +31,8 @@ from . import chat_bp
 logger = logging.getLogger(__name__)
 
 
+# ログイン必須の入口。ユーザー ID か、未ログイン時の 401 応答のどちらかを返す。
+# Login gate: return either the user id or a 401 response when signed out.
 def _require_user_id(request: Request) -> tuple[int | None, Any]:
     user_id = request.session.get("user_id")
     if not user_id:
@@ -33,6 +43,10 @@ def _require_user_id(request: Request) -> tuple[int | None, Any]:
     return int(user_id), None
 
 
+# 利用者が明示的に選んだロケールを返す。セッションに無ければ DB を1回だけ引き、結果(未設定を含む)をセッションに覚えて再問い合わせを避け
+# る。
+# Return the locale the user explicitly chose: consult the DB once if the session lacks it and remember the result (even "unset") to
+# avoid re-querying.
 async def _load_explicit_locale(request: Request, user_id: int):
     session_locale = normalize_locale(request.session.get(PREFERRED_LOCALE_SESSION_KEY))
     if session_locale is not None:
@@ -47,6 +61,8 @@ async def _load_explicit_locale(request: Request, user_id: int):
     return preferred_locale
 
 
+# 現在のロケール設定を返す。明示設定が無ければリクエストから決まる言語を返す。
+# Return the current locale; fall back to the request-derived language when none was chosen.
 @chat_bp.get("/api/user/preferences", name="chat.get_user_preferences")
 async def get_user_preferences(request: Request):
     user_id, error_response = _require_user_id(request)
@@ -67,6 +83,8 @@ async def get_user_preferences(request: Request):
     return jsonify({"locale": preferred_locale or get_request_locale(request)})
 
 
+# ロケール設定を保存する。DB に保存できたときだけセッションと Cookie を更新する。
+# Save the locale preference; the session and cookie are updated only when the DB write succeeds.
 @chat_bp.put("/api/user/preferences", name="chat.update_user_preferences")
 async def update_user_preferences(request: Request):
     user_id, error_response = _require_user_id(request)

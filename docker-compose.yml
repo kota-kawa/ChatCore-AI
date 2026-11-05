@@ -1,3 +1,8 @@
+# [JP] 単一構成（blue/green ではない）の Docker Compose 定義。app（FastAPI）・frontend（Next.js）・db・redis と、nginx 用 upstream の初期化ジョブを持つ。
+#      本番では deploy/blue_green_deploy.sh が、従来構成の検出と停止にこのファイルを使う。
+# [EN] Docker Compose definition for the single-stack setup (not blue/green): app (FastAPI), frontend (Next.js), db, redis, and the nginx upstream bootstrap job.
+#      In production, deploy/blue_green_deploy.sh uses it to detect and stop the old stack.
+
 name: chatcore-ai
 
 # [JP] 既定の json-file ドライバは無制限に肥大化する。Blue/Green は常時2色分の
@@ -47,6 +52,7 @@ services:
       - GOOGLE_JS_ORIGIN=${GOOGLE_JS_ORIGIN:-https://chatcore-ai.com}
       - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      # リモート MCP サーバーと OAuth の設定。
       # Remote MCP server and OAuth configuration.
       - MCP_ENABLED=${MCP_ENABLED:-false}
       - MCP_PUBLIC_BASE_URL=${MCP_PUBLIC_BASE_URL:-https://chatcore-ai.com}
@@ -84,6 +90,7 @@ services:
       - PROMPT_SHARE_UPLOAD_DIR=/app/data/uploads/prompt_share
       - AVATAR_UPLOAD_DIR=/app/data/uploads/avatars
       - CHAT_IMAGE_UPLOAD_DIR=/app/data/uploads/chat_images
+      # ユーザーごとの、正規化済みの表示用とカード用の画像の合計上限（既定 100 MiB）。
       # Per-user total of normalized display + card variants (100 MiB default).
       - PROMPT_SHARE_ATTACHMENT_USER_QUOTA_BYTES=${PROMPT_SHARE_ATTACHMENT_USER_QUOTA_BYTES:-104857600}
     ports:
@@ -91,10 +98,13 @@ services:
       # Bind to loopback only; the host nginx is the sole external consumer.
       - "127.0.0.1:5004:5004"
     volumes:
+      # プロンプト共有のアップロードは、app コンテナの再構築やデプロイをまたいで残す必要がある。
       # Prompt-share uploads must outlive app container rebuilds and deployments.
       - prompt_share_uploads:/app/data/uploads/prompt_share
+      # アバターのアップロードも、再構築やデプロイをまたいで残す必要がある。
       # Avatar uploads must outlive app container rebuilds and deployments too.
       - avatar_uploads:/app/data/uploads/avatars
+      # チャット画像は非公開のまま、メッセージから参照されている間は再構築をまたいで残す必要がある。
       # Chat images stay private and must survive rebuilds while messages reference them.
       - chat_image_uploads:/app/data/uploads/chat_images
     depends_on:
@@ -183,6 +193,7 @@ services:
       - -c
       - log_min_duration_statement=${POSTGRES_LOG_MIN_DURATION_MS:-500}
     volumes:
+      # PostgreSQL 18 以降は、メジャーバージョンごとのクラスターを /var/lib/postgresql の下に置く。
       # PostgreSQL 18+ stores major-specific clusters below /var/lib/postgresql.
       - db_data_pg18:/var/lib/postgresql
     healthcheck:
@@ -227,6 +238,8 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  # 初回起動用。ホスト側 nginx の upstream ファイルを、指定した色のポートで作る（一度きり、再起動しない）。
+  # First-run helper: writes the host nginx upstream files for the chosen color's ports (run once, never restarted).
   nginx_bootstrap:
     image: alpine:3.24.1
     logging: *default_logging
@@ -259,6 +272,8 @@ services:
     restart: "no"
 
 volumes:
+  # PostgreSQL のメジャーバージョン間ではデータディレクトリを共有できない。以前の
+  # chatcore-ai_db_data ボリュームは、pg15 のアーカイブとして意図的にそのまま残している。
   # PostgreSQL major versions cannot share a data directory. The former
   # chatcore-ai_db_data volume is intentionally left untouched as the pg15 archive.
   db_data_pg18:

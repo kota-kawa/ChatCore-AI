@@ -1,7 +1,9 @@
+"""メモを Markdown / JSON / CSV のファイルとしてダウンロードさせる API（/memo/api/export）。
+
+API that lets users download their memos as Markdown, JSON or CSV files (/memo/api/export).
+"""
 from __future__ import annotations
 
-# メモのエクスポート（Markdown / JSON / CSV）
-# Memo export (Markdown / JSON / CSV)
 import logging
 
 from fastapi import Request

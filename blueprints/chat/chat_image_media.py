@@ -29,6 +29,8 @@ from services.web import jsonify
 from . import chat_bp
 
 
+# 画像またはサムネイルを返す共通処理。持ち主の照合 → ファイルの存在確認 → 配信の順で、どこで失敗しても同じ 404 にする。
+# Shared image/thumbnail delivery: check ownership, check the file exists, then serve; every failure answers the same 404.
 async def _chat_image_response(request: Request, image_id: str, *, thumbnail: bool):
     session = request.session
     owner_key = chat_image_owner_key(user_id=session.get("user_id"), sid=session.get("sid"))
@@ -48,11 +50,15 @@ async def _chat_image_response(request: Request, image_id: str, *, thumbnail: bo
     )
 
 
+# 元画像を返す。
+# Serve the original image.
 @chat_bp.get("/api/chat/images/{image_id}", name="chat.get_chat_image")
 async def get_chat_image(request: Request, image_id: str):
     return await _chat_image_response(request, image_id, thumbnail=False)
 
 
+# サムネイルを返す。
+# Serve the thumbnail.
 @chat_bp.get("/api/chat/images/{image_id}/thumbnail", name="chat.get_chat_image_thumbnail")
 async def get_chat_image_thumbnail(request: Request, image_id: str):
     return await _chat_image_response(request, image_id, thumbnail=True)
