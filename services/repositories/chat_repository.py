@@ -488,6 +488,7 @@ class ChatRepository:
         return bool(result.rowcount)
 
     async def list_referenced_chat_image_ids(self) -> set[str]:
+        # 非表示の分岐も参照中として集計し、切り替え可能な会話の画像を掃除で消さないようにする。
         """Return every chat image id still referenced by a stored message, on any branch."""
 
         values = await self.session.scalars(

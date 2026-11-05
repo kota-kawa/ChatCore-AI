@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 async def cleanup_orphaned_prompt_attachments() -> int:
+    # DBを正本として未参照の古い画像を削除し、書き込み失敗やプロセス停止で残ったファイルを回収する。
+    # 保存先が変わっても、同じ照合契約を維持できるようにする。
     """Delete old local variants not referenced by an active prompt.
 
     The local backend is intentionally reconciled from database truth. This

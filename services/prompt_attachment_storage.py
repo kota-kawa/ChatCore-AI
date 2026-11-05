@@ -339,6 +339,7 @@ def normalize_prompt_attachment_public_url(url: object) -> str | None:
 
 
 def delete_prompt_attachment(attachment: object) -> int:
+    # 添付情報に含まれる各派生画像をまとめて削除する。
     """Remove every local variant referenced by one attachment descriptor."""
     return get_prompt_attachment_storage().delete_attachment(attachment)
 

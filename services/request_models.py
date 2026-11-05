@@ -613,6 +613,7 @@ class PromptUpdateRequest(RequestPayloadModel):
     content_format: str = DEFAULT_CONTENT_FORMAT
     media_type: str = DEFAULT_MEDIA_TYPE
     attributes: dict[str, str] = Field(default_factory=dict)
+    # Noneは既存リソースの保持、空リストは全削除を明示するため、両者を区別する。
     # None means "leave existing resources unchanged"; [] explicitly removes all resources.
     resources: list[SkillResourceInput] | None = Field(
         default=None,

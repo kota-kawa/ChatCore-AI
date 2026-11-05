@@ -2171,6 +2171,7 @@ def serialize_web_search_result(result: WebSearchResult) -> dict[str, Any]:
 
 
 def serialize_web_search_result_for_storage(result: WebSearchResult) -> dict[str, Any]:
+    # 保存履歴を肥大化させないよう、出典と上限付き抜粋だけを残し、ページ全文と画像候補を除く。
     """Persist source references and bounded excerpts without page bodies or images."""
     compact_sources: list[WebSearchSource] = []
     for source in result.sources:
