@@ -1,3 +1,6 @@
+// 共通UIで使うDOM操作の補助処理を提供する。
+// Provides DOM helpers for shared UI behavior.
+
 export type SharedDomRefs = {
   setupContainer: HTMLElement | null;
   chatContainer: HTMLElement | null;

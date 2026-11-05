@@ -1,3 +1,6 @@
+/* 公開投稿画面のヘッダーと一覧を画面幅に合わせる。
+ * Adapts the public feed header and list to viewport width. */
+
 @media (max-width: 1024px) {
   .prompt-share-page .prompt-cards {
     grid-template-columns: 1fr 1fr;

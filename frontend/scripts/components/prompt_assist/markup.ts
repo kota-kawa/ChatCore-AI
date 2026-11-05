@@ -1,3 +1,6 @@
+// プロンプト作成補助パネルのDOM用マークアップを組み立てる。
+// Builds markup for the prompt assistance panel.
+
 import { getPromptAssistTargetMeta } from "./constants";
 import { localized } from "./strings";
 import type { PromptAssistTarget } from "./types";

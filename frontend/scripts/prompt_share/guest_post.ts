@@ -1,3 +1,6 @@
+// ゲスト投稿を許可されたテキスト形式と入力条件へ制限する。
+// Restricts guest posts to supported text payloads and input conditions.
+
 import type { ContentFormat, MediaType, PromptResource } from "./types";
 
 export const GUEST_POST_CONTENT_FORMAT: ContentFormat = "prompt";

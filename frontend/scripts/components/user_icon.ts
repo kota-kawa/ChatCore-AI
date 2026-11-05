@@ -1,3 +1,7 @@
+// 利用者アイコンとアカウント操作のカスタム要素を定義する。
+// Defines the user icon custom element and account actions.
+
+// 利用者アイコンのコンポーネント。
 // components/user_icon.ts
 // ────────────────────────────────────────────────
 import { getLoggedInState, hasLoggedInState } from "../core/app_state";
@@ -92,7 +96,7 @@ tpl.innerHTML = `
       object-fit: cover;
       display: block;
     }
-    /* ▼ dropdown */
+    /* ドロップダウン / ▼ dropdown */
     .dropdown {
       position: absolute;
       top: 3.5rem;

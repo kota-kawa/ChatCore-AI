@@ -1,3 +1,6 @@
+// ツールチップのDOMと対象要素に応じた表示位置を管理する。
+// Manages tooltip markup and placement relative to trigger elements.
+
 const TOOLTIP_OFFSET_PX = 10;
 const TOOLTIP_VIEWPORT_PADDING_PX = 12;
 const TOOLTIP_ARROW_EDGE_PADDING_PX = 14;

@@ -1,3 +1,6 @@
+// チャット本文の数式表示に必要な文字列処理を提供する。
+// Provides text processing for math display in chat messages.
+
 import { replaceDisplayText, type DisplaySourceSpan } from "./display_source_positions";
 
 function readBracedGroup(value: string, startIndex: number) {

@@ -1,3 +1,6 @@
+// ブラウザーで共有するアプリ状態の入口を提供する。
+// Provides access to shared browser application state.
+
 let loggedInState: boolean | null = null;
 
 function dispatchAuthStateChange(loggedIn: boolean) {

@@ -575,7 +575,8 @@
   font-size: var(--text-sm);
 }
 
-/* ---- FAQ ---- */
+/* よくある質問。
+  ---- FAQ ---- */
 
 .lp-faq {
   background: var(--lp-paper-tint);

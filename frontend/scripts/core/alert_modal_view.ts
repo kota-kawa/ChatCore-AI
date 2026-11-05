@@ -1,4 +1,8 @@
-/**
+// 共通ダイアログのDOM構築と開閉遷移を、キュー管理から分離する。
+// Separates shared dialog markup and open/close transitions from queue management.
+
+/** 通知と確認ダイアログのDOM・開閉遷移を、キュー管理から分離する。
+ *
  * Markup builders and open/close transitions for the global alert & confirm
  * dialogs. Keeps DOM/animation concerns out of the queueing logic in
  * `alert_modal.ts`.
@@ -47,7 +51,8 @@ type DialogMarkupOptions = {
   title: string;
   overlayAttribute: string;
   actionsMarkup: string;
-  /**
+  /** アイコン横の本文列ではなくヘッダー下の全幅に置き、入力と操作行の端を揃える。
+   *
    * Rendered full-width under the header rather than inside the icon-indented
    * text column, so inputs line up with the dialog padding and the action row.
    */
@@ -114,7 +119,8 @@ function buildButtonMarkup(options: { label: string; secondary?: boolean; attrib
   `;
 }
 
-/** Reveals the dialog, cancelling any exit transition that is still running. */
+/** 残っている終了遷移を取り消してからダイアログを開く。
+ * Reveals the dialog, cancelling any exit transition that is still running. */
 function playOpenTransition(root: HTMLElement) {
   root.classList.remove("is-closing");
   root.hidden = false;
@@ -122,7 +128,8 @@ function playOpenTransition(root: HTMLElement) {
   root.classList.add("is-visible");
 }
 
-/**
+/** 終了アニメーション後に隠す。次のダイアログが即時に引き継げるようキャンセル関数を返す。
+ *
  * Plays the exit animation and hides the dialog once it finishes.
  * Returns a cancel function so a queued dialog can take over immediately.
  */

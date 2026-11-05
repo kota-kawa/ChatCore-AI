@@ -1,3 +1,6 @@
+// プロンプト作成補助の表示と遷移アニメーションを扱う。
+// Handles prompt assistance visibility and transition animations.
+
 import type { PromptAssistFieldConfig } from "./types";
 
 export function animateAppliedField(

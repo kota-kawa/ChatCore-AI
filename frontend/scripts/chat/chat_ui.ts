@@ -1,4 +1,5 @@
 // chat_ui.ts  – チャット画面 UI 共通ユーティリティ
+// Provides shared UI helpers for the chat screen.
 // --------------------------------------------------
 import hljs from "highlight.js";
 import { Marked } from "marked";
@@ -257,6 +258,7 @@ function normalizeLLMTextForDisplay(rawText: string) {
   const formattedParts = parts
     .map((part, idx) => {
       if (!part) return "";
+      // 捕捉グループを使うsplitでは、奇数位置がコードフェンスになる。
       // split() with capturing group: odd index is code fence
       if (idx % 2 === 1) return part.trim();
       return normalizeMarkdownSegmentForDisplay(part);

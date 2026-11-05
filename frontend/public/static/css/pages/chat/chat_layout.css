@@ -1,5 +1,7 @@
 /* chat_layout.css
    チャットコンテナ全体、ヘッダー、メインの２カラムレイアウト
+
+   Styles the chat container, header and main two-column layout.
 */
 :where(body.chat-page, .chat-page-shell) #chat-container {
   /* ヘッダーは行を占有しない浮遊オーバーレイなので、その基準となる包含ブロックを
@@ -20,7 +22,8 @@
   flex-direction: column;
   min-height: 0;
   opacity: 0;
-  /* Rises up from below and out of 3D depth (perspective lives on
+  /* 親のperspectiveを使い、チャットパネルが手前へ浮かぶ登場表現にする。
+    Rises up from below and out of 3D depth (perspective lives on
      .chat-page-stage), so the chat panel feels like it surfaces toward
      the viewer rather than blinking into place. */
   transform: translate3d(0, 44px, -120px) scale(0.94) rotateX(-6deg);
@@ -59,7 +62,8 @@
   pointer-events: none;
 }
 
-/* Staggered reveal of the chat panel's contents as it surfaces. The header
+/* ヘッダーと本文をずらして登場させる。準備中と表示中の定義を揃え、状態変更で再始動させない。
+  Staggered reveal of the chat panel's contents as it surfaces. The header
    eases down from the top while the conversation area rises up, layering the
    entrance instead of revealing everything in a single beat. Both the
    "launching" and "chat" states share identical declarations so the animation

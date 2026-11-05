@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// フロントエンドのimport先が解決できるか検査する。
+// Checks that frontend import targets resolve.
+
 
 const fs = require("fs");
 const path = require("path");

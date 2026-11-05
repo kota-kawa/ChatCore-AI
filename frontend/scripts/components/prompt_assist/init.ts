@@ -1,3 +1,6 @@
+// プロンプト作成補助の初期化とイベント接続を扱う。
+// Initializes prompt assistance and wires its events.
+
 import { animateAppliedField } from "./animation";
 import { createSuggestionRow } from "./cards";
 import { PROMPT_ASSIST_PRIMARY_FIELDS, getPromptAssistImageMeta, getPromptAssistSkillMeta, getPromptAssistTargetMeta } from "./constants";

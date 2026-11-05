@@ -1,3 +1,7 @@
+// チャット固有のポップアップメニューを提供する。
+// Provides the chat-specific popup menu.
+
+// チャット固有のポップアップメニュー。
 // components/chat/popup_menu.ts (chat-specific)
 
 const chatTemplate = document.createElement("template");

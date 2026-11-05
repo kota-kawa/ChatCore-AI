@@ -1,3 +1,5 @@
+/* 「新規投稿」ボタンの起動アニメーション（keyframes）と、動きを抑える設定への対応をまとめる。ボタン本体の指定は prompt_share.modals-composer.css にある。
+   Launch-animation keyframes for the "new prompt" button and their reduced-motion handling; the button rules themselves live in prompt_share.modals-composer.css. */
 /*
  * グローバルなサポートAIエージェントの見た目は styles/globals.css に集約する。
  * このページ固有の body クラスは、アプリ全体で共有するエージェントにも付くため、
@@ -8,6 +10,8 @@
  * (ai-agent-* / mini-chat-*).
  */
 
+/* ボタン内アイコンの回転（行き過ぎてから戻る弾み付き）。
+   Spin of the icon inside the button, with an overshoot-and-settle bounce. */
 @keyframes newPromptIconSpin {
   0%   { transform: rotate(0deg) scale(1); }
   30%  { transform: rotate(200deg) scale(1.15); }
@@ -17,6 +21,8 @@
   100% { transform: rotate(360deg) scale(1); }
 }
 
+/* ボタン本体の押し込みから跳ね上がる動き。
+   Press-down then pop-up motion of the button itself. */
 @keyframes newPromptButtonLaunch {
   0% {
     transform: scale(1);
@@ -32,6 +38,8 @@
   }
 }
 
+/* ボタンの外側へ広がって消える波紋。
+   Ripple that expands outward from the button and fades. */
 @keyframes newPromptButtonPulse {
   0% {
     opacity: 0;
@@ -46,6 +54,8 @@
   }
 }
 
+/* ボタン上を左から右へ流れる光沢。
+   Sheen sweeping across the button from left to right. */
 @keyframes newPromptButtonSheen {
   0% {
     opacity: 0;
@@ -60,6 +70,8 @@
   }
 }
 
+/* 動きを減らす設定のユーザーには、遷移とアニメーションをほぼ無効化し、ホバー・押下時の変形も止める。
+   For users who prefer reduced motion, effectively disable transitions/animations and stop hover/active transforms. */
 @media (prefers-reduced-motion: reduce) {
   :where(body.prompt-share-page, .prompt-share-page) .category-card,
   .prompt-share-page .prompt-card,

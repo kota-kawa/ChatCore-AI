@@ -1,4 +1,8 @@
-/* task-order.css */
+/* タスク並べ替え中のカードとタッチ操作の状態を整える。
+ * Styles task reorder cards and touch gesture states. */
+
+/* タスク並べ替えのスタイル。
+  task-order.css */
 
 :where(body.chat-page, .chat-page-shell) #edit-task-order-btn {
   width: 44px;

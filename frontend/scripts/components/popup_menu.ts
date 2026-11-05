@@ -1,3 +1,7 @@
+// ページ間で使う共通ポップアップメニューを提供する。
+// Provides the shared popup menu used across pages.
+
+// 共通ポップアップメニュー。
 // components/popup_menu.ts
 
 const template = document.createElement("template");
@@ -31,6 +35,7 @@ template.innerHTML = `
     }
 
     /* ============
+       基本リセット
        Reset / Base
        ============ */
     * {
@@ -40,6 +45,7 @@ template.innerHTML = `
     }
 
     /* ============
+       非表示のチェックボックス
        Hidden Checkbox
        ============ */
     input[type="checkbox"] {
@@ -47,6 +53,7 @@ template.innerHTML = `
     }
 
     /* ============
+       共通ボタンのスタイル
        Common Button Styles
        ============ */
     .btn {
@@ -95,6 +102,7 @@ template.innerHTML = `
     }
 
     /* ============
+       操作メニューの枠
        Action Menu Wrapper
        ============ */
     /* bottom は AI エージェントボタン（.global-ai-agent-button）と同じ計算式で高さを揃える */
@@ -134,6 +142,7 @@ template.innerHTML = `
     }
 
     /* ============
+       大きなメニューボタン
        Menu Button (Large)
        ============ */
     .btn--menu {
@@ -169,6 +178,7 @@ template.innerHTML = `
     }
 
     /* ============
+       操作ボタン
        Action Buttons
        ============ */
     .btn--share {

@@ -1,3 +1,6 @@
+// 初回描画で認証依存UIを復元するため、認証状態を画面間で共有する。
+// Shares cached authentication state across pages for the initial UI paint.
+
 import { CACHE_TTL_MS, STORAGE_KEYS } from "./constants";
 
 // ページ間で共有する認証状態キャッシュ。トップページ・メモなど、認証依存のUIを
@@ -21,6 +24,7 @@ export function readCachedAuthState(): boolean | null {
     if (cached === "1") return true;
     if (cached === "0") return false;
   } catch {
+    // localStorageの失敗は許容する。
     // ignore localStorage failures
   }
   return null;
@@ -43,6 +47,7 @@ export function writeCachedAuthState(loggedIn: boolean) {
     localStorage.setItem(STORAGE_KEYS.authStateCache, loggedIn ? "1" : "0");
     localStorage.setItem(STORAGE_KEYS.authStateCachedAt, String(Date.now()));
   } catch {
+    // localStorageの失敗は許容する。
     // ignore localStorage failures
   }
 }

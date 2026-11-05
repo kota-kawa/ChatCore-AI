@@ -1,3 +1,6 @@
+// ブラウザー側の共通処理で使う定数を定義する。
+// Defines constants used by shared browser runtime helpers.
+
 const SHORT_CACHE_TTL_MS = 30_000;
 
 export const STORAGE_KEYS = {

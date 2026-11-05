@@ -24,6 +24,8 @@
     border-color 0.2s ease;
 }
 
+/* 主要ボタン（送信・メインのヒーロー操作）は青の塗りと白文字にする。
+   Primary buttons (submit and the main hero action) use the blue fill with light text. */
 .prompt-share-page .submit-btn,
 .prompt-share-page .hero-action--primary {
   --ps-button-base: var(--ps-primary);
@@ -35,6 +37,8 @@
   border-color: transparent;
 }
 
+/* 選択中・展開中の状態は薄い青の面にし、ホバーでも色を変えない。
+   Selected/expanded states use a pale blue surface that does not change on hover. */
 .prompt-share-page .category-card.active,
 
 .prompt-share-page .prompt-type-filter-btn.active,
@@ -76,6 +80,8 @@
   transform: scale(0.97);
 }
 
+/* いいね・チャットで使うボタンはアイコンだけを見せるため、どの状態でも塗り・影・フィルターを持たない。
+   Like and use-in-chat buttons show only their icon, so they never get a fill, shadow or filter in any state. */
 .prompt-share-page .prompt-action-btn.like-btn,
 
 .prompt-share-page .prompt-action-btn.use-in-chat-btn,
@@ -92,6 +98,8 @@
   filter: none;
 }
 
+/* 動きを減らす設定では、色の遷移をほぼ無効にし、押下時の縮小も止める。
+   Under reduced motion, transitions are effectively disabled and the press-down scale is removed. */
 @media (prefers-reduced-motion: reduce) {
   .prompt-share-page :where(
     #auth-buttons .auth-btn,

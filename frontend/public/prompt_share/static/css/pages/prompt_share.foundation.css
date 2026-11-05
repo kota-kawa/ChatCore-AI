@@ -1,3 +1,8 @@
+/* Prompt Share ページの土台となるスタイル。デザイントークン（--ps-*）、ヘッダー・検索欄・ブランド、カテゴリと種別フィルター、一覧セクションの枠、「もっと見る」ボタンを定義する。
+   Foundation styles for the Prompt Share page: design tokens (--ps-*), header/search/brand, category and type filters, the list section frame and the load-more button. */
+
+/* アイコンフォント（bootstrap-icons）を、他のスタイルの font 指定に負けずに表示するための共通指定。
+   Shared rules that keep bootstrap-icons rendering with the icon font regardless of other font settings. */
 :where(body.prompt-share-page, .prompt-share-page) .bi {
   display: inline-block;
   font-family: "bootstrap-icons" !important;
@@ -11,6 +16,8 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ページ共通のデザイントークン（配色・影・いいね/チャット利用の色・FAB の青）と基本の文字設定。ダークテーマの値は prompt_share.dark-mode.css が差し替える。
+   Page-wide design tokens (colors, shadows, like/use-in-chat colors, the blue FAB) and base text settings; prompt_share.dark-mode.css swaps the values for the dark theme. */
 body.prompt-share-page,
 
 .prompt-share-page {
@@ -64,6 +71,8 @@ body.prompt-share-page,
 /* Setting overflow on body makes it a scroll container and breaks the sticky header;
    horizontal overflow is already clipped by html { overflow-x: hidden } in global.css */
 
+/* モーダルを開いている間だけ背景ページのスクロールを止める（ps-modal-open は html と body の両方に付く）。
+   Stop the background page from scrolling only while a modal is open (ps-modal-open is set on both html and body). */
 html.ps-modal-open,
 
 body.prompt-share-page.ps-modal-open {
@@ -99,6 +108,8 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
   z-index: 1;
 }
 
+/* クローラー向けの要約。画面には見えない（1px に潰して切り抜く）が、DOM には残して検索エンジンなどが読めるようにする。
+   Summary meant for crawlers: visually hidden (collapsed to 1px and clipped) but kept in the DOM so search engines can read it. */
 :where(body.prompt-share-page, .prompt-share-page) .prompt-crawl-summary {
   position: absolute !important;
   width: 1px !important;
@@ -144,6 +155,8 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
   font-weight: 700;
 }
 
+/* ヘッダー右上の「ログイン / 登録」ボタン。
+   The "log in / sign up" button at the header's right side. */
 .prompt-share-page #auth-buttons .auth-btn {
   border: 1px solid rgba(255, 255, 255, 0.8);
   border-radius: 999px;
@@ -244,6 +257,8 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
   align-items: center;
 }
 
+/* ヘッダーの主要操作（投稿するボタンなど）。塗りと色は prompt_share.button-system.css の変数で決まる。
+   Primary header action (such as the post button); its fill and colors come from the variables in prompt_share.button-system.css. */
 :where(body.prompt-share-page, .prompt-share-page) .hero-action {
   border: 1px solid transparent;
   border-radius: 999px;
@@ -344,6 +359,8 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
   font-size: 1rem;
 }
 
+/* キーボード操作時のフォーカスリングを、主要な操作要素でそろえる。
+   Unify the keyboard focus ring across the main interactive elements. */
 .prompt-share-page .search-box button:focus-visible,
 
 .prompt-share-page .hero-action:focus-visible,
@@ -361,6 +378,8 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
   outline-offset: 2px;
 }
 
+/* カテゴリ領域と一覧領域は、角丸の白いパネルとして同じ最大幅（1280px）で積む。
+   The category and list areas stack as rounded white panels sharing the same max width (1280px). */
 :where(body.prompt-share-page, .prompt-share-page) .categories,
 :where(body.prompt-share-page, .prompt-share-page) .prompts-list {
   width: min(1280px, 100%);
@@ -421,6 +440,8 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
   font-size: 0.88rem;
 }
 
+/* カテゴリカードのグリッド。高さは変数に持たせ、カード側の height / min-height と行の高さをそろえる。
+   Category card grid; the height lives in a variable so the card height/min-height and the row height stay in sync. */
 :where(body.prompt-share-page, .prompt-share-page) .category-list {
   --prompt-category-card-height: 44px;
   position: relative;
@@ -476,6 +497,8 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
   text-decoration: underline;
 }
 
+/* カテゴリで絞り込むカード。選択中は .active で縁と文字色を変え、塗りの色は button-system 側の変数で決まる。
+   Category filter card; .active changes the border and text color, and the fill comes from the variables in button-system. */
 :where(body.prompt-share-page, .prompt-share-page) .category-card {
   width: 100%;
   height: var(--prompt-category-card-height);
@@ -536,6 +559,8 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
   color: #2d6fba;
 }
 
+/* カテゴリの下に置く、投稿の種類（プロンプト・画像・スキルなど）で絞り込むブロック。
+   Block under the categories that filters posts by type (prompt, image, skill, ...). */
 :where(body.prompt-share-page, .prompt-share-page) .prompt-filter-block {
   position: relative;
   z-index: 1;
@@ -613,6 +638,8 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
   color: #2d6fba;
 }
 
+/* 投稿カードの一覧パネル。上のパネル共通指定に、余白と縦積みの並びを足す。
+   Panel holding the post cards; adds padding and a vertical layout on top of the shared panel rules above. */
 :where(body.prompt-share-page, .prompt-share-page) .prompts-list {
   padding: 1.45rem 1.55rem;
   display: flex;
@@ -650,6 +677,8 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
   font-size: 0.78rem;
 }
 
+/* 一覧の見出し下に置く、件数表示などのツールバー。
+   Toolbar under the list heading, showing the result count and similar info. */
 :where(body.prompt-share-page, .prompt-share-page) .prompt-toolbar {
   position: relative;
   z-index: 1;
@@ -669,6 +698,8 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
   color: #68809b;
 }
 
+/* 一覧の末尾に置く「もっと見る」ボタン。読み込み中の無効状態は prompt_share.cards-actions.css にある。
+   The load-more button at the end of the list; its disabled/loading state is in prompt_share.cards-actions.css. */
 :where(body.prompt-share-page, .prompt-share-page) .prompt-load-more {
   appearance: none;
   border: 1px solid rgba(69, 88, 110, 0.18);

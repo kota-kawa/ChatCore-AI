@@ -1,3 +1,6 @@
+// 複数のモーダルが共存しても解除しすぎないよう、bodyのスクロールロックを管理する。
+// Coordinates body scroll locks so overlapping modals cannot release each other's lock.
+
 type BodyScrollLockState = {
   locks: Set<symbol>;
   previousOverflow: string | null;
@@ -21,6 +24,7 @@ function getBodyScrollLockState(): BodyScrollLockState {
 export function acquireBodyScrollLock() {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return () => {
+      // ブラウザー以外では何もしない。
       // no-op outside the browser
     };
   }

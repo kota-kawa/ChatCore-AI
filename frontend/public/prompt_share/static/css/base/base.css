@@ -1,4 +1,5 @@
-/* Shared variables and resets for prompt share pages */
+/* プロンプト共有ページ共通のリセット（余白と box-sizing）。
+   Shared resets (margin/padding and box-sizing) for the prompt share pages. */
 :where(body.prompt-share-page, .prompt-share-page) {
   margin: 0;
   padding: 0;
@@ -10,7 +11,10 @@
   padding: 0;
 }
 
-/* Class-level display rules (e.g. display:flex on .image-prompt-fields) would otherwise
+/* .image-prompt-fields の display:flex のようなクラス指定は、ブラウザ既定の [hidden]{display:none}
+   （詳細度 0-0-1 < 0-1-0）を上書きして hidden が効かなくなる。ここでは !important を使い、
+   どの display 指定にも勝って [hidden] が必ず非表示になるようにする。
+   Class-level display rules (e.g. display:flex on .image-prompt-fields) would otherwise
    override the UA stylesheet's [hidden]{display:none} (specificity 0-0-1 < 0-1-0).
    !important here wins over any author display rule so [hidden] always hides. */
 :where(body.prompt-share-page, .prompt-share-page) [hidden] {

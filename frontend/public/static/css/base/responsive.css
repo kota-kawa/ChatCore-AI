@@ -1,4 +1,8 @@
-/* responsive.css
+/* base.cssから読み込む共有のレスポンシブ規則を定義する。
+ * Defines shared responsive rules imported by base.css. */
+
+/* base.cssが読む共有の画面幅規則。チャット固有の規則はchat_layout.cssに置く。
+  responsive.css
    Shared responsive breakpoints for layout and components.
    Imported by base.css.
    Note: Chat-specific responsive rules live in chat_layout.css (960px, 576px). */

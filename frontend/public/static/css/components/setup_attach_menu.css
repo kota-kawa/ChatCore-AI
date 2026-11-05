@@ -1,4 +1,6 @@
-/* 入力欄の追加メニュー。ペーストはスマホだけに表示する。 */
+/* 入力欄の追加メニュー。ペーストはスマホだけに表示する。
+   Styles the input attachment menu; paste is offered on phones only.
+*/
 /* Composer add menu. Paste is shown only on phones. */
 
 :where(body.chat-page, .chat-page-shell) .setup-attach-menu__list {

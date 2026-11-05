@@ -1,3 +1,6 @@
+// 状態変更リクエストへCSRFトークンを付け、取得中の要求を共有する。
+// Adds CSRF tokens to state-changing requests and shares in-flight token requests.
+
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 // CSRF トークン取得の多重リクエストを避けるため Promise を共有する
@@ -45,6 +48,8 @@ const invalidateCsrfToken = (): void => {
   csrfTokenPromise = null;
 };
 
+// 通常の権限不足を再送しないよう、JSONのCSRF専用エラーだけをトークン再取得の対象にする。
+// Refresh the token only for JSON CSRF errors so ordinary permission failures are not replayed.
 const isCsrfFailureResponse = async (response: Response): Promise<boolean> => {
   if (response.status !== 403) return false;
 
@@ -108,6 +113,8 @@ export function ensureCsrfProtection(): void {
     let requestWithCsrf = await buildRequestWithCsrf(createBaseRequest(), originalFetch);
     let response = await originalFetch(requestWithCsrf);
 
+    // CSRFで拒否された要求だけを1回再試行し、再拒否や他の403ではループしない。
+    // Retry a CSRF-rejected request once; a second rejection or another 403 must not loop.
     if (await isCsrfFailureResponse(response)) {
       requestWithCsrf = await buildRequestWithCsrf(createBaseRequest(), originalFetch, {
         forceRefreshToken: true

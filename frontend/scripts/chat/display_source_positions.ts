@@ -1,8 +1,12 @@
+// 表示用文字列の置換に合わせて、元テキストとの位置対応を更新する。
+// Updates source-position mappings alongside display-only text replacements.
+
 export interface DisplaySourceSpan {
   start: number;
   end: number;
 }
 
+// 表示専用の置換に合わせて、任意の元ソース範囲も更新する。
 // Update optional source spans alongside a display-only replacement.
 export function replaceDisplayText(
   text: string, pattern: RegExp, replacement: string, positions?: DisplaySourceSpan[],

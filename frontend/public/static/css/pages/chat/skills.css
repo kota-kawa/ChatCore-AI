@@ -1,4 +1,8 @@
-/* Compact personal Skill controls that sit below the task cards. */
+/* タスク下の個人Skill操作とスマートフォン表示を整える。
+ * Styles personal Skill controls below tasks and their phone layout. */
+
+/* タスクカードの下に置く小型の個人Skill操作。
+  Compact personal Skill controls that sit below the task cards. */
 :where(body.chat-page, .chat-page-shell) .skill-section {
   --skill-chip-row-width: 15rem;
   width: 100%;

@@ -1,3 +1,6 @@
+// プロンプト作成補助の対象種別ごとの設定を定義する。
+// Defines per-target configuration for prompt assistance.
+
 import { localized } from "./strings";
 import type { PromptAssistTarget } from "./types";
 

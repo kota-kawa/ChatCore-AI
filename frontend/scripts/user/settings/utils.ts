@@ -1,3 +1,6 @@
+// 設定APIの応答を日付表示やフォーム状態へ変換する。
+// Adapts settings API responses into date displays and form state.
+
 import { formatDateTime } from "../../../lib/datetime";
 import { asRecord } from "../../../lib/utils";
 

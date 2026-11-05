@@ -1,3 +1,6 @@
+// Skill同梱リソースの形式・言語推定と旧データ互換を扱う。
+// Handles Skill resource normalization, language inference and legacy compatibility.
+
 import type { PromptResource, PromptResourceRole } from "./types";
 import type { Locale } from "../../lib/i18n/config";
 import { promptShareText } from "./i18n";
