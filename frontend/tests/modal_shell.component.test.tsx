@@ -1,10 +1,10 @@
 // モーダル共通枠の表示と操作を検証する。
 // Tests modal shell behavior.
 
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ModalShell } from "../components/ui/modal_shell";
+import { MODAL_EXIT_DURATION_MS, ModalShell } from "../components/ui/modal_shell";
 
 function renderShell(overrides: Partial<Parameters<typeof ModalShell>[0]> = {}) {
   const onClose = overrides.onClose ?? vi.fn();
@@ -117,5 +117,108 @@ describe("ModalShell", () => {
     summary.focus();
     fireEvent.keyDown(summary, { key: "Tab" });
     expect(screen.getByRole("button", { name: "first" })).toHaveFocus();
+  });
+});
+
+// 閉じる呼び出し元と同じく、閉じると同時に表示中のデータを消す
+// Like the real callers, clear the displayed data at the same moment the modal closes
+function DetailHarness({ item, returnTo }: { item: string | null; returnTo?: string | null }) {
+  return (
+    <ModalShell isOpen={item !== null} onClose={() => {}} labelledBy="detail-title" className="cc-modal" returnTo={returnTo}>
+      {item ? (
+        <div className="cc-modal__panel">
+          <h2 id="detail-title">{item}</h2>
+        </div>
+      ) : null}
+    </ModalShell>
+  );
+}
+
+function rect(left: number, top: number, width: number, height: number) {
+  return { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) } as DOMRect;
+}
+
+describe("ModalShell closing phase", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("keeps showing the open content while it fades, even after the caller cleared its data", () => {
+    vi.useFakeTimers();
+    const { rerender } = render(<DetailHarness item="Memo A" />);
+    rerender(<DetailHarness item={null} />);
+
+    const dialog = screen.getByRole("dialog", { hidden: true });
+    expect(dialog).toHaveClass("is-closing");
+    expect(dialog).not.toHaveClass("is-open");
+    expect(dialog).toHaveAttribute("aria-hidden", "true");
+    // 消える途中の面は操作もフォーカスも受けない
+    // The fading surface takes no input or focus
+    expect(dialog).toHaveAttribute("inert");
+    expect(screen.getByText("Memo A")).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(MODAL_EXIT_DURATION_MS);
+    });
+    expect(dialog).not.toHaveClass("is-closing");
+    expect(dialog).not.toHaveAttribute("inert");
+    expect(screen.queryByText("Memo A")).toBeNull();
+  });
+
+  it("goes straight back to open when reopened mid-fade, showing the new content", () => {
+    vi.useFakeTimers();
+    const { rerender } = render(<DetailHarness item="Memo A" />);
+    rerender(<DetailHarness item={null} />);
+    rerender(<DetailHarness item="Memo B" />);
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveClass("is-open");
+    expect(dialog).not.toHaveClass("is-closing");
+    expect(screen.getByText("Memo B")).toBeInTheDocument();
+    expect(screen.queryByText("Memo A")).toBeNull();
+  });
+
+  it("does not enter the closing phase when it was never open", () => {
+    render(<DetailHarness item={null} />);
+    expect(screen.getByRole("dialog", { hidden: true })).not.toHaveClass("is-closing");
+  });
+
+  it("shrinks back into the visible card it was opened from", () => {
+    vi.useFakeTimers();
+    const card = document.createElement("article");
+    card.setAttribute("data-modal-origin", "memo:7");
+    document.body.appendChild(card);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this === card) return rect(300, 500, 260, 180);
+      return this.classList.contains("cc-modal__panel") ? rect(120, 40, 1040, 720) : rect(0, 0, 0, 0);
+    });
+
+    const { rerender } = render(<DetailHarness item="Memo A" returnTo="memo:7" />);
+    // 閉じると同時に呼び出し元が目印も消すが、開いていた間の値で戻る
+    // The caller drops the marker as it closes; the value seen while open is used
+    rerender(<DetailHarness item={null} returnTo={null} />);
+
+    const dialog = screen.getByRole("dialog", { hidden: true });
+    expect(dialog).toHaveClass("is-closing", "is-returning");
+    expect(dialog.style.getPropertyValue("--cc-modal-return-x")).toBe("180px");
+    expect(dialog.style.getPropertyValue("--cc-modal-return-y")).toBe("460px");
+    expect(dialog.style.getPropertyValue("--cc-modal-return-scale-x")).toBe("0.25");
+    expect(dialog.style.getPropertyValue("--cc-modal-return-scale-y")).toBe("0.25");
+
+    act(() => {
+      vi.advanceTimersByTime(MODAL_EXIT_DURATION_MS);
+    });
+    expect(dialog).not.toHaveClass("is-returning");
+    expect(dialog.style.getPropertyValue("--cc-modal-return-x")).toBe("");
+    card.remove();
+  });
+
+  it("fades in place when the card it was opened from is not on screen", () => {
+    vi.useFakeTimers();
+    const { rerender } = render(<DetailHarness item="Memo A" returnTo="memo:missing" />);
+    rerender(<DetailHarness item={null} />);
+    const dialog = screen.getByRole("dialog", { hidden: true });
+    expect(dialog).toHaveClass("is-closing");
+    expect(dialog).not.toHaveClass("is-returning");
   });
 });
