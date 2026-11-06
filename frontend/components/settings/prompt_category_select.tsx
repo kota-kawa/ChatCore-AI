@@ -10,6 +10,7 @@ import {
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import { PROMPT_CATEGORY_OPTIONS } from "../prompt_share/prompt_share_page_constants";
 import { useTranslation } from "../../contexts/locale_context";
+import { useDismissOnOutsidePress } from "../../hooks/use_dismiss_on_outside_press";
 
 // キーボード操作に対応したアクセシブルなカテゴリ選択コンポーネント
 // Accessible category select component with full keyboard navigation support
@@ -57,24 +58,8 @@ export function PromptCategorySelect({
     setActiveIndex(selectedIndex);
   }, [selectedIndex]);
 
-  // ドロップダウンが開いている間、外側クリックで閉じるためのグローバルリスナーを登録する
-  // Register a global pointer-down listener to close the dropdown when clicking outside
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-    };
-  }, [isOpen]);
+  // 外側の押下はドロップダウンを閉じるだけにする / A press outside only closes the dropdown
+  useDismissOnOutsidePress(isOpen, (target) => Boolean(rootRef.current?.contains(target)), () => setIsOpen(false));
 
   // activeIndex が変わるたびに対応するオプションにフォーカスを移す
   // Move focus to the option at activeIndex whenever it changes while the list is open

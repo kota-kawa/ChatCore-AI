@@ -1138,18 +1138,6 @@ export default function PromptSharePage({
     );
   }, [contentFormat, mediaType]);
 
-  // ドキュメント全体のクリックでドロップダウンを閉じる。バブリングを利用した実装
-  // Closes any open dropdown on document click, leveraging event bubbling
-  useEffect(() => {
-    const handleDocumentClick = () => {
-      setOpenDropdownPromptId(null);
-    };
-    document.addEventListener("click", handleDocumentClick);
-    return () => {
-      document.removeEventListener("click", handleDocumentClick);
-    };
-  }, []);
-
   // 投稿フォームの全フィールドがDOMにマウントされてからAI補助パネルを一度だけ初期化する
   // Initializes the AI-assist panel exactly once after all composer form fields are mounted in the DOM
   useEffect(() => {

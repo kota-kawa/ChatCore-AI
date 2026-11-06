@@ -1,8 +1,9 @@
 // サイドバーのチャットルーム1件分のカードと操作メニュー（名前変更・ピン留め・複数選択・プロジェクト追加・削除）。chat_main_section.tsx から使われる。
 // One chat room card in the sidebar with its action menu (rename, pin, multi-select, add to project, delete); used by chat_main_section.tsx.
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useHomePageChatContext, useHomePageProjectContext } from "../../contexts/chat_page/home_page_context";
 import { useTranslation } from "../../contexts/locale_context";
+import { useDismissOnOutsidePress } from "../../hooks/use_dismiss_on_outside_press";
 import type { ChatRoom } from "../../lib/chat_page/types";
 
 type ChatRoomCardProps = {
@@ -42,6 +43,10 @@ export function ChatRoomCard({ room }: ChatRoomCardProps) {
   };
 
   const roomMenuOpen = openRoomActionsFor === room.id;
+  // 開いたメニューの外の押下は閉じるだけにする。ほかのルームの「⋮」も外側として扱う
+  // A press outside the open menu only closes it; another room's "⋮" counts as outside too
+  const actionsRef = useRef<HTMLDivElement | null>(null);
+  useDismissOnOutsidePress(roomMenuOpen, (target) => Boolean(actionsRef.current?.contains(target)), () => setOpenRoomActionsFor(null));
   // タイトルが空の場合は「新規チャット」をフォールバック表示する。
   // Fall back to "新規チャット" when the room has no title yet.
   const roomTitle = room.title || t("chat.new");
@@ -90,6 +95,7 @@ export function ChatRoomCard({ room }: ChatRoomCardProps) {
         // ルームカード右端の縦三点メニュー。名前変更・ピン留め・複数選択・削除を提供する。
         // Three-dot context menu on each room card for rename, pin, multi-select, and delete.
         <div
+          ref={actionsRef}
           className="chat-room-card-actions"
           onClick={(event) => {
             event.stopPropagation();
