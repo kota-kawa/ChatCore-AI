@@ -1486,21 +1486,19 @@ export default function UserSettingsPage() {
           </main>
         </div>
 
-        {/* プロンプト編集モーダル — editPromptForm が存在する場合のみレンダリングする / Prompt edit modal — rendered only when editPromptForm is non-null */}
-        {editPromptForm ? (
-          <EditPromptModal
-            formState={editPromptForm}
-            saving={promptSaving}
-            onClose={() => {
-              if (!promptSaving) {
-                setEditPromptForm(null);
-              }
-            }}
-            onCategoryChange={handleEditPromptCategoryChange}
-            onChange={handleEditPromptChange}
-            onSubmit={handleEditPromptSubmit}
-          />
-        ) : null}
+        {/* プロンプト編集モーダル — editPromptForm があるあいだ開く / Prompt edit modal — open while editPromptForm is non-null */}
+        <EditPromptModal
+          formState={editPromptForm}
+          saving={promptSaving}
+          onClose={() => {
+            if (!promptSaving) {
+              setEditPromptForm(null);
+            }
+          }}
+          onCategoryChange={handleEditPromptCategoryChange}
+          onChange={handleEditPromptChange}
+          onSubmit={handleEditPromptSubmit}
+        />
 
         {/* カードから開く閲覧専用モーダル / Read-only preview opened from a prompt card */}
         {previewPrompt ? (
