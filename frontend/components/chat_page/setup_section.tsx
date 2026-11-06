@@ -25,7 +25,9 @@ import { SkillSection } from "./skill_section";
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
 import { useChatClipboardPaste } from "../../hooks/chat_page/use_chat_clipboard_paste";
 import { useTaskReorderDrag } from "../../hooks/chat_page/use_task_reorder_drag";
+import { getStableTaskKey } from "../../lib/chat_page/task_utils";
 import type { NormalizedTask } from "../../lib/chat_page/types";
+import { modalOriginKey } from "../../lib/ui/modal_return_target";
 import {
   useHomePageSetupChatContext,
   useHomePageTaskContext,
@@ -124,6 +126,8 @@ export const TaskCard = memo(function TaskCard({
         data-launching={isLaunching ? "true" : "false"}
         data-task={task.name}
         data-is_default={task.is_default ? "true" : "false"}
+        // 詳細モーダルを閉じるとき、このカードへ縮んで戻る / The detail modal shrinks back into this card on close
+        data-modal-origin={modalOriginKey("task", getStableTaskKey(task)) ?? undefined}
         role="button"
         tabIndex={0}
         aria-label={locale === "en" ? `Launch ${task.name}` : `${task.name}を起動`}

@@ -7,6 +7,7 @@ import { useTranslation } from "../../contexts/locale_context";
 import { NewSkillModal } from "./modals/new_skill_modal";
 import { SkillDetailModal } from "./modals/skill_detail_modal";
 import type { UserSkill } from "../../lib/chat_page/skill_api";
+import { modalOriginKey } from "../../lib/ui/modal_return_target";
 
 type SkillSectionProps = {
   loggedIn: boolean;
@@ -93,7 +94,13 @@ function SkillSectionComponent({ loggedIn }: SkillSectionProps) {
             const isPending = pendingSkillId === skill.id;
             const stateLabel = skill.is_enabled ? t("home.skillOn") : t("home.skillOff");
             return (
-              <div className={`skill-chip-row ${skill.is_enabled ? "is-enabled" : "is-disabled"} ${skill.is_default ? "is-default" : ""}`.trim()} key={skill.id} role="listitem">
+              <div
+                className={`skill-chip-row ${skill.is_enabled ? "is-enabled" : "is-disabled"} ${skill.is_default ? "is-default" : ""}`.trim()}
+                key={skill.id}
+                role="listitem"
+                // 詳細モーダルを閉じるとき、このチップへ縮んで戻る / The detail modal shrinks back into this chip on close
+                data-modal-origin={modalOriginKey("skill", skill.id) ?? undefined}
+              >
                 <button
                   type="button"
                   className="skill-chip"

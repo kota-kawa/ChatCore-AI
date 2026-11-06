@@ -12,6 +12,7 @@ import { HighlightedText } from "./HighlightedText";
 import { MemoListSkeleton } from "./MemoListSkeleton";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { CopyButton } from "../ui/copy_button";
+import { modalOriginKey } from "../../lib/ui/modal_return_target";
 import { useTranslation } from "../../contexts/locale_context";
 import {
   useMemoPageBoardContext,
@@ -146,6 +147,8 @@ export function MemoHistoryPanel() {
                         }}
                         className={`memo-item${isTrash ? " is-trashed" : ""}${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${memo.background_color ? " has-accent" : ""}${isSelected ? " is-selected" : ""}${canDragMemo ? " is-reorderable" : ""}${isDragging ? " is-dragging" : ""}`}
                         style={memo.background_color ? { "--memo-card-accent": memo.background_color } as React.CSSProperties : undefined}
+                        // 詳細モーダルを閉じるとき、このカードへ縮んで戻る / The detail modal shrinks back into this card on close
+                        data-modal-origin={modalOriginKey("memo", memoId) ?? undefined}
                         draggable={canDragMemo}
                         onDragStart={(event) => handleMemoDragStart(event, memo)}
                         onDragEnd={clearMemoDragState}

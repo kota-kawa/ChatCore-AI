@@ -28,6 +28,7 @@ import { PromptShareDetailImage } from "./prompt_share_detail_image";
 import { CopyButton } from "../ui/copy_button";
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
+import { modalOriginKey } from "../../lib/ui/modal_return_target";
 import { useTranslation } from "../../contexts/locale_context";
 
 // 詳細モーダルが必要とするすべての状態とハンドラをまとめたProps型
@@ -566,7 +567,7 @@ export function PromptShareDetailModalPanel({
 // プロンプト詳細とコメントを切り替えて表示するモーダルコンポーネント（外殻）
 // Modal that switches between prompt detail view and comments view via tabs (the shell)
 export function PromptShareDetailModal(props: PromptShareDetailModalProps) {
-  const { isOpen, onClose, activeView, promptDetailModalRef, commentTextareaRef, commentsSectionRef, promptDetailCloseButtonRef } = props;
+  const { isOpen, onClose, activeView, detailPrompt, promptDetailModalRef, commentTextareaRef, commentsSectionRef, promptDetailCloseButtonRef } = props;
 
   // 開いたときの初期フォーカス先。コメントから開いた場合は入力欄、それ以外は閉じるボタン。
   // activeView は ref に写してから読むので、タブ切り替えでフォーカスが奪われることはない。
@@ -592,6 +593,7 @@ export function PromptShareDetailModal(props: PromptShareDetailModalProps) {
       labelledBy="modalPromptTitle"
       overlayRef={promptDetailModalRef}
       getInitialFocus={getInitialFocus}
+      returnTo={modalOriginKey("prompt", detailPrompt?.id)}
     >
       <PromptShareDetailModalPanel {...props} />
     </ModalShell>

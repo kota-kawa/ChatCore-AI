@@ -7,6 +7,7 @@ import Image from "next/image";
 import MarkdownContent from "../MarkdownContent";
 import { buildPromptPath } from "../../lib/promptSlug";
 import { localizePublicPath } from "../../lib/seo";
+import { modalOriginKey } from "../../lib/ui/modal_return_target";
 import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import { DEFAULT_CONTENT_FORMAT, DEFAULT_MEDIA_TYPE } from "../../scripts/prompt_share/prompt_type_registry";
@@ -215,6 +216,8 @@ function PromptCardComponent({
       ref={rootRef}
       className={`prompt-card cc-press${isDropdownOpen ? " menu-open" : ""}`}
       data-category={prompt.category || ""}
+      // 詳細モーダルを閉じるとき、このカードへ縮んで戻る / The detail modal shrinks back into this card on close
+      data-modal-origin={modalOriginKey("prompt", prompt.id) ?? undefined}
       role="button"
       tabIndex={0}
       aria-label={t("promptShare.showDetails", { title: prompt.title })}

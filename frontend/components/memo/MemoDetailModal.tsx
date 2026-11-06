@@ -9,6 +9,7 @@ import { applyMemoEdits, type MemoEditPayload } from "../../lib/memo/agent_edits
 import { InlineLoading } from "../ui/inline_loading";
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
+import { modalOriginKey } from "../../lib/ui/modal_return_target";
 import { isImeConfirmKey } from "../../lib/memo/ime";
 import { MemoEditor } from "./MemoEditor";
 import { MemoFormatToggle, MemoFormatToolbar } from "./MemoFormatToolbar";
@@ -137,6 +138,7 @@ export function MemoDetailModal() {
       labelledBy="memoModalTitle"
       getInitialFocus={getInitialFocus}
       style={viewportStyle}
+      returnTo={modalOriginKey("memo", selectedMemo?.id)}
     >
       <div
         ref={panelRef}
