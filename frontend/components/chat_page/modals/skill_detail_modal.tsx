@@ -5,6 +5,7 @@ import { useTranslation } from "../../../contexts/locale_context";
 import MarkdownContent from "../../MarkdownContent";
 import { ModalCloseButton } from "../../ui/modal_close_button";
 import { ModalShell } from "../../ui/modal_shell";
+import { modalOriginKey } from "../../../lib/ui/modal_return_target";
 
 type SkillDetailModalProps = {
   skill: UserSkill | null;
@@ -26,6 +27,7 @@ export function SkillDetailModal({ skill, onClose }: SkillDetailModalProps) {
       className="cc-modal skill-detail-modal"
       labelledBy="skill-detail-modal-title"
       initialFocusSelector="[data-close-skill-detail]"
+      returnTo={modalOriginKey("skill", skill?.id)}
     >
       {skill ? (
         <div className="cc-modal__panel cc-modal__panel--md" tabIndex={-1}>

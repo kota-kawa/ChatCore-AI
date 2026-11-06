@@ -2,7 +2,9 @@
 // Read-only modal for a task's definition (prompt template, response rules, output template, input/output examples); rendered by pages/index.tsx.
 import { memo } from "react";
 
+import { getStableTaskKey } from "../../../lib/chat_page/task_utils";
 import type { NormalizedTask } from "../../../lib/chat_page/types";
+import { modalOriginKey } from "../../../lib/ui/modal_return_target";
 import { ModalCloseButton } from "../../ui/modal_close_button";
 import { ModalShell } from "../../ui/modal_shell";
 import { useTranslation } from "../../../contexts/locale_context";
@@ -40,6 +42,7 @@ function TaskDetailModalComponent({ taskDetail, onClose }: TaskDetailModalProps)
       className="cc-modal task-detail-modal"
       labelledBy="taskDetailTitle"
       initialFocusSelector="[data-close-task-detail]"
+      returnTo={taskDetail ? modalOriginKey("task", getStableTaskKey(taskDetail)) : null}
     >
       {taskDetail && (
         <div className="cc-modal__panel cc-modal__panel--lg" tabIndex={-1}>

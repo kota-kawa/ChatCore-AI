@@ -140,14 +140,14 @@ export function DemoCodesPanel({ onUnauthorized }: { onUnauthorized: () => void 
         {list}
       </div>
 
-      {revokeTarget ? (
-        <ModalShell
-          isOpen
-          onClose={closeRevokeDialog}
-          className="cc-modal"
-          labelledBy="demoCodeRevokeTitle"
-          dismissDisabled={revokingId !== null}
-        >
+      <ModalShell
+        isOpen={revokeTarget !== null}
+        onClose={closeRevokeDialog}
+        className="cc-modal"
+        labelledBy="demoCodeRevokeTitle"
+        dismissDisabled={revokingId !== null}
+      >
+        {revokeTarget ? (
           <div className="cc-modal__panel cc-modal__panel--sm" tabIndex={-1}>
             <header className="cc-modal__header">
               <div className="cc-modal__heading">
@@ -172,8 +172,8 @@ export function DemoCodesPanel({ onUnauthorized }: { onUnauthorized: () => void 
               </button>
             </footer>
           </div>
-        </ModalShell>
-      ) : null}
+        ) : null}
+      </ModalShell>
     </section>
   );
 }

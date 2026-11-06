@@ -178,7 +178,10 @@ describe("設定画面のプロンプトカード詳細", () => {
     fireEvent.click(previewButton);
     fireEvent.keyDown(previewButton, { key: " " });
     expect(onPreview).toHaveBeenCalledTimes(2);
-    expect(onPreview).toHaveBeenLastCalledWith(authoredPrompt);
+    // 閉じるとき戻る先として、カード自身に付けた目印も渡す
+    // The card also hands over the marker it carries, as the close target
+    expect(onPreview).toHaveBeenLastCalledWith(authoredPrompt, "settings-prompt:prompt-1");
+    expect(previewButton.closest("article")).toHaveAttribute("data-modal-origin", "settings-prompt:prompt-1");
 
     fireEvent.click(screen.getByRole("button", { name: "編集" }));
     fireEvent.click(screen.getByRole("button", { name: "削除" }));
@@ -287,7 +290,7 @@ describe("設定画面のプロンプトカード詳細", () => {
     render(<LikedPromptCard entry={likedPrompt} onPreview={onPreview} onDelete={onDelete} />);
 
     fireEvent.keyDown(screen.getByRole("button", { name: "「会議メモを要約する」の詳細を表示" }), { key: "Enter" });
-    expect(onPreview).toHaveBeenCalledWith(likedPrompt);
+    expect(onPreview).toHaveBeenCalledWith(likedPrompt, "settings-liked-prompt:liked-1");
 
     fireEvent.click(screen.getByRole("button", { name: "いいねを解除" }));
     expect(onDelete).toHaveBeenCalledWith(likedPrompt);

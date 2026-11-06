@@ -355,16 +355,16 @@ export function MyContextPanel({
         </div>
       )}
 
-      {editor && (
-        <ModalShell
-          isOpen
-          onClose={closeEditor}
-          id="context-editor-modal"
-          className="cc-modal memo-modal-scope memo-context-modal memo-context-editor"
-          labelledBy="context-editor-title"
-          dismissDisabled={submitting}
-          getInitialFocus={getInitialModalFocus}
-        >
+      <ModalShell
+        isOpen={editor !== null}
+        onClose={closeEditor}
+        id="context-editor-modal"
+        className="cc-modal memo-modal-scope memo-context-modal memo-context-editor"
+        labelledBy="context-editor-title"
+        dismissDisabled={submitting}
+        getInitialFocus={getInitialModalFocus}
+      >
+        {editor && (
           <div className="cc-modal__panel cc-modal__panel--md" tabIndex={-1} aria-busy={submitting}>
             <header className="cc-modal__header">
               <div className="cc-modal__heading">
@@ -463,8 +463,8 @@ export function MyContextPanel({
               </footer>
             </form>
           </div>
-        </ModalShell>
-      )}
+        )}
+      </ModalShell>
 
       {isLoading ? (
         <MemoListSkeleton />

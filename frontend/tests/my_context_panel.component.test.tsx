@@ -176,9 +176,17 @@ describe("MyContextPanel", () => {
 
     fireEvent.keyDown(document, { key: "Escape" });
 
+    // 閉じた直後は外殻を置いたまま、入力していた面を残して薄れさせる
+    // Right after closing, the shell stays and keeps the form on screen while it fades
+    const overlay = document.getElementById("context-editor-modal");
+    expect(overlay).toHaveClass("is-closing");
+    expect(overlay).toHaveTextContent("コンテキストを追加");
+
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "コンテキストを追加" })).not.toBeInTheDocument();
       expect(document.body.style.overflow).toBe("");
+      expect(overlay).not.toHaveClass("is-closing");
+      expect(overlay).not.toHaveTextContent("コンテキストを追加");
     });
   });
 

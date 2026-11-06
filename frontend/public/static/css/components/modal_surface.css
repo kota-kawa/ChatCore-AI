@@ -2,14 +2,16 @@
    全ページ共通の中央寄せモーダル面。ModalShell（.modal-base）に `cc-modal` を足し、
    中身は panel / header / body / footer の 4 部品で組む。
    - 面は不透明・1px 罫線・1 段の影。グラデーション・発光・ぼかしは持たない。
-   - 動きは開くときの 160ms のフェード＋わずかな持ち上がりのみ。
+   - 動きは開くときの 160ms のフェード＋わずかな持ち上がりと、閉じるときの 200ms の薄れ
+     （ModalShell の `is-closing`）のみ。カードから開いたモーダルは `is-returning` で元のカードへ縮んで戻る。
    - 色は base/variables.css の --modal-* トークンだけを参照する。ページ固有の
      アクセント（Prompt Share の青、メモの琥珀）は各ページのスコープで
      --modal-accent 系を差し替える。
    Shared centered-modal surface used on every page. Add `cc-modal` to the ModalShell
    overlay (.modal-base) and compose the content from panel / header / body / footer.
    - Opaque surface, 1px border, one shadow. No gradients, glows or blur.
-   - Motion is a single 160ms fade + slight rise on open.
+   - Motion is a 160ms fade + slight rise on open and a 200ms fade on close (ModalShell's
+     `is-closing`); a modal opened from a card shrinks back into it with `is-returning`.
    - Colors come only from the --modal-* tokens in base/variables.css; page accents
      (Prompt Share blue, memo amber) override the accent tokens in their own scope. */
 
@@ -635,10 +637,70 @@
   }
 }
 
+/* ── 閉じる動き / Closing motion ────────────────────────────────────
+   ModalShell は閉じた直後の MODAL_EXIT_DURATION_MS の間だけ `is-closing` を付け、開いていたときの
+   中身を描き続ける。長さはこの変数と揃える（tests/modal_surface_style.test.ts が照合する）。
+   背景は opacity ではなく色だけを薄れさせ、子のパネルの見え方をパネル自身の動きに任せる。
+   ModalShell keeps drawing the open content with `is-closing` for MODAL_EXIT_DURATION_MS after
+   closing; keep that length equal to this variable (tests/modal_surface_style.test.ts checks it).
+   The backdrop fades its colour rather than its opacity so the panel's look stays with the panel's own motion. */
+.cc-modal {
+  --cc-modal-exit-duration: 200ms;
+}
+
+.cc-modal.is-closing {
+  display: flex;
+  pointer-events: none;
+  animation: cc-modal-overlay-out var(--cc-modal-exit-duration) ease both;
+}
+
+.cc-modal.is-closing .cc-modal__panel {
+  animation: cc-modal-panel-out var(--cc-modal-exit-duration) ease both;
+}
+
+/* 元のカードへ縮んで戻る。移動量と縮尺は ModalShell が測って外殻に載せる
+   Shrink back into the card; ModalShell measures the offset and scale and sets them on the overlay */
+.cc-modal.is-returning .cc-modal__panel {
+  transform-origin: 0 0;
+  animation-name: cc-modal-panel-return;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes cc-modal-overlay-out {
+  to { background-color: transparent; }
+}
+
+@keyframes cc-modal-panel-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+/* 縮み始めは不透明のまま、カードに重なる手前から残像のように薄れる
+   Stay opaque as the shrink starts, then fade like an afterimage as it settles onto the card */
+@keyframes cc-modal-panel-return {
+  0%,
+  40% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform:
+      translate(var(--cc-modal-return-x, 0px), var(--cc-modal-return-y, 0px))
+      scale(var(--cc-modal-return-scale-x, 1), var(--cc-modal-return-scale-y, 1));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cc-modal.is-open,
   .cc-modal.is-open .cc-modal__panel {
     animation: none;
+  }
+
+  .cc-modal.is-closing {
+    display: none;
   }
 }
 

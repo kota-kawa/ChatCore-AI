@@ -1313,22 +1313,20 @@ export default function PromptSharePage({
 
         {/* 本人のカードから開くインライン編集。設定画面と同じフォーム契約を再利用する。 */}
         {/* Inline editing opened from an owned card, reusing the settings form contract. */}
-        {editPromptForm ? (
-          <EditPromptModal
-            formState={editPromptForm}
-            saving={isEditSaving}
-            modalRef={editModalRef}
-            className="prompt-share-edit-modal-scope"
-            onClose={() => {
-              if (!isEditSaving) {
-                closeModal("edit");
-              }
-            }}
-            onCategoryChange={handleEditPromptCategoryChange}
-            onChange={handleEditPromptChange}
-            onSubmit={handleEditPromptSubmit}
-          />
-        ) : null}
+        <EditPromptModal
+          formState={editPromptForm}
+          saving={isEditSaving}
+          modalRef={editModalRef}
+          className="prompt-share-edit-modal-scope"
+          onClose={() => {
+            if (!isEditSaving) {
+              closeModal("edit");
+            }
+          }}
+          onCategoryChange={handleEditPromptCategoryChange}
+          onChange={handleEditPromptChange}
+          onSubmit={handleEditPromptSubmit}
+        />
 
         {/* プロンプト投稿フォーム。ゲスト時はテキスト専用の制限付き Composer を表示する。 */}
         {/* Prompt composer. Guests receive a restricted text-only composer. */}

@@ -420,16 +420,16 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
         </button>
       )}
 
-      {review && (
-        <ModalShell
-          isOpen
-          onClose={closeReview}
-          id="context-candidate-modal"
-          className="cc-modal memo-modal-scope memo-context-modal memo-context-candidate-modal"
-          labelledBy="context-candidate-modal-title"
-          dismissDisabled={busyCandidateId !== null}
-          getInitialFocus={getInitialModalFocus}
-        >
+      <ModalShell
+        isOpen={review !== null}
+        onClose={closeReview}
+        id="context-candidate-modal"
+        className="cc-modal memo-modal-scope memo-context-modal memo-context-candidate-modal"
+        labelledBy="context-candidate-modal-title"
+        dismissDisabled={busyCandidateId !== null}
+        getInitialFocus={getInitialModalFocus}
+      >
+        {review && (
           <div className="cc-modal__panel cc-modal__panel--md" tabIndex={-1}>
             <header className="cc-modal__header">
               <div className="cc-modal__heading">
@@ -563,8 +563,8 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
               </>
             )}
           </div>
-        </ModalShell>
-      )}
+        )}
+      </ModalShell>
     </section>
   );
 }

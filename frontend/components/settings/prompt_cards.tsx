@@ -2,6 +2,7 @@
 // Prompt card components for the settings page's authored and liked prompt lists. Used by settings_sections.tsx.
 import type { ReactNode } from "react";
 
+import { modalOriginKey } from "../../lib/ui/modal_return_target";
 import { asId } from "../../lib/utils";
 import { stripMarkdownForPreview } from "../../scripts/core/markdown_preview";
 import {
@@ -131,18 +132,20 @@ export function PromptCard({
   onDelete
 }: {
   prompt: PromptRecord;
-  onPreview: (prompt: PromptPreview) => void;
+  // originKey は閉じるときに戻る先としてカードに付けた目印 / originKey is the marker this card carries as the close target
+  onPreview: (prompt: PromptPreview, originKey: string | null) => void;
   onEdit: (prompt: PromptRecord) => void;
   onDelete: (prompt: PromptRecord) => void;
 }) {
   const { locale, t } = useTranslation();
   const promptId = asId(prompt.id);
+  const originKey = modalOriginKey("settings-prompt", promptId);
   const categoryLabel = getCategoryLabelOrFallback(normalizePreviewText(prompt.category), undefined, locale);
   const createdAtLabel = prompt.createdAt ? toDisplayDate(prompt.createdAt) : t("promptShare.dateUnknown");
 
   return (
     <SettingsPromptCard
-      cardAttributes={{ "data-prompt-id": promptId }}
+      cardAttributes={{ "data-prompt-id": promptId, ...(originKey ? { "data-modal-origin": originKey } : null) }}
       title={prompt.title}
       contentSource={getPromptPreviewSource(prompt.description, prompt.contentFormat, prompt.content, prompt.skillMarkdown)}
       contentFormat={prompt.contentFormat}
@@ -151,7 +154,7 @@ export function PromptCard({
       categoryLabel={categoryLabel}
       dateLabel={createdAtLabel}
       dateTime={prompt.createdAt}
-      onOpenDetail={() => onPreview(prompt)}
+      onOpenDetail={() => onPreview(prompt, originKey)}
       actions={
         <>
           <button
@@ -186,11 +189,12 @@ export function LikedPromptCard({
   onDelete
 }: {
   entry: LikedPrompt;
-  onPreview: (prompt: PromptPreview) => void;
+  onPreview: (prompt: PromptPreview, originKey: string | null) => void;
   onDelete: (entry: LikedPrompt) => void;
 }) {
   const { locale, t } = useTranslation();
   const entryId = asId(entry.id);
+  const originKey = modalOriginKey("settings-liked-prompt", entryId);
   // カテゴリ未設定時はバッジ自体を出さないため、フォールバックなしでラベルを解決する
   // Resolve the label without a fallback: an unset category hides the badge entirely
   const categoryLabel = getCategoryLabel(normalizePreviewText(entry.category), locale);
@@ -198,7 +202,7 @@ export function LikedPromptCard({
 
   return (
     <SettingsPromptCard
-      cardAttributes={{ "data-liked-prompt-id": entryId }}
+      cardAttributes={{ "data-liked-prompt-id": entryId, ...(originKey ? { "data-modal-origin": originKey } : null) }}
       title={entry.title}
       contentSource={getPromptPreviewSource(entry.description, entry.contentFormat, entry.content, entry.skillMarkdown)}
       contentFormat={entry.contentFormat}
@@ -207,7 +211,7 @@ export function LikedPromptCard({
       categoryLabel={categoryLabel}
       dateLabel={likedAtLabel}
       dateTime={entry.likedAt}
-      onOpenDetail={() => onPreview(entry)}
+      onOpenDetail={() => onPreview(entry, originKey)}
       actions={
         <button
           type="button"

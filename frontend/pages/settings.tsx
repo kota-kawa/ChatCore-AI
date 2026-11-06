@@ -146,6 +146,7 @@ export default function UserSettingsPage() {
   const [promptSaving, setPromptSaving] = useState(false);
   const [previewPrompt, setPreviewPrompt] = useState<PromptPreview | null>(null);
   const [previewPromptSource, setPreviewPromptSource] = useState<"authored" | "liked">("authored");
+  const [previewOriginKey, setPreviewOriginKey] = useState<string | null>(null);
 
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>("light");
   const [localeSaving, setLocaleSaving] = useState(false);
@@ -890,9 +891,10 @@ export default function UserSettingsPage() {
 
   // カードの本文領域から閲覧用モーダルを開き、投稿・いいねの出所も表示する
   // Open the read-only modal from a card and retain whether it was authored or liked
-  const handleOpenPromptPreview = useCallback((prompt: PromptPreview, source: "authored" | "liked") => {
+  const handleOpenPromptPreview = useCallback((prompt: PromptPreview, source: "authored" | "liked", originKey: string | null) => {
     setPreviewPrompt(prompt);
     setPreviewPromptSource(source);
+    setPreviewOriginKey(originKey);
   }, []);
 
   // 確認ダイアログを経てプロンプトを削除し、成功後に一覧を再取得する
@@ -1328,7 +1330,7 @@ export default function UserSettingsPage() {
         <PromptCard
           key={key}
           prompt={prompt}
-          onPreview={(entry) => handleOpenPromptPreview(entry, "authored")}
+          onPreview={(entry, originKey) => handleOpenPromptPreview(entry, "authored", originKey)}
           onEdit={handleOpenPromptEdit}
           onDelete={handleDeletePrompt}
         />
@@ -1346,7 +1348,7 @@ export default function UserSettingsPage() {
         <LikedPromptCard
           key={key}
           entry={entry}
-          onPreview={(prompt) => handleOpenPromptPreview(prompt, "liked")}
+          onPreview={(prompt, originKey) => handleOpenPromptPreview(prompt, "liked", originKey)}
           onDelete={handleUnlikePrompt}
         />
       );
@@ -1486,30 +1488,27 @@ export default function UserSettingsPage() {
           </main>
         </div>
 
-        {/* プロンプト編集モーダル — editPromptForm が存在する場合のみレンダリングする / Prompt edit modal — rendered only when editPromptForm is non-null */}
-        {editPromptForm ? (
-          <EditPromptModal
-            formState={editPromptForm}
-            saving={promptSaving}
-            onClose={() => {
-              if (!promptSaving) {
-                setEditPromptForm(null);
-              }
-            }}
-            onCategoryChange={handleEditPromptCategoryChange}
-            onChange={handleEditPromptChange}
-            onSubmit={handleEditPromptSubmit}
-          />
-        ) : null}
+        {/* プロンプト編集モーダル — editPromptForm があるあいだ開く / Prompt edit modal — open while editPromptForm is non-null */}
+        <EditPromptModal
+          formState={editPromptForm}
+          saving={promptSaving}
+          onClose={() => {
+            if (!promptSaving) {
+              setEditPromptForm(null);
+            }
+          }}
+          onCategoryChange={handleEditPromptCategoryChange}
+          onChange={handleEditPromptChange}
+          onSubmit={handleEditPromptSubmit}
+        />
 
         {/* カードから開く閲覧専用モーダル / Read-only preview opened from a prompt card */}
-        {previewPrompt ? (
-          <PromptPreviewModal
-            prompt={previewPrompt}
-            source={previewPromptSource}
-            onClose={() => setPreviewPrompt(null)}
-          />
-        ) : null}
+        <PromptPreviewModal
+          prompt={previewPrompt}
+          source={previewPromptSource}
+          returnTo={previewOriginKey}
+          onClose={() => setPreviewPrompt(null)}
+        />
       </div>
     </>
   );
