@@ -1,9 +1,9 @@
 // 開いたメニューの外を押したとき、閉じるだけで押した先には何も起きないことを検証する。
 // Tests that a press outside an open menu only closes it and never reaches what was pressed.
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useRef, useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useDismissOnOutsidePress } from "../hooks/use_dismiss_on_outside_press";
 
@@ -107,6 +107,55 @@ describe("useDismissOnOutsidePress", () => {
 
     expect(onFirstDismiss).toHaveBeenCalledTimes(1);
     expect(onSecondDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  // 押下を離したら打ち消しを外し、次の押下は通常どおり届く。
+  // Once the press ends the swallowing stops, so the next press reaches its target as usual.
+  describe("after the press ends", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it.each(["mouse", "touch"] as const)("lets the next %s press through", (pointerType) => {
+      vi.useFakeTimers();
+      const onOutsideClick = vi.fn();
+      render(
+        <>
+          <Menu label="menu" />
+          <button type="button" onClick={onOutsideClick}>outside</button>
+        </>,
+      );
+      const outside = screen.getByRole("button", { name: "outside" });
+
+      fireEvent.pointerDown(outside, { pointerType });
+      fireEvent.pointerUp(outside, { pointerType });
+      if (pointerType === "touch") {
+        // タッチは touchend まで打ち消しを残す / A touch keeps swallowing until touchend
+        act(() => { vi.runAllTimers(); });
+        expect(fireEvent.touchEnd(outside)).toBe(false);
+      }
+      act(() => { vi.runAllTimers(); });
+
+      const next = pressWithMouse(outside);
+      expect(next.mouseDown).toBe(true);
+      expect(onOutsideClick).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // 副ボタンの押下も閉じるだけにし、中ボタンのリンクや右クリックのメニューを開かせない。
+  // A secondary-button press only closes too: no middle-click link opening, no context menu.
+  it("swallows auxclick and contextmenu of the dismissing press", () => {
+    render(
+      <>
+        <Menu label="menu" />
+        <a href="#elsewhere">outside link</a>
+      </>,
+    );
+    const link = screen.getByRole("link", { name: "outside link" });
+
+    fireEvent.pointerDown(link, { button: 1 });
+    expect(fireEvent(link, new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 }))).toBe(false);
+    expect(fireEvent.contextMenu(link)).toBe(false);
   });
 
   // 押下の終わりを受け取れなくても、次のキー操作による click は打ち消さない。

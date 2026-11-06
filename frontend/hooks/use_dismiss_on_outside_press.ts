@@ -8,16 +8,17 @@ const CAPTURE_ACTIVE: AddEventListenerOptions = { capture: true, passive: false 
 
 let swallowedPress: { pointerDown: PointerEvent; release: () => void } | null = null;
 
-// 閉じるために使った押下を、離すまで（タッチは疑似マウスイベントと click まで）打ち消す。
+// 閉じるために使った押下を、離すまで（タッチは touchend まで）打ち消す。
 // mousedown を止めるとマウスでのフォーカス移動・カーソル配置・範囲選択が起きず、
-// touchend を止めるとタッチでのフォーカス移動と click が起きない。最後に click も止めて、ボタンやリンクを反応させない。
+// touchend を止めるとタッチでのフォーカス移動と click が起きない。click・auxclick・contextmenu も止めて、
+// ボタンやリンク（中ボタンで新しいタブを開く操作を含む）や右クリックのメニューを反応させない。
 // 押下が終わったら外す。離す操作を受け取れなかったときも次の押下かキー入力で外し、キーボードや
 // スクリプトによる click（detail が 0）は打ち消さない。
 // Swallow the rest of the press that dismissed the menu. Cancelling mousedown keeps a mouse press from moving
 // focus, placing the caret, or starting a selection; cancelling touchend keeps a tap from focusing and from
-// producing a click; the click itself is stopped too so buttons and links do not react. The listeners come off
-// when the press ends, or at the next press or key if its end was never seen, and a keyboard or scripted click
-// (detail 0) is never swallowed.
+// producing a click. click, auxclick and contextmenu are stopped too, so buttons, links (including a middle-click
+// into a new tab) and the context menu do not react. The listeners come off when the press ends, or at the next
+// press or key if its end was never seen, and a keyboard or scripted click (detail 0) is never swallowed.
 function swallowRestOfPress(pointerDown: PointerEvent) {
   pointerDown.stopPropagation();
   if (swallowedPress) {
@@ -35,16 +36,25 @@ function swallowRestOfPress(pointerDown: PointerEvent) {
     cancel(event);
     release();
   };
-  // マウスの click は pointerup と同じタスクで届くので、次のタスクで外せば取りこぼさない
-  // A mouse click arrives in the same task as pointerup, so releasing on the next task still catches it
+  // マウスの click は pointerup と同じタスクで届くので、次のタスクで外せば取りこぼさない。
+  // タッチは pointerup と touchend が別のタスクで届くブラウザもあるので、touchend を打ち消してから外す。
+  // A mouse click arrives in the same task as pointerup, so releasing on the next task still catches it.
+  // Some browsers deliver touchend in a later task than pointerup, so a touch press is released after touchend.
   const releaseAfterPointerUp = (event: Event) => {
     event.stopPropagation();
+    if ((event as PointerEvent).pointerType === "touch") return;
+    window.setTimeout(release, 0);
+  };
+  const cancelTouchEnd = (event: Event) => {
+    cancel(event);
     window.setTimeout(release, 0);
   };
   const listeners: Array<[string, EventListener, AddEventListenerOptions]> = [
     ["mousedown", cancel, CAPTURE],
     ["mouseup", cancel, CAPTURE],
-    ["touchend", cancel, CAPTURE_ACTIVE],
+    ["auxclick", cancel, CAPTURE],
+    ["contextmenu", cancel, CAPTURE],
+    ["touchend", cancelTouchEnd, CAPTURE_ACTIVE],
     ["pointerup", releaseAfterPointerUp, CAPTURE],
     ["pointercancel", () => release(), CAPTURE],
     ["click", cancelClick, CAPTURE],
