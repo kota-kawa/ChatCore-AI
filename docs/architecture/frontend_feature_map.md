@@ -60,6 +60,7 @@ Markdown 本文と取り消し履歴は CodeMirror の document を正本にし�
 - `components/ui/copy_button.tsx`（`CopyButton`）＋ `hooks/use_copy_feedback.ts` ＋ `lib/copy_feedback.ts`: 全画面共通のコピーボタン。アイコンのみで、押すと数秒チェックマークに変わります。新しいコピー操作はこれを使い、個別実装を増やしません。
 - `components/ui/modal_shell.tsx`（`ModalShell`）＋ `components/ui/modal_close_button.tsx` ＋ `public/static/css/components/modal_surface.css`: 全画面共通の中央寄せモーダル。`document.body` へポータルし、`is-open` の切替・フォーカストラップ・Escape／背景クリックの閉じる操作を持ちます。見た目は `cc-modal` の部品（panel / header / body / footer / btn）と `--modal-*` トークンで組み、ページはアクセント色だけを差し替えます。新しいモーダルはこれを使い、独自のオーバーレイや外殻 CSS を増やしません。閉じた直後は `is-closing` で中身を残したまま薄れ、カードから開いたモーダルは `returnTo` と `lib/ui/modal_return_target.ts` の目印で元のカードへ縮んで戻ります。閉じる動きを描くため、外殻はアンマウントせず `isOpen` で開閉します。
 - `hooks/use_dismiss_on_outside_press.ts`（`useDismissOnOutsidePress`）: メニューと自作プルダウンに共通の「外側を押したら閉じる」処理です。外側の押下は閉じるだけにし、その押下でフォーカス移動・カーソル配置・ボタンの反応を起こしません（ほかのメニューの開くボタンも外側として扱います）。新しいメニューはこれを使い、`document` に外側クリックのリスナーを個別に張りません。
+- `hooks/use_dismiss_on_escape.ts`（`useDismissOnEscape`）: メニューと自作プルダウンに共通の「Escape で閉じて開くボタンへフォーカスを戻す」処理です。window の capture で受けて既定動作を打ち消すため、ModalShell のフォーカストラップなど後続の Escape 処理は同じキーで動きません。矢印キー操作と一緒に Escape を扱うリストボックス（`MemoSelect` など）は、フォーカス位置に依存するのでこのフックを使わず個別に処理します。
 
 共有モーダルのSNS URL生成、Web Share API、クリップボード操作、共有本文の表示は共通ランタイム／UI部品で処理します。チャット、メモ、プロンプト固有のURL発行とステータス文言は各adapterに残します。共有Chatのforkと公開PromptのTask／Skill取り込みは、共通の操作状態・二重実行防止・ボタン外観を使いながら、APIと遷移は機能ごとの契約を維持します。
 
