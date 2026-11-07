@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
+import { useModalClosingPhase } from "../../hooks/use_modal_closing_phase";
 
 type PromptShareDetailImageProps = {
   imageUrl: string;
@@ -21,6 +22,9 @@ export function PromptShareDetailImage({
 }: PromptShareDetailImageProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
+  // 閉じた直後は薄れる間だけ拡大表示を残す（ModalShell は body へポータルしてフォーカスを奪うため、入れ子のここでは使わない）
+  // Keep the viewer mounted while it fades after closing (ModalShell portals to body and traps focus, so it is not used for this nested viewer)
+  const isClosing = useModalClosingPhase(isExpanded);
   const expandButtonRef = useRef<HTMLButtonElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   // 拡大を閉じた直後だけ元のボタンへフォーカスを戻す（初回描画では戻さない）
@@ -82,12 +86,15 @@ export function PromptShareDetailImage({
         </span>
       </button>
 
-      {isExpanded ? (
+      {isExpanded || isClosing ? (
         <div
-          className="prompt-detail-image-viewer"
+          className={`prompt-detail-image-viewer${isClosing ? " is-closing" : ""}`}
           role="dialog"
           aria-modal="true"
           aria-label={altText}
+          // 閉じる途中の面は見えているだけで、操作もフォーカスも受けない
+          // The closing viewer is only visible; it takes no input or focus
+          inert={isClosing}
           onKeyDown={handleViewerKeyDown}
           onClick={(event) => {
             // 画像の外側（背景）クリックで閉じる / clicking the backdrop closes the viewer

@@ -1,12 +1,13 @@
 // 公開投稿詳細のモーダル表示を検証する。
 // Tests prompt share detail modal behavior.
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createRef } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PromptShareDetailModal } from "../components/prompt_share/prompt_share_detail_modal";
 import type { PromptRecord } from "../components/prompt_share/prompt_card";
+import { MODAL_EXIT_DURATION_MS } from "../components/ui/modal_shell";
 
 const noop = () => {};
 
@@ -137,22 +138,60 @@ describe("プロンプト詳細モーダルの作例画像", () => {
     expect(screen.queryByRole("dialog", { name: expandedViewerName })).not.toBeInTheDocument();
   });
 
-  it("クリックで拡大表示を開き、閉じるボタンで元に戻る", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function openViewer() {
+    fireEvent.click(screen.getByRole("button", { name: "作例画像を拡大表示する" }));
+    return screen.getByRole("dialog", { name: expandedViewerName });
+  }
+
+  // 閉じた直後は薄れる間だけ残り、時間が経つと消える
+  // Right after closing the viewer stays while it fades, then disappears
+  function expectFadesOut(viewer: HTMLElement) {
+    expect(viewer).toBeInTheDocument();
+    expect(viewer).toHaveClass("is-closing");
+    // 消える途中の面は操作もフォーカスも受けない
+    // The fading surface takes no input or focus
+    expect(viewer).toHaveAttribute("inert");
+    act(() => {
+      vi.advanceTimersByTime(MODAL_EXIT_DURATION_MS - 1);
+    });
+    expect(viewer).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.queryByRole("dialog", { name: expandedViewerName })).not.toBeInTheDocument();
+  }
+
+  it("クリックで拡大表示を開き、閉じるボタンで薄れてから元に戻る", () => {
+    vi.useFakeTimers();
     renderWithImage();
 
-    fireEvent.click(screen.getByRole("button", { name: "作例画像を拡大表示する" }));
-    const viewer = screen.getByRole("dialog", { name: expandedViewerName });
+    const viewer = openViewer();
     expect(viewer.querySelector("img")?.getAttribute("src")).toBe(imageUrl);
+    expect(viewer).not.toHaveClass("is-closing");
+    expect(viewer).not.toHaveAttribute("inert");
 
     fireEvent.click(screen.getByRole("button", { name: "拡大表示を閉じる" }));
-    expect(screen.queryByRole("dialog", { name: expandedViewerName })).not.toBeInTheDocument();
+    expectFadesOut(viewer);
+  });
+
+  it("背景クリックでも同じように薄れてから閉じる", () => {
+    vi.useFakeTimers();
+    renderWithImage();
+
+    const viewer = openViewer();
+    fireEvent.click(viewer);
+    expectFadesOut(viewer);
   });
 
   it("拡大表示中のEscapeは拡大だけを閉じ、詳細モーダル側へは伝えない", () => {
+    vi.useFakeTimers();
     renderWithImage();
 
-    fireEvent.click(screen.getByRole("button", { name: "作例画像を拡大表示する" }));
-    const viewer = screen.getByRole("dialog", { name: expandedViewerName });
+    const viewer = openViewer();
 
     // fireEventはpreventDefaultされるとfalseを返す。詳細モーダルのEscape処理は
     // defaultPreventedを見て中断するため、モーダルごと閉じてしまうことはない
@@ -160,6 +199,72 @@ describe("プロンプト詳細モーダルの作例画像", () => {
     // defaultPrevented, so the whole modal does not close behind the viewer
     const notPrevented = fireEvent.keyDown(viewer, { key: "Escape" });
     expect(notPrevented).toBe(false);
+    expectFadesOut(viewer);
+  });
+
+  it("閉じた直後にフォーカスは拡大ボタンへ戻り、薄れている面は操作を受けない", () => {
+    vi.useFakeTimers();
+    renderWithImage();
+
+    const viewer = openViewer();
+    expect(screen.getByRole("button", { name: "拡大表示を閉じる" })).toHaveFocus();
+
+    fireEvent.keyDown(viewer, { key: "Escape" });
+    expect(screen.getByRole("button", { name: "作例画像を拡大表示する" })).toHaveFocus();
+    expect(viewer).toHaveAttribute("inert");
+  });
+
+  it("薄れている途中で拡大ボタンを押すと、同じ面がそのまま開き直る", () => {
+    vi.useFakeTimers();
+    renderWithImage();
+
+    const viewer = openViewer();
+    fireEvent.keyDown(viewer, { key: "Escape" });
+    expect(viewer).toHaveClass("is-closing");
+
+    act(() => {
+      vi.advanceTimersByTime(MODAL_EXIT_DURATION_MS / 2);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "作例画像を拡大表示する" }));
+    expect(viewer).not.toHaveClass("is-closing");
+    expect(viewer).not.toHaveAttribute("inert");
+    expect(screen.getByRole("button", { name: "拡大表示を閉じる" })).toHaveFocus();
+
+    // 最初の閉じる操作のタイマーは捨てられ、開き直した面は残り続ける
+    // The first close's timer is dropped, so the reopened viewer stays
+    act(() => {
+      vi.advanceTimersByTime(MODAL_EXIT_DURATION_MS * 2);
+    });
+    expect(screen.getByRole("dialog", { name: expandedViewerName })).toBe(viewer);
+
+    // 開き直したあとの閉じる操作も、もう一度同じ時間だけ薄れる
+    // Closing again after the reopen fades for the full duration once more
+    fireEvent.click(screen.getByRole("button", { name: "拡大表示を閉じる" }));
+    expectFadesOut(viewer);
+  });
+
+  it("閉じてすぐ開き直してまた閉じても、最初の閉じる操作のタイマーで早く消えない", () => {
+    vi.useFakeTimers();
+    renderWithImage();
+
+    const viewer = openViewer();
+    fireEvent.keyDown(viewer, { key: "Escape" });
+    act(() => {
+      vi.advanceTimersByTime(MODAL_EXIT_DURATION_MS / 2);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "作例画像を拡大表示する" }));
+    fireEvent.keyDown(screen.getByRole("dialog", { name: expandedViewerName }), { key: "Escape" });
+
+    // 最初の閉じる操作の終了時刻を過ぎても、2 回目の薄れは続いている
+    // Past the first close's end time, the second fade is still running
+    act(() => {
+      vi.advanceTimersByTime(MODAL_EXIT_DURATION_MS / 2);
+    });
+    expect(viewer).toBeInTheDocument();
+    expect(viewer).toHaveClass("is-closing");
+    act(() => {
+      vi.advanceTimersByTime(MODAL_EXIT_DURATION_MS / 2);
+    });
     expect(screen.queryByRole("dialog", { name: expandedViewerName })).not.toBeInTheDocument();
   });
 });

@@ -45,6 +45,24 @@
   background: rgba(15, 23, 42, 0.95);
 }
 
+/* 閉じる動き。長さは外側の `.cc-modal` が持つ --cc-modal-exit-duration を継承し、動きも modal_surface.css の
+   keyframes を使う（背景は色だけ、画像と閉じるボタンは薄れて少し沈む）。閉じる途中は inert で操作を受けない
+   Closing motion. The length is inherited from --cc-modal-exit-duration on the enclosing `.cc-modal`, and the motion
+   reuses modal_surface.css keyframes (backdrop fades its colour; image and close button fade and sink slightly). The closing viewer is inert */
+:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-image-viewer.is-closing {
+  animation: cc-modal-overlay-out var(--cc-modal-exit-duration) ease both;
+}
+
+:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-image-viewer.is-closing > * {
+  animation: cc-modal-panel-out var(--cc-modal-exit-duration) ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-image-viewer.is-closing {
+    display: none;
+  }
+}
+
 :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn {
   position: fixed;
   right: auto;

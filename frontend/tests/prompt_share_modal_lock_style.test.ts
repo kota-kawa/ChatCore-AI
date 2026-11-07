@@ -176,3 +176,27 @@ test("the Prompt Share edit modal uses the page blue palette through tokens", ()
     /\[data-theme="dark"\] \.prompt-share-modal,\s*\[data-theme="dark"\] \.prompt-share-edit-modal-scope\s*\{[\s\S]*?--modal-accent:\s*#7ab4ff;/,
   );
 });
+
+// 作例画像の拡大表示は ModalShell に載らない入れ子の面なので、閉じる動きの長さと keyframes は
+// 共通モーダル面から借り、ここへ時間を書き足さない。
+// The example-image viewer is a nested surface outside ModalShell, so it borrows the closing length and keyframes
+// from the shared modal surface instead of restating a duration.
+test("the example-image viewer fades out with the shared modal closing duration and keyframes", () => {
+  const closing = /\.prompt-detail-image-viewer\.is-closing\s*\{([^}]*)\}/.exec(promptShareModalCss)?.[1] ?? "";
+  assert.match(closing, /animation:\s*cc-modal-overlay-out var\(--cc-modal-exit-duration\)/);
+  const closingChildren = /\.prompt-detail-image-viewer\.is-closing > \*\s*\{([^}]*)\}/.exec(promptShareModalCss)?.[1] ?? "";
+  assert.match(closingChildren, /animation:\s*cc-modal-panel-out var\(--cc-modal-exit-duration\)/);
+  assert.doesNotMatch(closing + closingChildren, /\d+m?s\b/, "no duration literal of its own");
+  // 借りている keyframes と変数が共通面に存在する
+  // The borrowed keyframes and variable exist in the shared surface
+  assert.match(sharedModalCss, /@keyframes cc-modal-overlay-out\s*\{/);
+  assert.match(sharedModalCss, /@keyframes cc-modal-panel-out\s*\{/);
+  assert.match(sharedModalCss, /--cc-modal-exit-duration:\s*\d+ms;/);
+});
+
+test("the example-image viewer is dropped at once under reduced motion, like the shared modal", () => {
+  assert.match(
+    promptShareModalCss,
+    /@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*?\.prompt-detail-image-viewer\.is-closing\s*\{\s*display:\s*none;/,
+  );
+});
