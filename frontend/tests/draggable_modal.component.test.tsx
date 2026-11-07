@@ -52,6 +52,25 @@ describe("DraggableModal", () => {
     opener.remove();
   });
 
+  // 手前のメニューが扱った Escape では閉じない（メニューだけが閉じる）。
+  // An Escape already handled by a menu in front does not close the dialog (only the menu closes).
+  it("stays open on an Escape something else already handled", () => {
+    const onClose = vi.fn();
+    render(
+      <DraggableModal isOpen onClose={onClose} title="テストモーダル">
+        <input aria-label="最初の入力" />
+      </DraggableModal>
+    );
+    act(() => vi.advanceTimersByTime(32));
+    const handledFirst = (event: KeyboardEvent) => event.preventDefault();
+    window.addEventListener("keydown", handledFirst, true);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    window.removeEventListener("keydown", handledFirst, true);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("restores and persists a safe stored position", () => {
     window.sessionStorage.setItem("agent-position", JSON.stringify({ x: 240, y: 180 }));
 

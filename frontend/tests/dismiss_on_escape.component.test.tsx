@@ -78,11 +78,16 @@ describe("useDismissOnEscape", () => {
     expect(screen.getByRole("button", { name: "trigger" })).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("ignores an Escape that cancels an IME composition", () => {
+  // isComposing が立たないブラウザでも、変換中を示す keyCode 229 で見分ける
+  // Browsers that leave isComposing unset still report the composition through keyCode 229
+  it.each([
+    ["isComposing", { isComposing: true }],
+    ["keyCode 229", { keyCode: 229 }],
+  ])("ignores an Escape that cancels an IME composition (%s)", (_label, init) => {
     const onDismiss = vi.fn();
     render(<Menu onDismiss={onDismiss} />);
 
-    const notPrevented = fireEvent.keyDown(document.body, { key: "Escape", isComposing: true });
+    const notPrevented = fireEvent.keyDown(document.body, { key: "Escape", ...init });
 
     expect(onDismiss).not.toHaveBeenCalled();
     expect(notPrevented).toBe(true);

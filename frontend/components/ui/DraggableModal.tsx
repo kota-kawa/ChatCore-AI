@@ -334,12 +334,14 @@ export function DraggableModal({
     return undefined;
   }, [isOpen]);
 
-  // Escキーでモーダルを閉じるイベントリスナー（キャプチャフェーズで登録して優先度を高める）
-  // Escape key listener to close the modal (registered in capture phase for higher priority)
+  // Escキーでモーダルを閉じるイベントリスナー（キャプチャフェーズで登録して優先度を高める）。
+  // 手前のメニューなどが先に Escape を扱った（defaultPrevented）ときは、同じキーで閉じない
+  // Escape key listener to close the modal (registered in capture phase for higher priority).
+  // When something in front, such as an open menu, already handled the Escape (defaultPrevented), it stays open
   useEffect(() => {
     if (!isOpen) return undefined;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.defaultPrevented) return;
       event.preventDefault();
       onClose();
     };
