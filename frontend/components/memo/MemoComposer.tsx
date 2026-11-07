@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { useMemoMobileLayout, useMemoViewport } from "../../hooks/memo_page/use_memo_viewport";
+import { useDismissOnOutsidePress } from "../../hooks/use_dismiss_on_outside_press";
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { isImeConfirmKey } from "../../lib/memo/ime";
 import { MemoFormatToggle, MemoFormatToolbar } from "./MemoFormatToolbar";
@@ -75,6 +76,8 @@ export function MemoComposer() {
   const [mobileDraftDismissed, setMobileDraftDismissed] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
+  const moreRef = useRef<HTMLDetailsElement>(null);
+  const paletteRef = useRef<HTMLDivElement>(null);
   const paletteTriggerRef = useRef<HTMLButtonElement>(null);
   const collapsedTextButtonRef = useRef<HTMLButtonElement>(null);
   const autoSubmittedBodyRef = useRef<string | null>(null);
@@ -87,6 +90,26 @@ export function MemoComposer() {
   const showExpandedComposer = composeIsExpanded && !(isMobileLayout && mobileDraftDismissed);
   const mobileDialogOpen = isMobileLayout && showExpandedComposer;
   const viewportStyle = useMemoViewport(mobileDialogOpen, true);
+  const isMenuOpen = isMoreOpen || isComposePaletteOpen;
+
+  // 「その他」パネルの外を押したら閉じるだけにする。本文・タイトル・作成欄の外も対象で、body へポータルされる MemoSelect のドロップダウン（listbox）はパネルの一部として扱う。
+  // A press outside the "More" panel only closes it, including the body, the title and anything outside the composer; a MemoSelect dropdown (listbox), portaled to body, counts as part of the panel.
+  useDismissOnOutsidePress(
+    isMenuOpen,
+    (target) => Boolean(moreRef.current?.contains(target) || (target instanceof Element && target.closest("[role='listbox']"))),
+    () => {
+      setIsMoreOpen(false);
+      setIsComposePaletteOpen(false);
+    },
+  );
+
+  // 色パレット（開くボタン＋メニュー）の外を押したらパレットだけ閉じる。パネル内の押下ならパネルは残り、パネルの外なら上のフックがパネルも閉じる。
+  // A press outside the color palette (trigger and menu) closes only the palette. Inside the panel the panel stays; outside it, the hook above closes the panel too.
+  useDismissOnOutsidePress(
+    isComposePaletteOpen,
+    (target) => Boolean(paletteRef.current?.contains(target)),
+    () => setIsComposePaletteOpen(false),
+  );
 
   // フローティングの「新規」ボタンはコントローラーを直接呼ぶので、インライン側のトリガー処理では
   // スマホ用のローカルな「閉じた」状態を解除できない。そこでネイティブの click を先に捕捉して解除する。
@@ -330,8 +353,9 @@ export function MemoComposer() {
         </div>
 
         <details
+          ref={moreRef}
           className="memo-quick-capture__more"
-          open={isMoreOpen || isComposePaletteOpen}
+          open={isMenuOpen}
           onToggle={handleMoreToggle}
           onKeyDown={(event) => {
             if (event.key !== "Escape" || event.defaultPrevented || !event.currentTarget.open) return;
@@ -344,11 +368,11 @@ export function MemoComposer() {
         >
           <summary onClick={(event) => {
             event.preventDefault();
-            const open = !(isMoreOpen || isComposePaletteOpen);
+            const open = !isMenuOpen;
             setIsMoreOpen(open);
             if (!open) setIsComposePaletteOpen(false);
           }}><i className="bi bi-three-dots" aria-hidden="true"></i>{t("memo.other")}</summary>
-          <div className="memo-quick-capture__more-panel" hidden={!(isMoreOpen || isComposePaletteOpen)}>
+          <div className="memo-quick-capture__more-panel" hidden={!isMenuOpen}>
             <button type="button" className="memo-ai-suggest-btn" onClick={() => { setSourceMode(!sourceMode); setIsMoreOpen(false); }}>
               <i className={`bi ${sourceMode ? "bi-eye" : "bi-code-slash"}`} aria-hidden="true"></i>
               {t(sourceMode ? "memo.formattedView" : "memo.markdownSource")}
@@ -378,7 +402,7 @@ export function MemoComposer() {
                   ? <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>{english ? "Suggesting…" : "提案中..."}</>
                   : <><i className="bi bi-stars" aria-hidden="true"></i>{english ? "AI title" : "AIタイトル"}</>}
               </button>
-              <div className="memo-compose-palette">
+              <div ref={paletteRef} className="memo-compose-palette">
                 <button
                   ref={paletteTriggerRef}
                   type="button"
