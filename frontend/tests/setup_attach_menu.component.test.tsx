@@ -96,8 +96,11 @@ describe("SetupAttachMenu", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "false");
 
     fireEvent.click(trigger);
-    fireEvent.keyDown(document, { key: "Escape" });
+    screen.getAllByRole("menuitemcheckbox")[0].focus();
+    fireEvent.keyDown(document.activeElement ?? document, { key: "Escape" });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
+    // 閉じたら開くボタンへフォーカスが戻る / Focus returns to the trigger once closed
+    expect(trigger).toHaveFocus();
   });
 
   // 添付上限に達しても、メモと共有プロンプトは選べる必要がある。

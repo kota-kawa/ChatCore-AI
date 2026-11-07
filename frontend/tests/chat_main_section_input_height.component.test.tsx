@@ -40,6 +40,7 @@ function ChatInputHarness() {
   const [chatInput, setChatInput] = useState("");
   const [setupInfo, setSetupInfo] = useState("");
   const [pageViewState, setPageViewState] = useState<"chat" | "launching">("chat");
+  const [chatHeaderModelMenuOpen, setChatHeaderModelMenuOpen] = useState(false);
   const chatMessagesRef = useRef<HTMLDivElement | null>(null);
   const controller = {
     loggedIn: true,
@@ -52,12 +53,12 @@ function ChatInputHarness() {
     sharedPromptsEnabled: false,
     selectedModel: "gpt-oss-120b",
     selectedModelShortLabel: "Model",
-    chatHeaderModelMenuOpen: false,
+    chatHeaderModelMenuOpen,
     chatHeaderModelSelectRef: { current: null },
     setPersonalKnowledgeEnabled: () => undefined,
     setSharedPromptsEnabled: () => undefined,
     setSelectedModel: () => undefined,
-    setChatHeaderModelMenuOpen: () => undefined,
+    setChatHeaderModelMenuOpen,
     showSetupForm: () => undefined,
     tasks: [],
     launchingTaskId: null,
@@ -236,5 +237,22 @@ describe("chat input height measurement", () => {
 
     fireEvent.click(container.querySelector("#update-launch-preview")!);
     expect(container.querySelector("[data-testid='setup-preview']")).toHaveTextContent("更新した環境");
+  });
+
+  // Escape で閉じ、フォーカスをモデル選択の開くボタンへ戻す。外側の押下で閉じる処理はコントローラ側なので、ここでは扱わない。
+  // Escape closes the header model menu and returns focus to its trigger; outside-press dismissal lives in the controller and is not covered here.
+  it("closes the header model menu on Escape and returns focus to its trigger", () => {
+    const { container } = render(<ChatInputHarness />);
+    const trigger = container.querySelector<HTMLButtonElement>(".chat-header-model-trigger");
+    if (!trigger) throw new Error("Model trigger did not render.");
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    container.querySelector<HTMLButtonElement>(".chat-header-model-option")?.focus();
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveFocus();
   });
 });

@@ -1,7 +1,7 @@
 // 投稿カードのキーボード操作を検証する。
 // Tests prompt card keyboard behavior.
 
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PromptCard, type PromptRecord } from "../components/prompt_share/prompt_card";
@@ -17,12 +17,12 @@ const prompt: PromptRecord = {
   used_in_chat: false
 };
 
-function renderCard(onOpenDetail = vi.fn()) {
+function renderCard(onOpenDetail = vi.fn(), { isDropdownOpen = false, onCloseDropdown = vi.fn() } = {}) {
   const noop = vi.fn();
   const view = render(
     <PromptCard
       prompt={prompt}
-      isDropdownOpen={false}
+      isDropdownOpen={isDropdownOpen}
       isLikePending={false}
       isLikeEffectActive={false}
       isAddAsTaskPending={false}
@@ -32,7 +32,7 @@ function renderCard(onOpenDetail = vi.fn()) {
       onOpenComments={noop}
       onOpenShare={noop}
       onToggleDropdown={noop}
-      onCloseDropdown={noop}
+      onCloseDropdown={onCloseDropdown}
       onAddAsTask={noop}
       onSaveAsMemo={noop}
       onToggleLike={noop}
@@ -66,5 +66,28 @@ describe("prompt_share card keyboard access", () => {
     menuButton?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Enter" }));
 
     expect(onOpenDetail).not.toHaveBeenCalled();
+  });
+
+  // 開いたメニューは Escape で閉じ、開く「…」ボタンへフォーカスが戻る。
+  // Escape closes the open menu and returns focus to the "…" button that opened it.
+  it("Escapeでメニューを閉じ、開くボタンへフォーカスを戻す", () => {
+    const onCloseDropdown = vi.fn();
+    const { container } = renderCard(vi.fn(), { isDropdownOpen: true, onCloseDropdown });
+    const menuButton = container.querySelector<HTMLButtonElement>(".meatball-menu");
+    container.querySelector<HTMLElement>(".prompt-actions-dropdown button")?.focus();
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+
+    expect(onCloseDropdown).toHaveBeenCalledTimes(1);
+    expect(menuButton).toHaveFocus();
+  });
+
+  it("メニューが閉じているときのEscapeでは何も起きない", () => {
+    const onCloseDropdown = vi.fn();
+    renderCard(vi.fn(), { onCloseDropdown });
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+
+    expect(onCloseDropdown).not.toHaveBeenCalled();
   });
 });

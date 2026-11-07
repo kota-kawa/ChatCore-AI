@@ -8,6 +8,7 @@ import MarkdownContent from "../MarkdownContent";
 import { buildPromptPath } from "../../lib/promptSlug";
 import { localizePublicPath } from "../../lib/seo";
 import { modalOriginKey } from "../../lib/ui/modal_return_target";
+import { useDismissOnEscape } from "../../hooks/use_dismiss_on_escape";
 import { useDismissOnOutsidePress } from "../../hooks/use_dismiss_on_outside_press";
 import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
@@ -146,6 +147,8 @@ function PromptCardComponent({
     (target) => Boolean(dropdownTriggerRef.current?.contains(target) || dropdownRef.current?.contains(target)),
     onCloseDropdown,
   );
+  // Escape でも閉じて「…」へフォーカスを戻す / Escape closes it too and returns focus to the "…"
+  useDismissOnEscape(isDropdownOpen, onCloseDropdown, dropdownTriggerRef);
   // サーバー値を正規化し、未設定時のフォールバックを確保する
   // Normalize server values and set safe fallbacks for missing fields
   const contentFormatValue = normalizePromptContentFormat(String(prompt.content_format || ""));

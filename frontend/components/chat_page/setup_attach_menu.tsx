@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
+import { useDismissOnEscape } from "../../hooks/use_dismiss_on_escape";
 import { useDismissOnOutsidePress } from "../../hooks/use_dismiss_on_outside_press";
 
 type SetupAttachMenuProps = {
@@ -62,19 +63,8 @@ export function SetupAttachMenu({
   // メニュー外の押下は閉じるだけにする / A press outside the menu only closes it
   useDismissOnOutsidePress(isOpen, (target) => Boolean(containerRef.current?.contains(target)), closeMenu);
 
-  // Escape キーで閉じる / Close on Escape
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      closeMenu();
-      triggerRef.current?.focus();
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [closeMenu, isOpen]);
+  // Escape で閉じて開くボタンへフォーカスを戻す / Escape closes the menu and returns focus to the trigger
+  useDismissOnEscape(isOpen, closeMenu, triggerRef);
 
   // メニューを開けなくなったら開いたままにしない / Never leave the menu open once it can no longer be opened
   useEffect(() => {
