@@ -26,6 +26,7 @@ import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attach
 import { useChatClipboardPaste } from "../../hooks/chat_page/use_chat_clipboard_paste";
 import { useChatFooterHeight } from "../../hooks/chat_page/use_chat_footer_height";
 import { useChatToolApprovals } from "../../hooks/chat_page/use_chat_tool_approvals";
+import { useDismissOnEscape } from "../../hooks/use_dismiss_on_escape";
 import { isNearBottom } from "../../lib/chat_page/dom";
 import { extractUrlsFromText, getUrlDomain } from "../../lib/chat_page/url_utils";
 import { useTranslation } from "../../contexts/locale_context";
@@ -117,7 +118,11 @@ function ChatMainSectionComponent() {
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const sidebarRef = useRef<HTMLDivElement | null>(null);
+  const chatHeaderModelTriggerRef = useRef<HTMLButtonElement | null>(null);
   const chatRoomsLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  // 外側の押下で閉じる処理はコントローラ側にある。Escape はボタンを持つここで受け、閉じたらそのボタンへフォーカスを戻す
+  // The outside-press dismissal lives in the controller; Escape is handled here, next to the trigger, and returns focus to it
+  useDismissOnEscape(chatHeaderModelMenuOpen, () => setChatHeaderModelMenuOpen(false), chatHeaderModelTriggerRef);
 
   // 未保存チャット・起動中は共有できない。これらの条件をまとめて UI の有効/無効に使う。
   // Sharing is unavailable for temporary rooms or while chat is launching.
@@ -374,6 +379,7 @@ function ChatMainSectionComponent() {
             className={`chat-header-model-select ${chatHeaderModelMenuOpen ? "is-open" : ""}`.trim()}
           >
             <button
+              ref={chatHeaderModelTriggerRef}
               type="button"
               className="chat-header-model-trigger cc-press"
               aria-haspopup="listbox"

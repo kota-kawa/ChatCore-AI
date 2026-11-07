@@ -3,6 +3,7 @@
 import { useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useHomePageChatContext, useHomePageProjectContext } from "../../contexts/chat_page/home_page_context";
 import { useTranslation } from "../../contexts/locale_context";
+import { useDismissOnEscape } from "../../hooks/use_dismiss_on_escape";
 import { useDismissOnOutsidePress } from "../../hooks/use_dismiss_on_outside_press";
 import type { ChatRoom } from "../../lib/chat_page/types";
 
@@ -46,7 +47,11 @@ export function ChatRoomCard({ room }: ChatRoomCardProps) {
   // 開いたメニューの外の押下は閉じるだけにする。ほかのルームの「⋮」も外側として扱う
   // A press outside the open menu only closes it; another room's "⋮" counts as outside too
   const actionsRef = useRef<HTMLDivElement | null>(null);
-  useDismissOnOutsidePress(roomMenuOpen, (target) => Boolean(actionsRef.current?.contains(target)), () => setOpenRoomActionsFor(null));
+  const actionsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const closeRoomMenu = () => setOpenRoomActionsFor(null);
+  useDismissOnOutsidePress(roomMenuOpen, (target) => Boolean(actionsRef.current?.contains(target)), closeRoomMenu);
+  // Escape でも閉じて「⋮」へフォーカスを戻す / Escape closes it too and returns focus to the "⋮"
+  useDismissOnEscape(roomMenuOpen, closeRoomMenu, actionsTriggerRef);
   // タイトルが空の場合は「新規チャット」をフォールバック表示する。
   // Fall back to "新規チャット" when the room has no title yet.
   const roomTitle = room.title || t("chat.new");
@@ -102,6 +107,7 @@ export function ChatRoomCard({ room }: ChatRoomCardProps) {
           }}
         >
           <button
+            ref={actionsTriggerRef}
             type="button"
             className="room-actions-icon cc-press"
             aria-label={english ? `Open actions for ${roomTitle}` : `${roomTitle} の操作メニューを開く`}

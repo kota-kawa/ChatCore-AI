@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { MemoActionMenuPosition } from "../../lib/memo/types";
 import { getMemoActionMenuPosition } from "../../lib/memo/utils";
+import { useDismissOnEscape } from "../use_dismiss_on_escape";
 import { useDismissOnOutsidePress } from "../use_dismiss_on_outside_press";
 
 // メモカードのアクションメニュー（開いているメモ・表示位置・外側の押下で閉じる）
@@ -32,6 +33,8 @@ export function useMemoPageActionMenu() {
     ),
     closeMemoActionMenu,
   );
+  // Escape でも閉じて開いた「…」へフォーカスを戻す / Escape closes it too and returns focus to the "…" that opened it
+  useDismissOnEscape(Boolean(openMenuMemoId), closeMemoActionMenu, openTriggerRef);
 
   // スクロールやリサイズで位置がずれるので閉じる / Close on scroll or resize, which would misplace the menu
   useEffect(() => {
