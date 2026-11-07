@@ -8,6 +8,7 @@ import MarkdownContent from "../MarkdownContent";
 import { buildPromptPath } from "../../lib/promptSlug";
 import { localizePublicPath } from "../../lib/seo";
 import { modalOriginKey } from "../../lib/ui/modal_return_target";
+import { useDismissOnOutsidePress } from "../../hooks/use_dismiss_on_outside_press";
 import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import { DEFAULT_CONTENT_FORMAT, DEFAULT_MEDIA_TYPE } from "../../scripts/prompt_share/prompt_type_registry";
@@ -136,6 +137,15 @@ function PromptCardComponent({
     // One count per card is enough, so only re-observe when the card shows a different prompt
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt.id]);
+  // 開いたメニューの外の押下は閉じるだけにする。ほかのカードの「…」も外側として扱う
+  // A press outside the open menu only closes it; another card's "…" counts as outside too
+  const dropdownTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  useDismissOnOutsidePress(
+    isDropdownOpen,
+    (target) => Boolean(dropdownTriggerRef.current?.contains(target) || dropdownRef.current?.contains(target)),
+    onCloseDropdown,
+  );
   // サーバー値を正規化し、未設定時のフォールバックを確保する
   // Normalize server values and set safe fallbacks for missing fields
   const contentFormatValue = normalizePromptContentFormat(String(prompt.content_format || ""));
@@ -307,6 +317,7 @@ function PromptCardComponent({
         {/* クリックがカード本体に伝播しないようにstopPropagationでモーダル誤起動を防ぐ */}
         {/* Stop propagation so clicking the menu button does not also open the detail modal */}
         <button
+          ref={dropdownTriggerRef}
           className="meatball-menu cc-press"
           type="button"
           aria-label={t("promptShare.moreActions")}
@@ -327,6 +338,7 @@ function PromptCardComponent({
       {/* ドロップダウンもカードクリックを遮断し、意図しない詳細モーダルの起動を避ける */}
       {/* Dropdown also stops propagation to prevent unintended detail modal trigger */}
       <div
+        ref={dropdownRef}
         id={menuId}
         className={`prompt-actions-dropdown${isDropdownOpen ? " is-open" : ""}`}
         role="menu"

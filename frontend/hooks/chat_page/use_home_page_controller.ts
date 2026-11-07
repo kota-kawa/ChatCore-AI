@@ -10,6 +10,7 @@ import {
 } from "react";
 import useSWR from "swr";
 import { useBodyScrollLock } from "../use_body_scroll_lock";
+import { useDismissOnOutsidePress } from "../use_dismiss_on_outside_press";
 import { useHomePageChatState } from "./use_home_page_chat_state";
 import { useHomePageNewPromptState } from "./use_home_page_new_prompt_state";
 import { useHomePageShareState } from "./use_home_page_share_state";
@@ -1194,24 +1195,21 @@ export function useHomePageController() {
     };
   }, [pageViewState]);
 
+  // モデル選択の外の押下は閉じるだけにする（ルーム操作メニューは ChatRoomCard が同じフックで閉じる）
+  // A press outside a model menu only closes it (ChatRoomCard closes the room actions menu with the same hook)
+  useDismissOnOutsidePress(modelMenuOpen, (target) => Boolean(modelSelectRef.current?.contains(target)), () => setModelMenuOpen(false));
+  useDismissOnOutsidePress(
+    chatHeaderModelMenuOpen,
+    (target) => Boolean(chatHeaderModelSelectRef.current?.contains(target)),
+    () => setChatHeaderModelMenuOpen(false),
+  );
+
   useEffect(() => {
-    // メニューの外をクリックしたときに、モデル選択・ルーム操作メニュー・オーバーレイのサイドバーを閉じる
-    // Close the model menus, room actions menu and overlay sidebar when clicking outside them
+    // オーバーレイ表示のサイドバーは、外をクリックしたら閉じる
+    // Close the overlay sidebar when clicking outside it
     const onOutsideClick = (event: MouseEvent) => {
       if (!(event.target instanceof Element)) return;
       const target = event.target;
-
-      if (modelMenuOpen && modelSelectRef.current && !modelSelectRef.current.contains(target)) {
-        setModelMenuOpen(false);
-      }
-
-      if (chatHeaderModelMenuOpen && chatHeaderModelSelectRef.current && !chatHeaderModelSelectRef.current.contains(target)) {
-        setChatHeaderModelMenuOpen(false);
-      }
-
-      if (openRoomActionsFor && !target.closest(".room-actions-menu") && !target.closest(".room-actions-icon")) {
-        setOpenRoomActionsFor(null);
-      }
 
       if (
         sidebarOpen &&
@@ -1227,7 +1225,7 @@ export function useHomePageController() {
     return () => {
       document.removeEventListener("click", onOutsideClick);
     };
-  }, [modelMenuOpen, chatHeaderModelMenuOpen, openRoomActionsFor, sidebarOpen]);
+  }, [sidebarOpen]);
 
   useEffect(() => {
     let lastWidth = typeof window === "undefined" ? 0 : window.innerWidth;

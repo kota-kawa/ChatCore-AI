@@ -24,6 +24,7 @@ import type { ContentFormat, MediaType, PromptResource } from "../../scripts/pro
 import type { PromptCategoryOption, PromptPostStatus } from "./prompt_share_page_types";
 import { SkillResourceEditor } from "./skill_resource_editor";
 import { useTranslation } from "../../contexts/locale_context";
+import { useDismissOnOutsidePress } from "../../hooks/use_dismiss_on_outside_press";
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
@@ -233,24 +234,8 @@ function PromptComposerSelect({
     }
   }, [isModalOpen]);
 
-  // メニューが開いている間だけpointerdownを監視し、外側クリックで閉じる
-  // Listen for outside pointer events only while the menu is open to close it on click-away
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-    };
-  }, [isOpen]);
+  // 外側の押下はメニューを閉じるだけにする / A press outside only closes the menu
+  useDismissOnOutsidePress(isOpen, (target) => Boolean(rootRef.current?.contains(target)), () => setIsOpen(false));
 
   // activeIndexが変わったとき、対応するオプションボタンにフォーカスを移す
   // Shift DOM focus to the newly active option after arrow-key navigation
@@ -530,24 +515,12 @@ export function PromptShareComposerModal({
     }
   }, [isOpen]);
 
-  // メニューが開いている間だけ外側クリックを監視し、自然に閉じられるようにする。
-  // Watch click-away only while open so the picker behaves like a regular menu.
-  useEffect(() => {
-    if (!isAiModelMenuOpen) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!aiModelMenuRef.current?.contains(event.target as Node)) {
-        setIsAiModelMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-    };
-  }, [isAiModelMenuOpen]);
+  // 入力欄と開くボタンを含む候補の外を押したら、閉じるだけにする / A press outside the picker (input, trigger, menu) only closes it
+  useDismissOnOutsidePress(
+    isAiModelMenuOpen,
+    (target) => Boolean(aiModelMenuRef.current?.contains(target)),
+    () => setIsAiModelMenuOpen(false),
+  );
 
   const selectAiModelOption = (modelName: string) => {
     setPostAiModel(modelName);

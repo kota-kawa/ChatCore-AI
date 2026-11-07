@@ -1,8 +1,9 @@
 // メモ詳細モーダルの「…」メニュー。ピン留め・アーカイブ・共有設定・削除・コレクション・背景色をまとめて操作する。MemoDetailModal から使われる。
 // The "more actions" menu of the memo detail modal: pin, archive, share settings, delete, collection, and background color; used by MemoDetailModal.
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
+import { useDismissOnOutsidePress } from "../../hooks/use_dismiss_on_outside_press";
 import { useMemoPageBoardContext, useMemoPageDetailContext, useMemoPageListContext } from "../../contexts/memo_page/memo_page_context";
 import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { MemoSelect } from "./MemoSelect";
@@ -13,8 +14,8 @@ type MemoDetailOrganizeControlsProps = {
   renderExtraActions?: (closeMenu: () => void) => ReactNode;
 };
 
-// 開閉は state で制御する <details>。外側の押下と Esc で閉じる。
-// A <details> whose open state is controlled; it closes on an outside press or Esc.
+// 開閉は state で制御する <details>。外側の押下と Esc で閉じる（外側の押下は閉じるだけで、押した先には届かない）。
+// A <details> whose open state is controlled; it closes on Esc or an outside press, which only closes it and never reaches what was pressed.
 export function MemoDetailOrganizeControls({ renderExtraActions }: MemoDetailOrganizeControlsProps) {
   const { t } = useTranslation();
   const { collections } = useMemoPageListContext();
@@ -27,18 +28,13 @@ export function MemoDetailOrganizeControls({ renderExtraActions }: MemoDetailOrg
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDetailsElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    // メニュー外を押したら閉じる。ただし MemoSelect のドロップダウン（listbox）内の操作では閉じない。
-    // Close on a press outside the menu, except for presses inside a MemoSelect dropdown (listbox).
-    const closeOutside = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element) || ref.current?.contains(target) || target.closest("[role='listbox']")) return;
-      setOpen(false);
-    };
-    document.addEventListener("pointerdown", closeOutside);
-    return () => document.removeEventListener("pointerdown", closeOutside);
-  }, [open]);
+  // メニュー外の押下は閉じるだけにする。body へポータルされる MemoSelect のドロップダウン（listbox）内はメニューの一部として扱う。
+  // A press outside the menu only closes it; a MemoSelect dropdown (listbox), portaled to body, counts as part of the menu.
+  useDismissOnOutsidePress(
+    open,
+    (target) => Boolean(ref.current?.contains(target) || (target instanceof Element && target.closest("[role='listbox']"))),
+    () => setOpen(false),
+  );
 
   // 閉じると中のボタンが消えるので、フォーカスを開くボタンへ戻す
   // Closing hides the focused item, so return focus to the trigger

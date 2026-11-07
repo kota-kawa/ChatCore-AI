@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
+import { useDismissOnOutsidePress } from "../../hooks/use_dismiss_on_outside_press";
 
 type SetupAttachMenuProps = {
   // メニュー自体を開けない状態（チャット起動中など）/ Disables opening the menu (e.g. while a chat is launching)
@@ -58,16 +59,12 @@ export function SetupAttachMenu({
     setIsOpen(false);
   }, []);
 
-  // メニュー外のクリックと Escape キーで閉じる / Close on outside click and on Escape
+  // メニュー外の押下は閉じるだけにする / A press outside the menu only closes it
+  useDismissOnOutsidePress(isOpen, (target) => Boolean(containerRef.current?.contains(target)), closeMenu);
+
+  // Escape キーで閉じる / Close on Escape
   useEffect(() => {
     if (!isOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const container = containerRef.current;
-      if (!container) return;
-      if (event.target instanceof Node && container.contains(event.target)) return;
-      closeMenu();
-    };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -75,12 +72,8 @@ export function SetupAttachMenu({
       triggerRef.current?.focus();
     };
 
-    document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [closeMenu, isOpen]);
 
   // メニューを開けなくなったら開いたままにしない / Never leave the menu open once it can no longer be opened

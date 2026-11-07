@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 
+import { useDismissOnOutsidePress } from "../../hooks/use_dismiss_on_outside_press";
 import type { SelectOption } from "../../lib/memo/types";
 
 // ---------------------------------------------------------------------------
@@ -141,24 +142,22 @@ export function MemoSelect({
     }
   };
 
-  // セレクトメニュー外のクリックとスクロールを検知して閉じる副作用
-  // Effect to close the select menu when clicking outside or scrolling
+  // 外側の押下はメニューを閉じるだけにする / A press outside only closes the menu
+  useDismissOnOutsidePress(
+    open,
+    (target) => Boolean(triggerRef.current?.contains(target) || menuRef.current?.contains(target)),
+    () => setOpen(false),
+  );
+
+  // メニュー外のスクロールで閉じる副作用 / Effect to close the select menu on a scroll outside it
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!triggerRef.current?.contains(e.target as Node) && !menuRef.current?.contains(e.target as Node))
-        setOpen(false);
-    };
     const onScroll = (event: Event) => {
       if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
       setOpen(false);
     };
-    document.addEventListener("mousedown", onDown);
     window.addEventListener("scroll", onScroll, true);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      window.removeEventListener("scroll", onScroll, true);
-    };
+    return () => window.removeEventListener("scroll", onScroll, true);
   }, [open]);
 
   // 開いたときはリストボックス自体にフォーカスを移し、矢印キー操作をすぐ受け付ける
