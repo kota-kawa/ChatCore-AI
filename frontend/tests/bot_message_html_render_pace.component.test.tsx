@@ -83,6 +83,36 @@ describe("BotMessageHtml streaming render pacing", () => {
     expect(formatLLMOutput).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps spacing out the renders that follow a deferred one", () => {
+    clock.renderCostMs = HEAVY_RENDER_COST_MS;
+    const { container, rerender } = render(<BotMessageHtml text="あ" streaming />);
+    rerender(<BotMessageHtml text="あい" streaming />);
+    advance(HEAVY_RENDER_COST_MS);
+    expect(drawnText(container)).toBe("あい");
+
+    // 予約した描き直しも重かったので、その直後の更新はまた待たされる。
+    // The deferred render was heavy too, so the update right after it waits again.
+    rerender(<BotMessageHtml text="あいう" streaming />);
+    expect(drawnText(container)).toBe("あい");
+
+    advance(HEAVY_RENDER_COST_MS);
+    expect(drawnText(container)).toBe("あいう");
+    expect(formatLLMOutput).toHaveBeenCalledTimes(3);
+  });
+
+  it("fades in the words drawn by a deferred render", () => {
+    clock.renderCostMs = HEAVY_RENDER_COST_MS;
+    const { container, rerender } = render(<BotMessageHtml text="最初の文です。" streaming />);
+    rerender(<BotMessageHtml text="最初の文です。遅れて描かれる続きの文です。" streaming />);
+
+    advance(HEAVY_RENDER_COST_MS);
+
+    const fadingText = Array.from(container.querySelectorAll("span.streaming-word"))
+      .map((word) => word.textContent)
+      .join("");
+    expect(fadingText).toContain("続きの文");
+  });
+
   it("does not hold text back longer than the cap, however heavy a render was", () => {
     clock.renderCostMs = MAX_STREAM_RENDER_GAP_MS * 4;
     const { container, rerender } = render(<BotMessageHtml text="あ" streaming />);
