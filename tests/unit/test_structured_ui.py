@@ -35,6 +35,35 @@ def fence(ui=None):
 
 
 class StructuredUiTests(unittest.TestCase):
+    def test_calculator_repair_connects_all_numeric_controls(self):
+        ui = document()
+        ui["nodes"] = [
+            {"id": "root", "type": "column", "children": ["price_input", "quantity_input", "result", "chart"]},
+            {"id": "price_input", "type": "input", "input_type": "number", "label": "Price", "state_id": "price"},
+            {"id": "quantity_input", "type": "slider", "label": "Quantity", "state_id": "quantity"},
+            {"id": "result", "type": "text", "binding": "total"},
+            {"id": "chart", "type": "chart", "series": [{"label": "Total", "binding": "series"}]},
+        ]
+        price = {"kind": "state", "value": "price"}
+        quantity = {"kind": "state", "value": "quantity"}
+        ui["state"] = [{"id": "price", "initial": 10}, {"id": "quantity", "initial": 2}]
+        ui["expressions"] = [
+            {"id": "total", "op": "mul", "args": [price, {"kind": "literal", "value": 2}]},
+            {"id": "sample", "op": "mul", "args": [price, {"kind": "index", "value": 1}]},
+            {"id": "series", "op": "series", "args": [{"kind": "literal", "value": 3}, {"kind": "expression", "value": "sample"}]},
+        ]
+        repaired_ui = copy.deepcopy(ui)
+        repaired_ui["expressions"][1]["args"][0] = quantity
+
+        normalized = normalize_response_with_artifact_retry(
+            fence(ui), conversation_messages=[], model="test", generate_response=lambda *_: fence(repaired_ui),
+            user_request="スライダーで数量を変更して金額を計算して", ui_mode="STRUCTURED_UI",
+        )
+
+        self.assertEqual(normalized.structured_ui_quality_errors, ["structured_ui_calculation_not_connected"])
+        self.assertTrue(normalized.structured_ui_repair_succeeded)
+        self.assertEqual(normalized.parts[0]["ui"]["expressions"][1]["args"][0], quantity)
+
     def test_storage_roundtrip_and_context_excludes_code(self):
         normalized = normalize_response_with_artifacts("Before\n" + fence() + "After")
         self.assertEqual([p["type"] for p in normalized.parts], ["text", "structured_ui", "text"])
