@@ -16,6 +16,35 @@ import {
   normalizeShareChatRoomPayload,
 } from "../lib/chat_page/api_contract";
 
+function structuredUiPayload(id: string, totalNodes = 1, text = "Native summary") {
+  if (totalNodes === 1) {
+    return {
+      version: 1,
+      id,
+      fallback_text: `${id} fallback`,
+      root_id: "root",
+      nodes: [{ id: "root", type: "text", text }],
+      state: [],
+      expressions: [],
+      images: [],
+    };
+  }
+  const children = Array.from({ length: totalNodes - 1 }, (_, index) => `node${index}`);
+  return {
+    version: 1,
+    id,
+    fallback_text: `${id} fallback`,
+    root_id: "root",
+    nodes: [
+      { id: "root", type: "column", children },
+      ...children.map((nodeId) => ({ id: nodeId, type: "text", text })),
+    ],
+    state: [],
+    expressions: [],
+    images: [],
+  };
+}
+
 test("normalizeChatRoom normalizes incomplete payloads", () => {
   const normalized = normalizeChatRoom({
     id: 123,
@@ -108,6 +137,132 @@ test("normalizeChatResponsePayload keeps generated room title", () => {
     error: undefined,
     roomTitle: "Thread title",
   });
+});
+
+test("normalizers retain structured UI, compose it with web images, and normalize the saved answer id", () => {
+  const response = normalizeChatResponsePayload({
+    response: "fallback response",
+    assistant_message_id: 42,
+    parts: [
+      { type: "structured_ui", ui: structuredUiPayload("overview") },
+      {
+        type: "web_search_image",
+        image: {
+          url: "https://cdn.example.com/hero.jpg",
+          alt: "Relevant photo",
+          source_url: "https://example.com/article",
+        },
+      },
+    ],
+  });
+
+  assert.equal(response.assistantMessageId, 42);
+  assert.deepEqual(response.parts?.map((part) => part.type), ["structured_ui", "web_search_image"]);
+});
+
+test("structured UI normalization falls back after the six-block limit", () => {
+  const response = normalizeChatResponsePayload({
+    response: "fallback response",
+    parts: Array.from({ length: 7 }, (_, index) => ({
+      type: "structured_ui",
+      ui: structuredUiPayload(`block${index}`),
+    })),
+  });
+
+  assert.equal(response.parts?.filter((part) => part.type === "structured_ui").length, 6);
+  assert.equal(response.parts?.filter((part) => part.type === "text").length, 1);
+  assert.equal(response.parts?.at(-1)?.type, "text");
+});
+
+test("structured UI normalization enforces one chart point budget for the full reply", () => {
+  const chartUi = (id: string, points: number) => ({
+    version: 1,
+    id,
+    fallback_text: `${id} fallback`,
+    root_id: "root",
+    nodes: [{ id: "root", type: "chart", kind: "line", series: [{ label: "Values", values: Array.from({ length: points }, () => 1) }] }],
+  });
+  const response = normalizeChatResponsePayload({
+    response: "fallback response",
+    parts: [
+      { type: "structured_ui", ui: chartUi("chart300", 300) },
+      { type: "structured_ui", ui: chartUi("chart200", 200) },
+      { type: "structured_ui", ui: chartUi("chart1", 1) },
+    ],
+  });
+
+  assert.deepEqual(response.parts?.map((part) => part.type), ["structured_ui", "structured_ui", "text"]);
+  assert.deepEqual(response.parts?.at(-1), { type: "text", text: "chart1 fallback" });
+});
+
+test("structured UI API normalization keeps only safe source links", () => {
+  const response = normalizeChatResponsePayload({
+    response: "fallback response",
+    parts: [{
+      type: "structured_ui",
+      ui: {
+        ...structuredUiPayload("sources"),
+        sources: [
+          { url: "https://example.test/reference", title: "Reference" },
+          { url: "javascript:alert(1)", title: "Unsafe" },
+          { url: "https://user:pass@example.test/", title: "Credentials" },
+        ],
+      },
+    }],
+  });
+  const part = response.parts?.[0];
+
+  assert.equal(part?.type, "structured_ui");
+  assert.deepEqual(part?.type === "structured_ui" ? part.ui.sources : undefined, [
+    { url: "https://example.test/reference", title: "Reference" },
+  ]);
+});
+
+test("invalid native UI fallback is escaped before it becomes a normal text part", () => {
+  const invalidUi = {
+    ...structuredUiPayload("invalid"),
+    root_id: "missing",
+    fallback_text: "<img src='remote' onerror='x'> ![diagram](https://example.com/a.png) &",
+  };
+  const response = normalizeChatResponsePayload({
+    response: "fallback response",
+    parts: [{ type: "structured_ui", ui: invalidUi }],
+  });
+
+  assert.deepEqual(response.parts, [{
+    type: "text",
+    text: "&lt;img src=&#x27;remote&#x27; onerror=&#x27;x&#x27;&gt; \\![diagram](https://example.com/a.png) &amp;",
+  }]);
+});
+
+test("structured UI normalization enforces reply node and UTF-8 payload budgets", () => {
+  const nodeBudgetParts = Array.from({ length: 6 }, (_, index) => ({
+    type: "structured_ui",
+    ui: structuredUiPayload(`nodes${index}`, 60),
+  }));
+  nodeBudgetParts[5] = {
+    type: "structured_ui",
+    ui: { ...structuredUiPayload("nodes5", 60), fallback_text: "![x](https://example.com/x.png)" },
+  };
+  const nodeBudgetResponse = normalizeChatResponsePayload({
+    response: "fallback response",
+    parts: nodeBudgetParts,
+  });
+  assert.equal(nodeBudgetResponse.parts?.filter((part) => part.type === "structured_ui").length, 5);
+  assert.deepEqual(nodeBudgetResponse.parts?.at(-1), {
+    type: "text",
+    text: "\\![x](https://example.com/x.png)",
+  });
+
+  const byteBudgetResponse = normalizeChatResponsePayload({
+    response: "fallback response",
+    parts: Array.from({ length: 4 }, (_, index) => ({
+      type: "structured_ui",
+      ui: structuredUiPayload(`bytes${index}`, 10, "x".repeat(3000)),
+    })),
+  });
+  assert.equal(byteBudgetResponse.parts?.filter((part) => part.type === "structured_ui").length, 3);
+  assert.equal(byteBudgetResponse.parts?.filter((part) => part.type === "text").length, 1);
 });
 
 test("normalizers keep valid sandbox artifact parts", () => {

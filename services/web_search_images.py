@@ -27,7 +27,7 @@ from services.llm import (
     get_llm_json_response,
 )
 from services.message_parts_display import (
-    GENERATIVE_UI_PART_TYPES,
+    ARTIFACT_PART_TYPES,
     MAX_WEB_SEARCH_IMAGES_PER_REPLY,
     WEB_SEARCH_IMAGE_PART_TYPE,
     apply_visual_part_contract,
@@ -776,6 +776,35 @@ def build_web_search_image_parts_at_offsets(
     ]
 
 
+def build_mixed_parts_with_images(
+    parts: list[dict[str, Any]], images: list[dict[str, Any]], offsets: list[int],
+) -> list[dict[str, Any]]:
+    """Insert images at prose offsets while preserving every authored UI boundary."""
+    mixed: list[dict[str, Any]] = []
+    image_index = 0
+    consumed = 0
+    for part in parts:
+        if part.get("type") == WEB_SEARCH_IMAGE_PART_TYPE:
+            continue
+        if part.get("type") != "text":
+            mixed.append(part)
+            continue
+        text = str(part.get("text") or "")
+        cursor = 0
+        while image_index < len(offsets) and offsets[image_index] <= consumed + len(text):
+            relative = max(cursor, offsets[image_index] - consumed)
+            if text[cursor:relative]:
+                mixed.append({"type": "text", "text": text[cursor:relative]})
+            mixed.append(images[image_index])
+            cursor = relative
+            image_index += 1
+        if text[cursor:]:
+            mixed.append({"type": "text", "text": text[cursor:]})
+        consumed += len(text)
+    mixed.extend(images[image_index:])
+    return normalize_message_parts_for_display(mixed)
+
+
 def place_web_search_image_parts(
     parts: list[dict[str, Any]] | None,
     image_parts: list[dict[str, Any]],
@@ -785,12 +814,13 @@ def place_web_search_image_parts(
 ) -> list[dict[str, Any]] | None:
     """選定 LLM の画像配置計画を、回答に実現する。
 
-    生成 UI を含む回答には画像を足さない。選択ボタンと承認カードは回答を締めくくる部品なので失わず、末尾に置く。
+    Sandbox Artifact を含む回答には画像を足さない。宣言的 UI の位置は保つ。
+    従来の回答では選択ボタンと承認カードを末尾に置く。
 
     Realize the selector LLM's image placement plan in the answer.
     """
     normalized_parts = apply_visual_part_contract(list(parts or []))
-    if any(part.get("type") in GENERATIVE_UI_PART_TYPES for part in normalized_parts):
+    if any(part.get("type") in ARTIFACT_PART_TYPES for part in normalized_parts):
         return normalized_parts
 
     existing_images = [
@@ -828,6 +858,8 @@ def place_web_search_image_parts(
         return [*all_images, *button_parts]
 
     ordered_images, offsets = _final_image_layout(answer_text, all_images)
+    if any(part.get("type") == "structured_ui" for part in other_parts):
+        return build_mixed_parts_with_images(other_parts, ordered_images, offsets)
     inline_parts = build_web_search_image_parts_at_offsets(
         answer_text,
         ordered_images,

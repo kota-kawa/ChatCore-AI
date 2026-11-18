@@ -7,6 +7,7 @@ import type { ChatMessagePart } from "../../lib/chat_page/types";
 import { BotMessageHtml } from "./bot_message_html";
 import { SandboxArtifactFrame } from "./sandbox_artifact_frame";
 import { InteractiveButtons } from "./interactive_buttons";
+import { StructuredUiRenderer } from "./structured_ui_renderer";
 import { ToolApprovalCard } from "./tool_approval_card";
 import { WebSearchImagePart } from "./web_search_image_part";
 import { GenerativeUiStatusNotice } from "./generative_ui_status_notice";
@@ -19,12 +20,13 @@ type BotMessagePartsProps = {
   // 生成中かどうか。末尾のテキストパートだけが単語フェードインの対象になる
   // Whether generation is in flight; only the last text part fades words in
   streaming?: boolean;
-  // 選択ボタンで選んだ選択肢を次の発話として送る
-  // Sends the option chosen on the choice buttons as the next message
-  onChoiceSubmit?: (text: string) => void;
-  // 回答済みや生成中で、選択ボタンを押せない状態
-  // The choice buttons cannot be pressed because they were answered or a reply is generating
-  choicesDisabled?: boolean;
+  // 選択ボタンや生成UIから質問・回答を入力欄へ反映する
+  // Adds a question and answer from choice buttons or generated UI to the composer
+  onCompose?: (text: string) => void;
+  // 回答済みや生成中で、入力欄へ反映できない状態
+  // The composer cannot be changed because the answer was handled or a reply is generating
+  composeDisabled?: boolean;
+  getStructuredUiStateScope?: (blockId: string) => string | undefined;
   // 承認カードの決定を送る / Sends the decision made on an approval card
   onToolApprovalDecide?: (approvalId: string, decision: ToolApprovalDecision, acknowledgeWarnings?: boolean) => Promise<void>;
   // 生成中や後ろに利用者の発言があるなど、承認カードを決められない状態
@@ -38,8 +40,9 @@ function BotMessagePartsComponent({
   fallbackText,
   parts,
   streaming = false,
-  onChoiceSubmit,
-  choicesDisabled = false,
+  onCompose,
+  composeDisabled = false,
+  getStructuredUiStateScope,
   onToolApprovalDecide,
   approvalsDisabled = false,
 }: BotMessagePartsProps) {
@@ -72,10 +75,22 @@ function BotMessagePartsComponent({
             </div>
           );
         }
+        if (part.type === "structured_ui") {
+          return (
+            <div key={`structured-ui-${part.ui.id}`} className="bot-message-part bot-message-part--structured-ui">
+              <StructuredUiRenderer
+                ui={part.ui}
+                onCompose={onCompose}
+                disabled={composeDisabled}
+                stateScope={getStructuredUiStateScope?.(part.ui.id)}
+              />
+            </div>
+          );
+        }
         if (part.type === "interactive_buttons") {
           return (
             <div key={`buttons-${index}`} className="bot-message-part bot-message-part--buttons">
-              <InteractiveButtons buttons={part.buttons} onSubmit={onChoiceSubmit} disabled={choicesDisabled} />
+              <InteractiveButtons buttons={part.buttons} onCompose={onCompose} disabled={composeDisabled} />
             </div>
           );
         }

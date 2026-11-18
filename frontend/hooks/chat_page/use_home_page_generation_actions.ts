@@ -33,6 +33,7 @@ import {
   prependStoredHistory,
   readStoredGenerationState,
   readStoredHistory,
+  readStoredUserScope,
   removeLastStoredHistoryEntry,
   removeStoredHistory,
   toStoredSender,
@@ -46,7 +47,7 @@ import type {
   AttachedFile,
   ChatHistoryMessagePayload,
   ChatHistoryPagination,
-  ChatMessagePart,
+  ChatResponsePayload,
   ChatRoom,
   ChatRoomMode,
   UiChatMessage,
@@ -64,6 +65,14 @@ import {
 import { stopGenerationBeforeDisconnect } from "../../lib/chat_page/stop_generation";
 import { useTranslation } from "../../contexts/locale_context";
 import { getStoredThemePreference, shouldSendThemePreference } from "../../scripts/core/theme";
+import { withChatCoreUiVersionHeader } from "../../lib/chat_page/api_headers";
+import {
+  ackStructuredUiMetrics,
+  clearStructuredUiMetrics,
+  readStructuredUiMetrics,
+  type StructuredUiMetricRecord,
+} from "../../lib/chat_page/structured_ui_metrics";
+import { createStructuredUiMetricsScope } from "../../lib/chat_page/structured_ui_scope";
 
 // サーバーが「該当ルームが見つかりません」を返したことを表すエラーコード。
 // Error code the server returns when the chat room no longer exists.
@@ -389,6 +398,7 @@ export function useHomePageGenerationActions({
       .map((message) => ({
         text: message.text,
         sender: toStoredSender(message.sender),
+        ...(typeof message.serverId === "number" ? { serverId: message.serverId } : {}),
         ...(message.parts?.length ? { parts: message.parts } : {}),
       }));
     notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, normalized, roomMode));
@@ -426,6 +436,7 @@ export function useHomePageGenerationActions({
         id: nextMessageId("local", messageSeqRef),
         sender: normalizeStoredSender(entry.sender),
         text: entry.text,
+        ...(typeof entry.serverId === "number" ? { serverId: entry.serverId } : {}),
         ...(entry.parts?.length ? { parts: entry.parts } : {}),
       }));
 
@@ -452,6 +463,7 @@ export function useHomePageGenerationActions({
 
     const response = await resilientFetch(`/api/get_chat_history?${params.toString()}`, {
       credentials: "same-origin",
+      headers: withChatCoreUiVersionHeader(),
     });
     const rawPayload = await readJsonBodySafe(response);
     const payload = normalizeChatHistoryPayload(rawPayload);
@@ -482,7 +494,7 @@ export function useHomePageGenerationActions({
         {
           credentials: "same-origin",
           signal,
-          headers,
+          headers: withChatCoreUiVersionHeader(headers),
         },
         { timeoutMs: 0 }
       ),
@@ -742,6 +754,7 @@ export function useHomePageGenerationActions({
         try {
           const statusResponse = await resilientFetch(`/api/chat_generation_status?room_id=${encodeURIComponent(roomId)}`, {
             credentials: "same-origin",
+            headers: withChatCoreUiVersionHeader(),
           });
           generationStatus = normalizeGenerationStatusPayload(await readJsonBodySafe(statusResponse));
         } catch {
@@ -898,7 +911,7 @@ export function useHomePageGenerationActions({
       try {
         const response = await resilientFetch("/api/chat_switch_branch", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: withChatCoreUiVersionHeader({ "Content-Type": "application/json" }),
           credentials: "same-origin",
           body: JSON.stringify({ chat_room_id: roomId, message_id: messageId }),
         });
@@ -1065,7 +1078,7 @@ export function useHomePageGenerationActions({
   // SSE ではない JSON 応答を、確定済みの回答として1件積む。
   // Append a non-SSE JSON reply as one settled answer message.
   const appendJsonAssistantMessage = useCallback(
-    (generation: ActiveGeneration, data: { response?: string | null; parts?: ChatMessagePart[] }) => {
+    (generation: ActiveGeneration, data: ChatResponsePayload) => {
       const { roomId } = generation;
       setMessages((previous) => {
         if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
@@ -1075,6 +1088,7 @@ export function useHomePageGenerationActions({
             id: nextMessageId("assistant", messageSeqRef),
             sender: "assistant",
             text: data.response ?? "",
+            ...(data.assistantMessageId ? { serverId: data.assistantMessageId } : {}),
             ...(data.parts?.length ? { parts: data.parts } : {}),
           },
         ];
@@ -1088,13 +1102,13 @@ export function useHomePageGenerationActions({
   const postChatMessageRequest = useCallback(
     (
       generation: ActiveGeneration,
-      payload: { message: string; model: string; attachedFiles?: AttachedFile[] },
+      payload: { message: string; model: string; attachedFiles?: AttachedFile[]; uiMetrics?: readonly StructuredUiMetricRecord[] },
     ) =>
       resilientFetch(
         "/api/chat",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: withChatCoreUiVersionHeader({ "Content-Type": "application/json" }),
           credentials: "same-origin",
           body: JSON.stringify({
             message: payload.message,
@@ -1106,6 +1120,7 @@ export function useHomePageGenerationActions({
               : {}),
             use_personal_knowledge: personalKnowledgeEnabled,
             use_shared_prompts: sharedPromptsEnabled,
+            ...(payload.uiMetrics?.length ? { ui_metrics: payload.uiMetrics } : {}),
             attached_files:
               payload.attachedFiles?.map((f) => ({
                 name: f.name,
@@ -1180,10 +1195,11 @@ export function useHomePageGenerationActions({
 
       appendJsonAssistantMessage(generation, data);
 
-      if (data.response && isGenerationActive(generation)) {
+      if ((data.response || data.parts?.length) && isGenerationActive(generation)) {
         notifyStoredHistoryWriteIssue(appendStoredHistory(generation.roomId, {
-          text: data.response,
+          text: data.response ?? "",
           sender: "bot",
+          ...(data.assistantMessageId ? { serverId: data.assistantMessageId } : {}),
           ...(data.parts?.length ? { parts: data.parts } : {}),
         }, roomMode));
         applyRoomTitleUpdate(generation.roomId, data.roomTitle);
@@ -1262,17 +1278,33 @@ export function useHomePageGenerationActions({
         message,
         options?.unsentInputText,
       );
-      const postChatMessage = () => postChatMessageRequest(generation, { message, model, attachedFiles });
+      const metricsScope = createStructuredUiMetricsScope(readStoredUserScope(), roomId, roomMode);
+      const metricsSnapshot = metricsScope ? readStructuredUiMetrics(metricsScope) : null;
+      const postChatMessage = () => postChatMessageRequest(generation, {
+        message,
+        model,
+        attachedFiles,
+        ...(metricsSnapshot ? { uiMetrics: metricsSnapshot.metrics } : {}),
+      });
+      let metricsRequestAccepted = false;
 
       try {
         let response = await postChatMessage();
         if (response.status === 404) {
           const resent = await resendAfterMissingChatRoom(generation, message, roomMode, response, postChatMessage);
           if ("failureMessage" in resent) {
+            if (metricsScope && metricsSnapshot) clearStructuredUiMetrics(metricsScope);
             handleUnansweredFailure(resent.failureMessage);
             return false;
           }
           response = resent;
+        }
+
+        if (response.ok && metricsScope && metricsSnapshot) {
+          metricsRequestAccepted = true;
+          ackStructuredUiMetrics(metricsScope, metricsSnapshot.snapshotId);
+        } else if (!response.ok && metricsScope && metricsSnapshot) {
+          clearStructuredUiMetrics(metricsScope);
         }
 
         const contentType = response.headers.get("content-type") || "";
@@ -1284,6 +1316,7 @@ export function useHomePageGenerationActions({
 
         return await applyJsonChatResponse(generation, roomMode, response, handleUnansweredFailure);
       } catch (error) {
+        if (!metricsRequestAccepted && metricsScope && metricsSnapshot) clearStructuredUiMetrics(metricsScope);
         if (generation.abortController.signal.aborted) {
           removeThinkingAfterAbort(generation);
           return false;
@@ -1325,7 +1358,7 @@ export function useHomePageGenerationActions({
         roomId,
         (targetRoomId) => resilientFetch("/api/chat_stop", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: withChatCoreUiVersionHeader({ "Content-Type": "application/json" }),
           credentials: "same-origin",
           body: JSON.stringify({ chat_room_id: targetRoomId }),
         }),
@@ -1401,7 +1434,7 @@ export function useHomePageGenerationActions({
           "/api/chat_edit_and_regenerate",
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: withChatCoreUiVersionHeader({ "Content-Type": "application/json" }),
             credentials: "same-origin",
             body: JSON.stringify({
               chat_room_id: roomId,
@@ -1434,10 +1467,11 @@ export function useHomePageGenerationActions({
         const data = normalizeChatResponsePayload(rawPayload);
         if (response.ok && (data.response || data.parts?.length)) {
           appendJsonAssistantMessage(generation, data);
-          if (data.response) {
+          if (data.response || data.parts?.length) {
             notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, {
-              text: data.response,
+              text: data.response ?? "",
               sender: "bot",
+              ...(data.assistantMessageId ? { serverId: data.assistantMessageId } : {}),
               ...(data.parts?.length ? { parts: data.parts } : {}),
             }, currentRoomMode));
           }
@@ -1570,7 +1604,7 @@ export function useHomePageGenerationActions({
           "/api/chat_regenerate",
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: withChatCoreUiVersionHeader({ "Content-Type": "application/json" }),
             credentials: "same-origin",
             body: JSON.stringify({
               chat_room_id: roomId,
@@ -1599,10 +1633,11 @@ export function useHomePageGenerationActions({
         const data = normalizeChatResponsePayload(rawPayload);
         if (response.ok && (data.response || data.parts?.length)) {
           appendJsonAssistantMessage(generation, data);
-          if (data.response) {
+          if (data.response || data.parts?.length) {
             notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, {
-              text: data.response,
+              text: data.response ?? "",
               sender: "bot",
+              ...(data.assistantMessageId ? { serverId: data.assistantMessageId } : {}),
               ...(data.parts?.length ? { parts: data.parts } : {}),
             }, currentRoomMode));
           }

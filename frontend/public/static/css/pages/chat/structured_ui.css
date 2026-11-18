@@ -1,0 +1,486 @@
+.structured-ui,
+.structured-ui * {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.structured-ui {
+  display: grid;
+  gap: var(--space-4);
+  color: var(--text-dark);
+  font-family: var(--font-app-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+}
+
+.structured-ui :where(p, h1, h2, h3, h4, h5, h6, figure, blockquote, ul, ol, pre) {
+  margin: 0;
+}
+
+.structured-ui__text,
+.structured-ui__markdown,
+.structured-ui__field,
+.structured-ui__section-title {
+  color: var(--text-dark);
+}
+
+.structured-ui__heading,
+.structured-ui__section-title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  line-height: var(--leading-tight);
+}
+
+.structured-ui__markdown {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.structured-ui__markdown :where(h1, h2, h3, h4, h5, h6) {
+  font-size: var(--text-lg);
+  line-height: var(--leading-tight);
+}
+
+.structured-ui__markdown :where(ul, ol) {
+  padding-inline-start: 1.4rem;
+}
+
+.structured-ui__markdown blockquote {
+  border-inline-start: 3px solid var(--border-default);
+  color: var(--text-secondary);
+  padding-inline-start: var(--space-3);
+}
+
+.structured-ui__markdown pre,
+.structured-ui__markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.structured-ui__markdown pre {
+  max-width: 100%;
+  overflow: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-s);
+  background: var(--surface-secondary);
+  white-space: pre;
+}
+
+.structured-ui__markdown :not(pre) > code {
+  border-radius: var(--radius-xs);
+  background: var(--surface-secondary);
+  padding: 0.08rem 0.3rem;
+}
+
+.structured-ui__markdown a,
+.structured-ui__inline-markdown a,
+.structured-ui__sources a,
+.structured-ui__image figcaption a {
+  color: var(--info-color);
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
+.structured-ui__sources {
+  display: grid;
+  gap: var(--space-2);
+  border-top: 1px solid var(--border-default);
+  padding-top: var(--space-3);
+}
+
+.structured-ui__sources ol {
+  display: grid;
+  gap: var(--space-2);
+  list-style: decimal;
+  padding-inline-start: 1.4rem;
+}
+
+.structured-ui__raw-markup,
+.structured-ui__image-alt {
+  white-space: pre-wrap;
+}
+
+.structured-ui__markdown-checkbox {
+  margin-inline-end: var(--space-1);
+}
+
+.structured-ui__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.structured-ui__row > .structured-ui__layout-child {
+  flex: 1 1 14rem;
+}
+
+.structured-ui__column,
+.structured-ui__grid {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.structured-ui__grid {
+  grid-template-columns: repeat(var(--structured-grid-columns, 2), minmax(0, 1fr));
+}
+
+.structured-ui__card,
+.structured-ui__tab-panel,
+.structured-ui__step-content,
+.structured-ui__diagram,
+.structured-ui__timeline-content {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-m);
+  background: var(--surface-secondary);
+  padding: var(--space-4);
+}
+
+.structured-ui__card,
+.structured-ui__tab-panel,
+.structured-ui__step-content {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.structured-ui__tabs,
+.structured-ui__steps,
+.structured-ui__timeline,
+.structured-ui__diagram {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.structured-ui__tab-list {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border-default);
+  padding-bottom: var(--space-1);
+}
+
+.structured-ui__tab,
+.structured-ui__step-actions button,
+.structured-ui__action-button {
+  display: inline-flex;
+  min-height: var(--tap-target-min);
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-s);
+  background: var(--surface-primary);
+  color: var(--text-dark);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.25;
+  padding: var(--space-2) var(--space-3);
+  text-align: center;
+}
+
+.structured-ui__tab.is-active {
+  border-color: var(--primary-dark);
+  background: var(--primary-dark);
+  color: var(--text-light);
+}
+
+.structured-ui__step-heading,
+.structured-ui__step-actions,
+.structured-ui__slider-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.structured-ui__step-heading > :last-child,
+.structured-ui__field output {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.structured-ui__steps progress {
+  width: 100%;
+  accent-color: var(--primary-dark);
+}
+
+.structured-ui__step-actions button:disabled,
+.structured-ui__action-button:disabled {
+  cursor: not-allowed;
+  color: var(--text-secondary);
+}
+
+.structured-ui__timeline ol {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+  padding: 0;
+}
+
+.structured-ui__timeline li {
+  border-inline-start: 2px solid var(--border-default);
+  display: grid;
+  gap: var(--space-2);
+  padding-inline-start: var(--space-3);
+}
+
+.structured-ui__timeline-label {
+  font-weight: 700;
+}
+
+.structured-ui__diagram-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: var(--space-2);
+  list-style: none;
+  padding: 0;
+}
+
+.structured-ui__diagram-node {
+  display: block;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-s);
+  background: var(--surface-primary);
+  padding: var(--space-3);
+  text-align: center;
+}
+
+.structured-ui__diagram-edges {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  padding: 0;
+}
+
+.structured-ui__diagram-edges li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.structured-ui__diagram-edges small {
+  color: var(--text-secondary);
+}
+
+.structured-ui__diagram-arrow {
+  color: var(--text-secondary);
+}
+
+.structured-ui__field {
+  display: grid;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+
+.structured-ui__field--checkbox {
+  min-height: var(--tap-target-min);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  cursor: pointer;
+}
+
+.structured-ui__field input:not([type="checkbox"]):not([type="range"]),
+.structured-ui__field select,
+.structured-ui__field textarea {
+  width: 100%;
+  min-height: var(--tap-target-min);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-s);
+  background: var(--surface-primary);
+  color: var(--text-dark);
+  font: inherit;
+  font-weight: 400;
+  padding: var(--space-2) var(--space-3);
+}
+
+.structured-ui__field textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.structured-ui__field input[type="checkbox"] {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: var(--primary-dark);
+}
+
+.structured-ui__field input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--primary-dark);
+}
+
+.structured-ui__action-button {
+  justify-self: start;
+  border-color: var(--primary-dark);
+  background: var(--primary-dark);
+  color: var(--text-light);
+}
+
+.structured-ui :where(button, input, select, textarea, a):focus-visible {
+  outline: 3px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.structured-ui__choice .interactive-buttons-container {
+  margin: 0;
+}
+
+.structured-ui__table-scroll,
+.structured-ui__chart-viewport {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.structured-ui__table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: start;
+}
+
+.structured-ui__table :where(caption, th, td) {
+  border: 1px solid var(--border-default);
+  padding: var(--space-2) var(--space-3);
+  vertical-align: top;
+}
+
+.structured-ui__table caption {
+  border-bottom: 0;
+  font-weight: 700;
+  text-align: start;
+}
+
+.structured-ui__table th {
+  background: var(--surface-secondary);
+  font-weight: 700;
+}
+
+.structured-ui__table td {
+  background: var(--surface-primary);
+}
+
+.structured-ui__chart {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 100%;
+}
+
+.structured-ui__chart figcaption {
+  font-weight: 700;
+}
+
+.structured-ui__chart-svg {
+  display: block;
+  width: 100%;
+  min-width: 28rem;
+  height: auto;
+  overflow: visible;
+}
+
+.structured-ui__chart-axis line {
+  stroke: var(--border-default);
+  stroke-width: 1;
+}
+
+.structured-ui__chart-axis text,
+.structured-ui__chart-x-label,
+.structured-ui__chart-svg--pie text {
+  fill: var(--text-secondary);
+  font-family: var(--font-app-sans);
+  font-size: 11px;
+}
+
+.structured-ui__chart-svg polyline {
+  fill: none;
+  stroke: var(--structured-series-color, var(--primary-color));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.structured-ui__chart-svg rect {
+  fill: var(--structured-series-color, var(--primary-color));
+}
+
+.structured-ui__chart-svg--pie path {
+  fill: var(--structured-series-color, var(--primary-color));
+  stroke: var(--surface-primary);
+  stroke-width: 2;
+}
+
+.structured-ui__chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  list-style: none;
+  padding: 0;
+}
+
+.structured-ui__chart-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.structured-ui__chart-swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  flex: 0 0 auto;
+  border-radius: var(--radius-full);
+  background: var(--structured-series-color, var(--primary-color));
+}
+
+.structured-ui__chart-empty,
+.structured-ui__image-missing,
+.structured-ui__fallback {
+  color: var(--text-secondary);
+}
+
+.structured-ui__chart-data {
+  display: none;
+}
+
+.structured-ui__image {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.structured-ui__image img {
+  display: block;
+  max-width: 100%;
+  max-height: 28rem;
+  object-fit: contain;
+  border-radius: var(--radius-s);
+}
+
+.structured-ui__image figcaption {
+  font-size: var(--text-sm);
+}
+
+.structured-ui__divider,
+.structured-ui__markdown hr {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--border-default);
+}
+
+@media (max-width: 640px) {
+  .structured-ui__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .structured-ui__card,
+  .structured-ui__tab-panel,
+  .structured-ui__step-content,
+  .structured-ui__diagram,
+  .structured-ui__timeline-content {
+    padding: var(--space-3);
+  }
+
+  .structured-ui__chart-svg {
+    min-width: 25rem;
+  }
+}

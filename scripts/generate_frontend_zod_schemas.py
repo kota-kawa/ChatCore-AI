@@ -108,12 +108,14 @@ from services.response_models import (  # noqa: E402
     UserSkillMutationApiResponse,
     UserSkillsApiResponse,
 )
+from services.structured_ui_models import StructuredUiV1  # noqa: E402
 
 FRONTEND_GENERATED_DIR = REPO_ROOT / "frontend" / "types" / "generated"
 GENERATED_FILE = FRONTEND_GENERATED_DIR / "api_schemas.ts"
 
 
 MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
+    ("StructuredUiV1", StructuredUiV1),
     # リクエストの正本はバックエンドのrequest_models。
     # Request payloads (source of truth: services/request_models.py)
     ("EmailRequest", EmailRequest),

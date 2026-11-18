@@ -1,32 +1,32 @@
-// AI が出す選択ボタン（はい/いいえ・単一選択・複数選択）。選んだ内容を次の発話として送る。通常チャットと共有チャットで使われる。
-// Choice buttons the AI can present (yes/no, single, multiple select) that send the pick as the next message; used by the chat and the shared chat.
+// AI が出す選択ボタン（はい/いいえ・単一選択・複数選択）。選んだ内容を質問と一緒に入力欄へ反映する。通常チャットと共有チャットで使われる。
+// Choice buttons the AI can present (yes/no, single, multiple select) that add the pick and question to the composer; used by the chat and shared chat.
 import { memo, useCallback, useId, useMemo, useState } from "react";
 
 import { useTranslation } from "../../contexts/locale_context";
 import type { InteractiveButtonsV1 } from "../../lib/chat_page/types";
 
-// 選択ボタンのprops型定義。onSubmit が無いときは共有表示などの読み取り専用として描く。
-// Props of the choice buttons. Without onSubmit they render read-only, as in a shared view.
+// 選択ボタンのprops型定義。onCompose が無いときは共有表示などの読み取り専用として描く。
+// Props of the choice buttons. Without onCompose they render read-only, as in a shared view.
 type Props = {
   buttons: InteractiveButtonsV1;
-  // 選んだ選択肢を次の発話として送る / Sends the chosen option(s) as the next message
-  onSubmit?: (text: string) => void;
+  // 質問と選んだ選択肢を入力欄へ反映する / Adds the question and chosen option(s) to the composer
+  onCompose?: (text: string) => void;
   // 回答済みや生成中など、今は答えられない状態 / The question cannot be answered right now
   disabled?: boolean;
 };
 
-// チャット標準の選択ボタン。Yes/No と単一選択は押した選択肢をそのまま、複数選択は
-// チェックした選択肢をまとめて1つの発話として送る。0件では送れない。
-// Standard chat choice buttons. Yes/no and single choice send the pressed option as is;
-// multiple select sends the ticked options together as one message and needs at least one.
-function InteractiveButtonsComponent({ buttons, onSubmit, disabled = false }: Props) {
+// チャット標準の選択ボタン。Yes/No と単一選択は押した選択肢を、複数選択は
+// チェックした選択肢を提示順でまとめ、質問と一緒に入力欄へ反映する。0件では反映しない。
+// Standard chat choice buttons. Yes/no and single choice compose the pressed option;
+// multiple select composes the ticked options in presented order and needs at least one.
+function InteractiveButtonsComponent({ buttons, onCompose, disabled = false }: Props) {
   const { t } = useTranslation();
   const questionId = useId();
   // 押してから次の発話が一覧に載るまでの二重送信を防ぐ
   // Blocks a second send between the press and the next message reaching the list
   const [submitted, setSubmitted] = useState(false);
   const [checkedIndexes, setCheckedIndexes] = useState<ReadonlySet<number>>(() => new Set());
-  const readOnly = !onSubmit;
+  const readOnly = !onCompose;
   const inactive = readOnly || disabled || submitted;
   const isMultipleSelect = buttons.type === "multiple_select";
   const options = useMemo(
@@ -36,11 +36,11 @@ function InteractiveButtonsComponent({ buttons, onSubmit, disabled = false }: Pr
 
   const send = useCallback(
     (text: string) => {
-      if (inactive || !onSubmit || !text) return;
+      if (inactive || !onCompose || !text) return;
       setSubmitted(true);
-      onSubmit(text);
+      onCompose(`${buttons.question.trim()}\n${text}`);
     },
-    [inactive, onSubmit],
+    [buttons.question, inactive, onCompose],
   );
 
   const toggleOption = useCallback((index: number) => {

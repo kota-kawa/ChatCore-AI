@@ -8,7 +8,7 @@ import { normalizeMessagePartsForDisplay } from "./message_parts_display";
 // Only this exact fence can start the generative-UI loading state. Legacy aliases
 // are still hidden from streamed prose below so malformed model output does not
 // expose its raw payload, but they are never treated as a UI being generated.
-const ARTIFACT_FENCE_NAME = "chatcore-artifact";
+const ARTIFACT_FENCE_NAME = "(?:chatcore-artifact|chatcore-ui)";
 const PROBABLE_ARTIFACT_FENCE_NAMES = [
   "chatcore[\\s_-]*artifact",
   "generative[\\s_-]*ui",
@@ -26,7 +26,7 @@ const CHOICE_BUTTONS_FENCE_NAMES = [
   "interactive[\\s_-]*buttons",
 ].join("|");
 const CHOICE_BUTTONS_TAG_NAME = "chatcore_buttons?";
-const HIDDEN_FENCE_NAMES = `${PROBABLE_ARTIFACT_FENCE_NAMES}|${CHOICE_BUTTONS_FENCE_NAMES}`;
+const HIDDEN_FENCE_NAMES = `${PROBABLE_ARTIFACT_FENCE_NAMES}|chatcore[\\s_-]*ui|${CHOICE_BUTTONS_FENCE_NAMES}`;
 const COMPLETE_HIDDEN_FENCE_RE = new RegExp(
   "```[ \\t]*(?:" + HIDDEN_FENCE_NAMES + ")\\b[^\\n]*\\n[\\s\\S]*?```",
   "gi",
@@ -253,11 +253,11 @@ function stripChoiceTagsForStreaming(text: string): string {
 }
 const ARTIFACT_FENCE_START_RE = new RegExp(
   "```[ \\t]*" + ARTIFACT_FENCE_NAME + "(?:\\s+json)?[ \\t]*(?:\\n|$)",
-  "i",
+  "gi",
 );
 const PROBABLE_FENCE_START_RE = new RegExp(
   "```[ \\t]*(?:" + PROBABLE_ARTIFACT_FENCE_NAMES + ")\\b[^\\n]*(?:\\n|$)",
-  "i",
+  "gi",
 );
 function findLastMatchIndexOutsideMarkdownCode(re: RegExp, text: string): number {
   re.lastIndex = 0;
@@ -347,7 +347,7 @@ export function sanitizeTextPartsForStreaming(parts: ChatMessagePart[] | undefin
 // Detect whether the streamed text contains the start of a generative UI fence
 export function hasGenerativeUiFenceStart(text: string) {
   const normalized = String(text || "").replace(/\r\n?/g, "\n");
-  return ARTIFACT_FENCE_START_RE.test(normalized);
+  return findLastMatchIndexOutsideMarkdownCode(ARTIFACT_FENCE_START_RE, normalized) >= 0;
 }
 
 // 近似フェンス（```generative-ui など）は実行できないが、本文からは隠している。
@@ -358,8 +358,8 @@ export function hasGenerativeUiFenceStart(text: string) {
 // the final outcome is delivered by artifact_status.
 export function generativeUiFenceKind(text: string): "exact" | "probable" | null {
   const normalized = String(text || "").replace(/\r\n?/g, "\n");
-  if (ARTIFACT_FENCE_START_RE.test(normalized)) return "exact";
-  return PROBABLE_FENCE_START_RE.test(normalized) ? "probable" : null;
+  if (findLastMatchIndexOutsideMarkdownCode(ARTIFACT_FENCE_START_RE, normalized) >= 0) return "exact";
+  return findLastMatchIndexOutsideMarkdownCode(PROBABLE_FENCE_START_RE, normalized) >= 0 ? "probable" : null;
 }
 
 // 生成UIの作成中（フェンスは始まったが、描画可能なパーツがまだ届いていない）かを判定する

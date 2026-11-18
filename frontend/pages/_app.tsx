@@ -26,6 +26,7 @@ import "../public/static/css/pages/chat/setup.css";
 import "../public/static/css/pages/chat/skills.css";
 import "../public/static/css/pages/chat/chat_layout.css";
 import "../public/static/css/pages/chat/chat_messages.css";
+import "../public/static/css/pages/chat/structured_ui.css";
 import "../public/static/css/pages/chat/chat_markdown.css";
 import "../public/static/css/pages/chat/chat_input.css";
 import "../public/static/css/pages/chat/tasks_order/tasks_order.css";

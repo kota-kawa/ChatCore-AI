@@ -206,9 +206,36 @@ LLM へ渡すツール定義は `services/llm_tool_schema.py` がプロバイダ
 
 `frontend/lib/chat_page/api_contract.ts` は、レガシー応答や生成 UI パーツを画面で安全に扱うための正規化層です。API の構造を変更する場合は、バックエンドモデル、生成スキーマ、必要な正規化処理を同時に確認します。
 
+### ネイティブ生成UIとArtifact
+
+`services/structured_ui_models.py` が宣言的UI v1の契約を持ち、ノード・状態・式は安定IDで参照します。任意HTML/JavaScriptは受け付けず、Frontendの部品レジストリと上限付き式評価器で描画・更新します。複雑なシミュレーションや3Dは従来のsandbox Artifactへ渡します。Skill選択の1回の呼び出しで形式と混合を決め、旧NONE/2D/3Dの読み取りも残します。
+
+```mermaid
+flowchart LR
+    Model[LLM response] --> Parse[Incremental block parser]
+    Parse --> Validate[Pydantic validation]
+    Validate --> Parts[Ordered message_parts]
+    Parts --> Store[(Existing message storage)]
+    Parts --> SSE[Generation-scoped SSE / Redis replay]
+    SSE --> Delivery[HTTP capability projection]
+    Delivery --> Native[React registry and bounded expressions]
+    Delivery --> Sandbox[Existing iframe and CSP]
+    Delivery --> Text[Text fallback]
+    Native --> Composer[User prepares and sends a chat message]
+    Composer --> Agent[Existing Agent and approval cards]
+```
+
+`services/structured_ui.py` は未完成ブロックを本文から隠し、完成ブロックだけを検証します。`services/structured_ui_response.py` が本文・新UI・既存Artifact・選択ボタンを生成位置で合成します。判断ステップにツール呼び出しが含まれないことが確定した後、完成ブロックから順にSSEの`response_parts_updated`で配信します。生成IDとイベント連番を使い、終了時に一度だけ保存します。引用は各本文パーツとUIの表示文字列ごとに解決し、本文全体を各パーツへ繰り返し入れません。宣言的UIは検索画像と共存し、Artifactがある場合の既存画像排他は維持します。
+
+HTTPクライアントは`X-ChatCore-UI-Version: 1`で対応を通知します。通知なし・未対応値の場合はJSONとSSEの新UIをfallbackテキストへ変換し、保存内容やRedisイベントは書き換えません。JSON・終了イベントの`assistant_message_id`で保存後の回答を識別します。
+
+ローカル入力・計算は通信やLLMを呼びません。UIからの会話操作と既存選択ボタンは入力欄の末尾へ質問・回答を反映し、利用者が確認して送信します。書き込みは既存Agentの認可と承認カードだけが担います。明示的なテキスト限定では標準ボタンも文章化しますが、生成UI設定OFFだけでは標準ボタンを抑制しません。
+
+選択・タブだけを同じ端末・利用者・通常ルーム・回答・定義の範囲で復元し、自由文・数値・スライダー値は保存しません。一時ルーム・ゲスト・共有画面は操作状態を永続化せず、共有先に元の入力状態を渡しません。共有画面では初期値からのローカル操作だけを許します。表示時間と操作件数は内容を含めず集計し、次の通常送信に添えた`ui_metrics`を検証して記録します。判断理由は[ADR 0022](docs/decisions/0022-native-and-sandbox-generated-ui.md)にあります。
+
 ### ターンごとの Skill 選択
 
-`services/user_skills.py` が利用者の ON/OFF と経路上の利用可否から候補を作り、`services/chat_skill_selection.py` が回答開始前に選択します。通常送信と再生成は同じ判定を使い、会話モデルへの1回の構造化要求で Skill ID と生成UIモードを決めます。設定が有効であることと今回選ばれたことは別の状態です。選択用の履歴は添付・URL本文の前置前に確保し、外部本文を選択命令へ昇格させません。
+`services/user_skills.py` が利用者の ON/OFF と経路上の利用可否から候補を作り、`services/chat_skill_selection.py` が回答開始前に選択します。通常送信と再生成は同じ判定を使い、会話モデルへの1回の構造化要求で Skill ID と生成UI形式（文章・宣言的UI・2D/3D Artifact・混合）を決めます。設定が有効であることと今回選ばれたことは別の状態です。選択用の履歴は添付・URL本文の前置前に確保し、外部本文を選択命令へ昇格させません。
 
 判定失敗・判断不能・候補外ID・入力超過では利用可能な全候補へ戻します。選択はターン中固定し、メモの指示とツール、生成UIの指示と契約を一緒に組み立てます。動的な指示と契約は履歴の後ろ、最新発話の前に置きます。利用制限の確認後に判定し、使用量は既存の計測へ含めます。選択のメタデータは本文を含まない構造化ログで確認できます。判断と評価条件は [ADR 0015](docs/decisions/0015-preselect-enabled-skills.md) にあります。
 

@@ -1,10 +1,10 @@
 # アシスタントメッセージのパーツ（テキスト／生成UI／選択ボタン／Web検索画像）の表示順を決める。
-# 生成UIとWeb検索画像は1ターン内で排他であり、画像は本文パーツの指定位置に挿入する。
+# sandbox ArtifactとWeb検索画像は1ターン内で排他。宣言的UIは画像と共存する。
 # 選択ボタンは生成UIではないため、この排他に加わらず、どちらとも同じ返信に並ぶ。
 # 旧形式でトレース前に保存された画像だけは「回答までのステップ」の直下へ移す。
 # Owns the display ordering contract for assistant message parts (text /
-# generated UI / choice buttons / web-search images). A generated UI and web-search
-# images are mutually exclusive within one turn. Choice buttons are not a generated UI,
+# generated UI / choice buttons / web-search images). Sandbox Artifacts and web-search
+# images are mutually exclusive; native UI coexists with images. Choice buttons are not generated UI,
 # so they take no part in that exclusivity and can sit beside either. Inline images
 # preserve their authored position; legacy images before the answer trace move below it.
 
@@ -13,10 +13,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
-# 生成UIとして同じ視覚スロットを占めるパーツ種別。選択ボタンはチャット標準の部品なので含めない。
-# Part types that occupy the generated-UI visual slot. Choice buttons are a standard chat part
-# and are not among them.
-GENERATIVE_UI_PART_TYPES = frozenset({"sandbox_artifact"})
+# 生成UIの存在判定と、画像との排他を担当するArtifactの集合を区別する。
+# Keep Artifact image exclusivity separate from the set of all generated UI part types.
+ARTIFACT_PART_TYPES = frozenset({"sandbox_artifact"})
+GENERATIVE_UI_PART_TYPES = frozenset({"sandbox_artifact", "structured_ui"})
 WEB_SEARCH_IMAGE_PART_TYPE = "web_search_image"
 TEXT_PART_TYPE = "text"
 MAX_WEB_SEARCH_IMAGES_PER_REPLY = 5
@@ -61,18 +61,19 @@ def split_answer_trace_block(text: str) -> tuple[str, str]:
 def apply_visual_part_contract(parts: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     """視覚パーツの排他規則を適用し、書かれた順序は保つ。
 
-    生成 UI があれば Web 検索画像は落とす。生成 UI が無いときは、画像パーツを前後のテキストの間に残し、先頭の5枚だけ残す。
+    Sandbox Artifact があれば Web 検索画像は落とす。宣言的 UI は画像と共存する。
+    Artifact が無いときは画像を前後のテキストの間に残し、先頭の5枚だけ残す。
     トレースを考慮した配置は、後で :func:`normalize_message_parts_for_display` が行う。
 
     Enforce visual exclusivity and keep the authored part order.
 
-    A generated UI wins over web-search images. Without a generated UI, inline
+    A sandbox Artifact wins over web-search images; native UI coexists with them. Without a generated UI, inline
     image parts stay between their surrounding text parts, and only the first five
     images are retained. The trace-aware placement is applied later by
     :func:`normalize_message_parts_for_display`.
     """
     normalized = [part for part in (parts or []) if isinstance(part, dict)]
-    if any(part.get("type") in GENERATIVE_UI_PART_TYPES for part in normalized):
+    if any(part.get("type") in ARTIFACT_PART_TYPES for part in normalized):
         return [part for part in normalized if part.get("type") != WEB_SEARCH_IMAGE_PART_TYPE]
 
     contracted: list[dict[str, Any]] = []

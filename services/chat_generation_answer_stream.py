@@ -14,14 +14,17 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any
 
-from services.generative_ui import normalize_response_with_artifacts
+from services.generative_ui import is_text_only_request, normalize_response_with_artifacts
 from services.generative_ui_images import attach_web_search_images_to_artifacts
 from services.message_parts_display import (
-    GENERATIVE_UI_PART_TYPES,
     MAX_WEB_SEARCH_IMAGES_PER_REPLY,
 )
+from services.structured_ui import StructuredUiStream
+from services.structured_ui_citations import resolve_message_part_citations
+from services.structured_ui_response import normalize_ui_stream
 
 from .chat_answer_continuation import stream_final_answer_with_recovery
 from .chat_generation_job_base import ChatGenerationJobBase
@@ -37,6 +40,7 @@ from .web_search import (
     strip_web_search_citation_html,
 )
 from .web_search_images import (
+    build_mixed_parts_with_images,
     build_web_search_image_parts,
     build_web_search_image_parts_at_offsets,
     choose_web_search_images,
@@ -52,12 +56,24 @@ logger = logging.getLogger(__name__)
 
 # ストリーミング中の応答テキストから Artifact 等の UI パーツ情報をパースして更新用ペイロードを組み立てる
 # Parse UI parts like Artifacts from streaming response text and build the update payload
-def _build_streaming_parts_update(raw_text: str) -> dict[str, Any] | None:
-    if "chatcore-artifact" not in raw_text and "chatcore-buttons" not in raw_text:
+def _build_streaming_parts_update(
+    raw_text: str, native_stream: StructuredUiStream | None = None, *,
+    explicit_ui_opt_out: bool = False, explicit_text_only: bool = False,
+) -> dict[str, Any] | None:
+    if native_stream is not None and (native_stream.seen or native_stream.in_block):
+        normalized_response = normalize_ui_stream(
+            native_stream, explicit_ui_opt_out=explicit_ui_opt_out, explicit_text_only=explicit_text_only,
+        )
+    elif not any(marker in raw_text for marker in ("chatcore-artifact", "chatcore-buttons", "chatcore-ui")):
         return None
 
-    normalized_response = normalize_response_with_artifacts(raw_text, allow_fallback=False)
-    if normalized_response.validation_errors or not normalized_response.parts:
+    else:
+        normalized_response = normalize_response_with_artifacts(
+            raw_text, allow_fallback=False, explicit_ui_opt_out=explicit_ui_opt_out, explicit_text_only=explicit_text_only,
+        )
+    if not normalized_response.parts:
+        return None
+    if normalized_response.validation_errors and not any(part.get("type") == "structured_ui" for part in normalized_response.parts):
         return None
 
     if not any(part.get("type") != "text" for part in normalized_response.parts):
@@ -77,7 +93,7 @@ def _build_streaming_parts_update(raw_text: str) -> dict[str, Any] | None:
 # with only the prose and the buttons would hide the images revealed so far until completion, so the
 # revealed images return to their offsets. Those offsets index the streamed display text (chip markup
 # already stripped), so the layout is rebuilt from that text minus the button fence, not from the raw
-# chunks. An update with a generated UI stays image-free, as generated UI and images are exclusive.
+# chunks. An update with an Artifact stays image-free, while native UI preserves revealed images.
 def _with_revealed_stream_images(
     parts_update: dict[str, Any],
     streamed_display_text: str,
@@ -85,9 +101,14 @@ def _with_revealed_stream_images(
     revealed_image_offsets: list[int],
 ) -> dict[str, Any]:
     if not revealed_image_parts or any(
-        part.get("type") in GENERATIVE_UI_PART_TYPES for part in parts_update["parts"]
+        part.get("type") == "sandbox_artifact" for part in parts_update["parts"]
     ):
         return parts_update
+    if any(part.get("type") == "structured_ui" for part in parts_update["parts"]):
+        return {
+            **parts_update,
+            "parts": build_mixed_parts_with_images(parts_update["parts"], revealed_image_parts, revealed_image_offsets),
+        }
     displayed_update = _build_streaming_parts_update(streamed_display_text)
     if displayed_update is None:
         return parts_update
@@ -162,7 +183,10 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
     def _publish_stream_text_with_images(self, state: ChatTurnRunState, text: str) -> None:
         pending_text = text
         while True:
-            raw_parts_update = _build_streaming_parts_update("".join(state.chunks))
+            raw_parts_update = _build_streaming_parts_update(
+                "".join(state.chunks), state.structured_ui_stream, explicit_ui_opt_out=self._explicit_ui_opt_out,
+                explicit_text_only=is_text_only_request(state.latest_user_message),
+            )
             if raw_parts_update is not None:
                 if pending_text:
                     self._publish_stream_chunk(state, pending_text)
@@ -257,9 +281,10 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
             # 表示前に取り除く。正規のチップはこの後の解決処理だけが描画する。
             # Chip markup echoed by the model is removed before display whether or
             # not this turn has evidence; only the resolution below renders chips.
+            visible_chunk = state.structured_ui_stream.feed(chunk)
             complete_stream_text, state.streaming_citation_buffer = (
                 split_web_search_citation_stream_text(
-                    f"{state.streaming_citation_buffer}{chunk}"
+                    f"{state.streaming_citation_buffer}{visible_chunk}"
                 )
             )
             complete_stream_text = strip_web_search_citation_html(
@@ -274,7 +299,10 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
                 ).text
             if stream_text:
                 self._publish_stream_text_with_images(state, stream_text)
-            streaming_parts_update = _build_streaming_parts_update("".join(chunks))
+            streaming_parts_update = _build_streaming_parts_update(
+                "".join(chunks), state.structured_ui_stream, explicit_ui_opt_out=self._explicit_ui_opt_out,
+                explicit_text_only=is_text_only_request(state.latest_user_message),
+            )
             if streaming_parts_update is not None:
                 if streaming_evidence is not None:
                     parts_resolution = resolve_web_search_citations(
@@ -285,15 +313,10 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
                     streaming_parts_update = {
                         **streaming_parts_update,
                         "response": resolved_parts_text,
-                        "parts": [
-                            (
-                                {**part, "text": resolved_parts_text}
-                                if part.get("type") == "text"
-                                else part
-                            )
-                            for part in streaming_parts_update["parts"]
-                        ],
+                        "parts": resolve_message_part_citations(streaming_parts_update["parts"], streaming_evidence),
                     }
+                elif any(part.get("type") == "structured_ui" for part in streaming_parts_update["parts"]):
+                    streaming_parts_update["parts"] = resolve_message_part_citations(streaming_parts_update["parts"], None)
                 # 生成UIが番号で参照した検索画像を、ストリーム中の表示でも読み込めるようにする。
                 # Let a streamed generated UI load the search images it references by number.
                 streaming_parts_update = {
@@ -317,6 +340,10 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
                 )
                 if streaming_parts_signature != state.last_streaming_parts_signature:
                     state.last_streaming_parts_signature = streaming_parts_signature
+                    if self._telemetry.first_visible_ui_ms is None and any(
+                        part.get("type") == "structured_ui" for part in streaming_parts_update["parts"]
+                    ):
+                        self._telemetry.first_visible_ui_ms = round((time.monotonic() - self.started_at) * 1000)
                     self._publish("response_parts_updated", streaming_parts_update)
 
     # 継続生成の1チャンクを、繰り返し届く内部状態の封筒を除いて配信する。

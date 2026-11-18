@@ -96,6 +96,7 @@ from services.selected_reference_context import (
     augment_messages_with_selected_references_async,
 )
 from services.selected_reference_sources import DeduplicatedLookup, build_selected_reference_searchers
+from services.structured_ui_citations import resolve_message_part_citations
 from services.usage_limits import usage_limit_message
 from services.user_skills import ChatSkillsContext, build_chat_skills_context
 from services.web_search import (
@@ -233,6 +234,7 @@ class _ChatPostTurn:
     personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None
     shared_prompt_search: Callable[[str], dict[str, Any]] | None = None
     selected_reference_trace: list[SelectedReferenceLookupTrace] = field(default_factory=list)
+    ui_metrics: list[dict[str, Any]] = field(default_factory=list)
     ui_mode: GenerativeUiMode | None = None
     # 判定モデルの NONE と、ユーザー自身の「UIは不要」を別の状態として持つ。
     # 前者で検証済みArtifactを捨てると、判定の偽陰性がそのまま失敗になる。
@@ -323,6 +325,8 @@ class ChatPostUseCase:
             if early_response is not None:
                 return early_response
 
+        if turn.authenticated and turn.room_mode == "normal" and turn.ui_metrics:
+            self.deps.logger.info("Client native UI observations", extra={"event": "structured_ui_metrics", "ui_metrics": turn.ui_metrics})
         await self._build_llm_history(turn)
         await self._load_prompt_context(turn)
         await self._load_prior_web_search_results(turn)
@@ -373,6 +377,7 @@ class ChatPostUseCase:
         turn.use_personal_knowledge = bool(payload.use_personal_knowledge)
         turn.use_shared_prompts = bool(payload.use_shared_prompts)
         turn.generation_id = payload.generation_id
+        turn.ui_metrics = [item.model_dump() for item in payload.ui_metrics]
 
         # モデル名の検証
         # Validate the requested model name
@@ -1205,7 +1210,7 @@ class ChatPostUseCase:
             # 初回応答を保存できた後にだけタイトルを自動生成する。
             # ユーザーが先に改名していた場合は conditional rename が更新を拒否する。
             if not should_auto_title_room:
-                return None
+                return {"assistant_message_id": assistant_message_id}
             generated_title = _run_async_callback(
                 lambda: self._generate_and_rename_room(
                     chat_room_id=chat_room_id,
@@ -1215,8 +1220,8 @@ class ChatPostUseCase:
                 )
             )
             if generated_title:
-                return {"room_title": generated_title}
-            return None
+                return {"room_title": generated_title, "assistant_message_id": assistant_message_id}
+            return {"assistant_message_id": assistant_message_id}
 
         def on_finished() -> None:
             """ストリーミング完了後に一度だけ呼ばれ、ルーム要約を作り直す。
@@ -1279,6 +1284,8 @@ class ChatPostUseCase:
         await self._rebuild_room_summary_after_reply(turn)
 
         response_payload: dict[str, Any] = {"response": turn.bot_reply}
+        if turn.saved_assistant_message_id is not None:
+            response_payload["assistant_message_id"] = turn.saved_assistant_message_id
         if turn.message_parts:
             response_payload["parts"] = turn.message_parts
         if turn.artifact_status:
@@ -1428,14 +1435,7 @@ class ChatPostUseCase:
             )
         turn.bot_reply = citation_resolution.text
         if turn.message_parts:
-            turn.message_parts = [
-                (
-                    {**part, "text": turn.bot_reply}
-                    if part.get("type") == "text"
-                    else part
-                )
-                for part in turn.message_parts
-            ]
+            turn.message_parts = resolve_message_part_citations(turn.message_parts, citation_evidence)
 
     async def _reject_empty_reply(self, turn: _ChatPostTurn) -> Response | None:
         """空の応答を保存せずエラーとして返します / Reject an empty reply instead of persisting it."""

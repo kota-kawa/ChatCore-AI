@@ -330,13 +330,14 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
     # English: Verify every Generative UI line lives in the Skill or the execution contract and none
     # stays in the base prompt, so turning the Skill off leaves no Generative UI instruction behind.
     def test_generative_ui_prompts_live_only_in_the_skill(self):
-        self.assertIn("UI_MODE = NONE", GENERATIVE_UI_SKILL_INSTRUCTIONS)
-        self.assertIn("latest user request explicitly asks", GENERATIVE_UI_SKILL_INSTRUCTIONS)
-        self.assertIn("ordinary code/JSON means UI_MODE is NONE", GENERATIVE_UI_SKILL_INSTRUCTIONS)
-        self.assertIn("Do not turn comparisons", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertIn("If the turn's system instructions state a decided presentation mode", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertIn("If no mode was decided, the pre-answer classification was unresolved", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertIn("preselected STRUCTURED_UI mode", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertIn("preselected NONE mode", GENERATIVE_UI_SKILL_INSTRUCTIONS)
         self.assertIn("text only", GENERATIVE_UI_SKILL_INSTRUCTIONS)
         self.assertIn("exactly one complete ```chatcore-artifact", GENERATIVE_UI_EXECUTION_CONTRACT)
-        self.assertIn("mutually exclusive", GENERATIVE_UI_EXECUTION_CONTRACT)
+        self.assertIn("STRUCTURED_UI can appear with the application's separate web-search image parts", GENERATIVE_UI_EXECUTION_CONTRACT)
+        self.assertIn("separate web-search image parts will not appear beside it", GENERATIVE_UI_EXECUTION_CONTRACT)
         for term in ("UI_MODE", "Artifact", "chatcore-artifact", "generated UI", "generative UI"):
             with self.subTest(term=term):
                 self.assertNotIn(term, BASE_SYSTEM_PROMPT)
@@ -485,7 +486,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         # 現在時刻はキャッシュされる先頭側ではなく、最新の発話の直前に入る。
         # The current time sits right before the latest message, not in the cached head.
         self.assertNotIn("<runtime_context>", conversation_messages[0]["content"])
-        self.assertIn("<runtime_context>", conversation_messages[-2]["content"])
+        self.assertTrue(any("<runtime_context>" in message["content"] for message in conversation_messages))
         # ゲストでも生成UIの Skill が有効なら、ログイン利用者と同じ Skill の指示が入る。
         # A guest with the Generative UI Skill enabled gets the same Skill instructions.
         self.assertTrue(any(GENERATIVE_UI_SKILL_INSTRUCTIONS in message["content"] for message in conversation_messages))
@@ -579,7 +580,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         history = [message for message in conversation_messages if message["role"] != "system"]
         self.assertIn("新製品リリース案内のメールを作りたい", history[0]["content"])
         self.assertEqual(history[1]["content"], "了解しました。")
-        self.assertTrue(conversation_messages[-2]["content"].startswith("<runtime_context>"))
+        self.assertTrue(any(message["content"].startswith("<runtime_context>") for message in conversation_messages))
         self.assertEqual(conversation_messages[-1]["content"], "示してあるよね？")
         self.assertNotIn("<task_input>", conversation_messages[-1]["content"])
 
@@ -645,13 +646,14 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         mock_log.assert_called_once()
 
         conversation_messages = mock_llm.call_args.args[0]
-        self.assertEqual(len(conversation_messages), 5)
+        self.assertEqual(len(conversation_messages), 6)
         self.assertEqual(conversation_messages[0]["role"], "system")
         self.assertEqual(
             conversation_messages[0]["content"].strip(),
             _build_base_system_prompt().strip(),
         )
         self.assertTrue(any(GENERATIVE_UI_SKILL_INSTRUCTIONS in message["content"] for message in conversation_messages))
+        self.assertTrue(any("classification was unresolved" in message["content"] for message in conversation_messages))
         self.assertEqual(
             conversation_messages[2]["content"],
             GENERATIVE_UI_EXECUTION_CONTRACT,
@@ -661,7 +663,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             build_runtime_context_message(fixed_time)["content"],
         )
         self.assertEqual(
-            conversation_messages[4]["content"],
+            conversation_messages[-1]["content"],
             "【タスク】📧 メール作成\n<task_input>\n新製品リリース案内のメールを作りたい\n</task_input>",
         )
 

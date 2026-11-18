@@ -54,6 +54,7 @@ from services.runtime_config import (  # noqa: E402
 )
 from services.security_headers import SecurityHeadersMiddleware  # noqa: E402
 from services.session_middleware import PermanentSessionMiddleware  # noqa: E402
+from services.structured_ui_delivery import StructuredUiDeliveryMiddleware  # noqa: E402
 from services.usage_subject import UsageSubjectMiddleware  # noqa: E402
 from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, jsonify  # noqa: E402
 
@@ -285,6 +286,7 @@ app.state.chat_generation_service = ChatGenerationService()
 # 後から追加したものほど外側になる。使用量の計上先はセッションを読むので最も内側に置く。
 # Later registrations wrap earlier ones; the usage subject reads the session, so it goes
 # innermost.
+app.add_middleware(StructuredUiDeliveryMiddleware)
 app.add_middleware(UsageSubjectMiddleware)
 app.add_middleware(
     LocaleMiddleware,

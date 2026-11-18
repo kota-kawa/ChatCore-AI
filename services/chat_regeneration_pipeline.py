@@ -570,12 +570,12 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                 message_parts: list[dict[str, Any]] | None = None,
                 web_search_context: list[dict[str, Any]] | None = None,
                 tool_approval_ids: list[str] | None = None,
-            ) -> None:
+            ) -> dict[str, Any] | None:
                 if tool_approval_ids and save_with_approvals is not None:
                     # 承認カードのある回答は、承認行への回答 ID の結び付けと同じトランザクションで保存する。
                     # A reply with approval cards is saved in the same transaction that ties the
                     # approval rows to it.
-                    _run_async_callback(
+                    saved_id = _run_async_callback(
                         lambda: save_with_approvals(
                             chat_room_id=chat_room_id,
                             user_id=user_id,
@@ -586,8 +586,8 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                             approval_ids=tool_approval_ids,
                         )
                     )
-                    return
-                _run_async_callback(
+                    return {"assistant_message_id": saved_id} if type(saved_id) is int else None
+                saved_id = _run_async_callback(
                     lambda: deps.save_message_to_db(
                         chat_room_id,
                         response,
@@ -599,6 +599,8 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                         web_search_context,
                     )
                 )
+
+                return {"assistant_message_id": saved_id} if type(saved_id) is int else None
 
             # 生成処理完了時にルームの会話要約やメモリを更新する内部終了ハンドラ
             # Internal callback executed upon generation completion to update summary/memory.
@@ -734,6 +736,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     if status_part:
         message_parts = [*(message_parts or [{"type": "text", "text": bot_reply}]), status_part]
 
+    saved_id: int | None = None
     if user_id is not None and room_mode == "normal":
         save_args: list[Any] = [
             chat_room_id,
@@ -744,7 +747,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
         ]
         if message_parts:
             save_args.append(message_parts)
-        await deps.save_message_to_db(*save_args)
+        saved_id = await deps.save_message_to_db(*save_args)
     elif sid is not None:
         append_args: list[Any] = [sid, chat_room_id, "assistant", bot_reply]
         if message_parts:
@@ -755,6 +758,8 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
         )
 
     response_payload: dict[str, Any] = {"response": bot_reply}
+    if type(saved_id) is int:
+        response_payload["assistant_message_id"] = saved_id
     if message_parts:
         response_payload["parts"] = message_parts
     if artifact_status:

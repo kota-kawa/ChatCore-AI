@@ -23,67 +23,69 @@ const MULTIPLE: InteractiveButtonsV1 = {
 };
 
 describe("InteractiveButtons", () => {
-  it("sends the localized yes/no label once and then locks the question", () => {
-    const onSubmit = vi.fn();
-    render(<InteractiveButtons buttons={YES_NO} onSubmit={onSubmit} />);
+  it("composes the localized yes/no label with its question once and then locks the question", () => {
+    const onCompose = vi.fn();
+    render(<InteractiveButtons buttons={YES_NO} onCompose={onCompose} />);
 
     expect(screen.getByRole("group", { name: YES_NO.question })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "はい" }));
     fireEvent.click(screen.getByRole("button", { name: "いいえ" }));
 
-    expect(onSubmit).toHaveBeenCalledTimes(1);
-    expect(onSubmit).toHaveBeenCalledWith("はい");
+    expect(onCompose).toHaveBeenCalledTimes(1);
+    expect(onCompose).toHaveBeenCalledWith(`${YES_NO.question}\nはい`);
     expect(screen.getByRole("button", { name: "はい" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "いいえ" })).toBeDisabled();
   });
 
-  it("sends the pressed option of a single choice as is", () => {
-    const onSubmit = vi.fn();
-    render(<InteractiveButtons buttons={SINGLE} onSubmit={onSubmit} />);
+  it("composes the pressed option of a single choice with its question", () => {
+    const onCompose = vi.fn();
+    render(<InteractiveButtons buttons={SINGLE} onCompose={onCompose} />);
 
     fireEvent.click(screen.getByRole("button", { name: "表" }));
 
-    expect(onSubmit).toHaveBeenCalledWith("表");
+    expect(onCompose).toHaveBeenCalledWith(`${SINGLE.question}\n表`);
   });
 
-  it("sends every ticked option of a multiple select together, in the presented order", () => {
-    const onSubmit = vi.fn();
-    render(<InteractiveButtons buttons={MULTIPLE} onSubmit={onSubmit} />);
-    const submit = screen.getByRole("button", { name: "選択して送信" });
+  it("composes every ticked option once with its question in the presented order", () => {
+    const onCompose = vi.fn();
+    render(<InteractiveButtons buttons={MULTIPLE} onCompose={onCompose} />);
+    const submit = screen.getByRole("button", { name: "入力欄へ反映" });
 
     expect(screen.getByText("当てはまるものをすべて選んでください")).toBeInTheDocument();
     expect(submit).toBeDisabled();
     fireEvent.click(submit);
-    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onCompose).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "リスク" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "概要" }));
     expect(submit).toBeEnabled();
     fireEvent.click(submit);
 
-    expect(onSubmit).toHaveBeenCalledTimes(1);
-    expect(onSubmit).toHaveBeenCalledWith("概要、リスク");
+    expect(onCompose).toHaveBeenCalledTimes(1);
+    expect(onCompose).toHaveBeenCalledWith(`${MULTIPLE.question}\n概要、リスク`);
+    fireEvent.click(submit);
+    expect(onCompose).toHaveBeenCalledTimes(1);
     expect(submit).toBeDisabled();
     expect(screen.getByRole("checkbox", { name: "費用" })).toBeDisabled();
   });
 
-  it("cannot send once every option is unticked again", () => {
-    const onSubmit = vi.fn();
-    render(<InteractiveButtons buttons={MULTIPLE} onSubmit={onSubmit} />);
+  it("cannot compose once every option is unticked again", () => {
+    const onCompose = vi.fn();
+    render(<InteractiveButtons buttons={MULTIPLE} onCompose={onCompose} />);
     const risk = screen.getByRole("checkbox", { name: "リスク" });
 
     fireEvent.click(risk);
     fireEvent.click(risk);
 
-    expect(screen.getByRole("button", { name: "選択して送信" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "入力欄へ反映" })).toBeDisabled();
   });
 
   it("uses the English labels and separator in the English UI", () => {
     const onSubmit = vi.fn();
     render(
       <LocaleProvider initialLocale="en">
-        <InteractiveButtons buttons={MULTIPLE} onSubmit={onSubmit} />
-        <InteractiveButtons buttons={YES_NO} onSubmit={onSubmit} />
+        <InteractiveButtons buttons={MULTIPLE} onCompose={onSubmit} />
+        <InteractiveButtons buttons={YES_NO} onCompose={onSubmit} />
       </LocaleProvider>,
     );
 
@@ -91,17 +93,17 @@ describe("InteractiveButtons", () => {
     expect(screen.getByRole("button", { name: "No" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: "概要" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "費用" }));
-    fireEvent.click(screen.getByRole("button", { name: "Send selection" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to message" }));
 
-    expect(onSubmit).toHaveBeenCalledWith("概要, 費用");
+    expect(onSubmit).toHaveBeenCalledWith(`${MULTIPLE.question}\n概要, 費用`);
   });
 
   it("stays inert once the question has been answered", () => {
     const onSubmit = vi.fn();
     render(
       <>
-        <InteractiveButtons buttons={SINGLE} onSubmit={onSubmit} disabled />
-        <InteractiveButtons buttons={MULTIPLE} onSubmit={onSubmit} disabled />
+        <InteractiveButtons buttons={SINGLE} onCompose={onSubmit} disabled />
+        <InteractiveButtons buttons={MULTIPLE} onCompose={onSubmit} disabled />
       </>,
     );
 
@@ -113,7 +115,7 @@ describe("InteractiveButtons", () => {
     for (const option of MULTIPLE.options ?? []) {
       expect(screen.getByRole("checkbox", { name: option })).toBeDisabled();
     }
-    expect(screen.getByRole("button", { name: "選択して送信" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "入力欄へ反映" })).toBeDisabled();
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.queryByText("対話型ボタンは共有画面では動作しません。")).not.toBeInTheDocument();
   });
@@ -125,23 +127,23 @@ describe("choice buttons inside message parts", () => {
     { type: "interactive_buttons", buttons: YES_NO },
   ];
 
-  it("hands the chosen option to the chat send path", () => {
-    const onChoiceSubmit = vi.fn();
-    render(<BotMessageParts fallbackText="" parts={parts} onChoiceSubmit={onChoiceSubmit} />);
+  it("hands the question and chosen option to the composer", () => {
+    const onCompose = vi.fn();
+    render(<BotMessageParts fallbackText="" parts={parts} onCompose={onCompose} />);
 
     fireEvent.click(screen.getByRole("button", { name: "はい" }));
 
-    expect(onChoiceSubmit).toHaveBeenCalledWith("はい");
+    expect(onCompose).toHaveBeenCalledWith(`${YES_NO.question}\nはい`);
   });
 
   it("disables the buttons of an answered message", () => {
-    const onChoiceSubmit = vi.fn();
-    render(<BotMessageParts fallbackText="" parts={parts} onChoiceSubmit={onChoiceSubmit} choicesDisabled />);
+    const onCompose = vi.fn();
+    render(<BotMessageParts fallbackText="" parts={parts} onCompose={onCompose} composeDisabled />);
 
     fireEvent.click(screen.getByRole("button", { name: "はい" }));
 
     expect(screen.getByRole("button", { name: "はい" })).toBeDisabled();
-    expect(onChoiceSubmit).not.toHaveBeenCalled();
+    expect(onCompose).not.toHaveBeenCalled();
   });
 
   it("renders the shared view read-only with a note", () => {
@@ -157,7 +159,7 @@ describe("choice buttons inside message parts", () => {
     for (const option of MULTIPLE.options ?? []) {
       expect(screen.getByRole("checkbox", { name: option })).toBeDisabled();
     }
-    expect(screen.getByRole("button", { name: "選択して送信" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "入力欄へ反映" })).toBeDisabled();
     expect(screen.getAllByText("対話型ボタンは共有画面では動作しません。")).toHaveLength(2);
   });
 });

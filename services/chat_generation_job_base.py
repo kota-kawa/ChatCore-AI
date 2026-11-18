@@ -23,11 +23,13 @@ from typing import Any
 
 from services.generative_ui import (
     GenerativeUiMode,
+    is_text_only_request,
     normalize_response_with_artifacts,
 )
 from services.i18n import normalize_locale, translate_text
 from services.interactive_buttons import INTERACTIVE_BUTTONS_PART_TYPE
 from services.message_parts_display import normalize_message_parts_for_display
+from services.structured_ui import has_structured_ui_source
 from services.tool_approval_parts import tool_approval_part
 
 from .chat_answer_continuation import (
@@ -466,7 +468,7 @@ class ChatGenerationJobBase:
                     self._chunks[:] = [fallback]
                     partial_text = fallback
                     pending_text = fallback
-        if pending_text:
+        if pending_text and not has_structured_ui_source(partial_text):
             self._publish("chunk", {"text": pending_text})
         approval_cards = self._settle_approvals_after_interruption()
         # 自動承認で実行済みの書き込みは取り消せないので、本文が無くてもカードを残す。
@@ -481,6 +483,7 @@ class ChatGenerationJobBase:
         normalized_response = normalize_response_with_artifacts(
             partial_text,
             recover_truncated=True,
+            explicit_text_only=is_text_only_request(_latest_user_message_text(self._conversation_messages)),
             ui_mode=self._ui_mode,
             explicit_ui_opt_out=self._explicit_ui_opt_out,
         )

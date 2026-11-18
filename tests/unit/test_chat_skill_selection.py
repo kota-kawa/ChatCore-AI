@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from services.chat_skill_selection import select_chat_skills
+from services.generative_ui import inject_generative_ui_mode_instruction
 from services.llm import SKILL_SELECTION_GENERATION_PHASE
 from services.user_skills import (
     GENERATIVE_UI_SYSTEM_SKILL_ID,
@@ -65,6 +66,35 @@ class ChatSkillSelectionTests(unittest.TestCase):
                 self.assertTrue(result.context.memo_tools_enabled)
                 self.assertTrue(result.context.generative_ui_selected)
                 self.assertIsNone(result.ui_mode)
+
+    def test_fail_open_keeps_explicit_visual_request_available_to_answer_generation(self):
+        context = _context(memo_enabled=False)
+        messages = [
+            {
+                "role": "user",
+                "content": "ブラウザからAPIサーバー、サービス層、データベースまでを新人向けに図解してください。",
+            }
+        ]
+
+        result = select_chat_skills(
+            context,
+            messages,
+            "model",
+            llm_json_response=Mock(return_value=None),
+        )
+        generation_messages = inject_generative_ui_mode_instruction(messages, result.ui_mode)
+        fallback_instruction = next(
+            message["content"]
+            for message in generation_messages
+            if message.get("role") == "system" and "classification was unresolved" in message.get("content", "")
+        )
+
+        self.assertIsNone(result.ui_mode)
+        self.assertTrue(result.context.generative_ui_selected)
+        self.assertIn("If no mode was decided", result.context.prompt or "")
+        self.assertIn("requested diagram", fallback_instruction)
+        self.assertIn("chatcore-ui", fallback_instruction)
+        self.assertIn("^[A-Za-z][A-Za-z0-9_-]{0,63}$", fallback_instruction)
 
     def test_uses_same_model_and_passes_full_skill_bodies_as_quoted_json_data(self):
         instructions = "\n".join(["常に結論を先に書く"] + ["確認文"] * 400)
@@ -293,6 +323,35 @@ class ChatSkillSelectionTests(unittest.TestCase):
         self.assertTrue(result.context.generative_ui_enabled)
         self.assertTrue(result.context.generative_ui_selected)
         self.assertIn("## 生成UI", result.context.prompt or "")
+
+    def test_structured_and_mixed_modes_select_the_ui_skill(self):
+        for ui_mode in ("STRUCTURED_UI", "MIXED_2D", "MIXED_3D"):
+            with self.subTest(ui_mode=ui_mode):
+                result = select_chat_skills(
+                    _context(),
+                    [{"role": "user", "content": "2案を比較して説明して"}],
+                    "model",
+                    llm_json_response=Mock(
+                        return_value=_decision([GENERATIVE_UI_SYSTEM_SKILL_ID], ui_mode=ui_mode)
+                    ),
+                )
+
+                self.assertEqual(result.ui_mode, ui_mode)
+                self.assertTrue(result.context.generative_ui_selected)
+
+    def test_every_non_text_mode_requires_the_enabled_ui_skill(self):
+        for ui_mode in ("STRUCTURED_UI", "2D", "3D", "MIXED_2D", "MIXED_3D"):
+            with self.subTest(ui_mode=ui_mode):
+                result = select_chat_skills(
+                    _context(user_skills=[{"id": 44, "name": "個人", "instructions": "簡潔に"}]),
+                    [{"role": "user", "content": "説明して"}],
+                    "model",
+                    llm_json_response=Mock(return_value=_decision([44], ui_mode=ui_mode)),
+                )
+
+                self.assertTrue(result.telemetry["fallback"])
+                self.assertEqual(result.telemetry["reason"], "invalid_response")
+                self.assertIsNone(result.ui_mode)
 
     def test_invalid_id_or_inconsistent_ui_falls_back_without_inference(self):
         context = _context(user_skills=[{"id": 5, "name": "個人", "instructions": "簡潔に"}])

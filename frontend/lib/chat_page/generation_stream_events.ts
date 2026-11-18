@@ -33,13 +33,13 @@ export type GenerationStreamAction =
   | { kind: "answer_draft_reset"; confirming: boolean }
   | { kind: "parts_updated"; displayText: string; parts: ChatMessagePart[] | null }
   | { kind: "thinking_status"; text: string; phase: ChatGenerationPhase }
-  | { kind: "done"; roomTitle: unknown; responseText: string; parts?: ChatMessagePart[] }
+  | { kind: "done"; roomTitle: unknown; responseText: string; parts?: ChatMessagePart[]; assistantMessageId?: number }
   // 完了したが本文もパーツも無い = 回答なし。空の吹き出しではなくエラーにする。
   // Completed with neither body nor answer parts: no answer at all, so this
   // becomes an error instead of a blank bubble.
   | { kind: "empty_answer"; roomTitle: unknown; message: string }
-  | { kind: "incomplete"; roomTitle: unknown; finalText: string; parts?: ChatMessagePart[]; message: string }
-  | { kind: "aborted"; finalText: string; parts?: ChatMessagePart[] }
+  | { kind: "incomplete"; roomTitle: unknown; finalText: string; parts?: ChatMessagePart[]; message: string; assistantMessageId?: number }
+  | { kind: "aborted"; finalText: string; parts?: ChatMessagePart[]; assistantMessageId?: number }
   | { kind: "error"; message: string };
 
 const IGNORED: GenerationStreamAction = { kind: "ignored" };
@@ -266,6 +266,7 @@ function interpretDoneEvent(
     roomTitle: data.room_title,
     responseText,
     parts,
+    ...(donePayload.assistantMessageId ? { assistantMessageId: donePayload.assistantMessageId } : {}),
   };
 }
 
@@ -281,6 +282,7 @@ function interpretIncompleteEvent(
     roomTitle: data.room_title,
     finalText: getStreamingGenerativeUiDisplayText(incompletePayload.response ?? context.streamedText),
     parts: sanitizeTextPartsForStreaming(incompletePayload.parts),
+    ...(incompletePayload.assistantMessageId ? { assistantMessageId: incompletePayload.assistantMessageId } : {}),
     message:
       typeof data.message === "string"
         ? data.message
@@ -344,6 +346,7 @@ export function interpretGenerationStreamEvent(
       kind: "aborted",
       finalText: getStreamingGenerativeUiDisplayText(abortedPayload.response ?? context.streamedText),
       parts: sanitizeTextPartsForStreaming(abortedPayload.parts),
+      ...(abortedPayload.assistantMessageId ? { assistantMessageId: abortedPayload.assistantMessageId } : {}),
     };
   }
 

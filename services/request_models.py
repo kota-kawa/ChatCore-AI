@@ -42,6 +42,7 @@ from services.prompt_types import (
     sanitize_attributes,
     validate_attributes,
 )
+from services.structured_ui_models import UiMetricsRecord
 from services.user_skills import (
     MAX_USER_SKILL_INSTRUCTIONS_LENGTH,
     MAX_USER_SKILL_NAME_LENGTH,
@@ -324,6 +325,7 @@ class AssignRoomProjectRequest(RequestPayloadModel):
 # 日本語: 新しいチャットメッセージと添付ファイルを含むリクエストペイロード。
 # English: Request payload for sending a chat message with optional attachments.
 class ChatMessageRequest(RequestPayloadModel):
+    ui_metrics: list[UiMetricsRecord] = Field(default_factory=list, max_length=20)
     message: ChatMessageStr
     chat_room_id: ChatRoomIdStr = "default"
     model: ModelNameStr | None = None

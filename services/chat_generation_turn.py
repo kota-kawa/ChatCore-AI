@@ -22,6 +22,7 @@ from .chat_turn_state import TurnStateUpdateFilter
 from .chat_web_page_reader import WebPageReader
 from .chat_workspace_tools.registry import ChatWorkspaceToolbox
 from .research_state import TurnState
+from .structured_ui import StructuredUiStream
 from .web_search import (
     WebEvidenceContextBudget,
     WebPageFetchBudget,
@@ -148,6 +149,8 @@ class ChatTurnRunState:
     # Whether external content or owner-unconfirmed personal context was read. Once set,
     # "always approve" no longer runs writes on its own and the card says why.
     untrusted_input_ingested: bool = False
+
+    structured_ui_stream: StructuredUiStream = field(default_factory=StructuredUiStream)
 
 
 # 1回のモデル判断ストリームの結末。停止・再試行・判断確定の3つだけを表す。

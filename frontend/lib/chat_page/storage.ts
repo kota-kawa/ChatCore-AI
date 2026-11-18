@@ -10,6 +10,12 @@ import { getStreamingGenerativeUiDisplayText } from "./generative_ui_stream";
 import { parseJsonText } from "../../scripts/core/runtime_validation";
 import { clearCachedUserIconProfile } from "../../scripts/core/user_icon_cache";
 import { clearPersistentCache } from "../data/persistent_cache";
+import { clearStructuredUiMetrics } from "./structured_ui_metrics";
+import {
+  createStructuredUiMetricsScope,
+  readStructuredUiScopeRoomId,
+  readStructuredUiScopeUserScope,
+} from "./structured_ui_scope";
 import {
   clearAllCachedHistory,
   readCachedHistory,
@@ -181,7 +187,13 @@ export function readStoredHistory(roomId: string): StoredHistoryEntry[] {
       // a reloaded artifact collapse into a text-only bubble, so they are restored through the
       // same normalization the server payloads use.
       const parts = normalizeChatMessageParts((entry as { parts?: unknown }).parts, undefined, sender !== "user");
-      normalized.push({ text: displayText, sender, ...(parts?.length ? { parts } : {}) });
+      const serverId = (entry as { serverId?: unknown }).serverId;
+      normalized.push({
+        text: displayText,
+        sender,
+        ...(typeof serverId === "number" && Number.isInteger(serverId) && serverId > 0 ? { serverId } : {}),
+        ...(parts?.length ? { parts } : {}),
+      });
     });
 
     return normalized;
@@ -244,6 +256,25 @@ export function prependStoredHistory(
 export function removeStoredHistory(roomId: string) {
   removeCachedHistory(roomId);
   clearStoredGenerationState(roomId);
+  const userScope = readStoredUserScope();
+  try {
+    for (let indexPosition = localStorage.length - 1; indexPosition >= 0; indexPosition -= 1) {
+      const key = localStorage.key(indexPosition);
+      if (!key?.startsWith("chatcore.structured-ui:")) continue;
+      const stateScope = key.slice("chatcore.structured-ui:".length);
+      if (
+        userScope?.startsWith("user:") &&
+        readStructuredUiScopeUserScope(stateScope) === userScope &&
+        readStructuredUiScopeRoomId(stateScope) === roomId
+      ) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // A storage failure must not prevent the room's other cleanup.
+  }
+  const metricsScope = createStructuredUiMetricsScope(userScope, roomId, "normal");
+  if (metricsScope) clearStructuredUiMetrics(metricsScope);
 }
 
 // localStorage から読んだ値を検証して StoredGenerationState にする。roomId が無い、または保存期限を過ぎていれば null。
@@ -387,6 +418,7 @@ export function readActiveStoredGenerationState(): StoredGenerationState | null 
 // pointer, home view state, task cache and the setup draft the restore path
 // reads.
 export function clearAllHomePagePersistedState() {
+  clearStructuredUiMetrics();
   try {
     clearAllCachedHistory();
   } catch {
@@ -398,7 +430,11 @@ export function clearAllHomePagePersistedState() {
     for (let indexPosition = localStorage.length - 1; indexPosition >= 0; indexPosition -= 1) {
       const key = localStorage.key(indexPosition);
       if (!key) continue;
-      if (key.startsWith(GENERATION_STATE_KEY_PREFIX) || key.startsWith(STORAGE_KEYS.tasksCachePrefix)) {
+      if (
+        key.startsWith(GENERATION_STATE_KEY_PREFIX) ||
+        key.startsWith(STORAGE_KEYS.tasksCachePrefix) ||
+        key.startsWith("chatcore.structured-ui:")
+      ) {
         localStorage.removeItem(key);
       }
     }

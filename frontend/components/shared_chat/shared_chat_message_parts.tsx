@@ -5,6 +5,7 @@ import { memo } from "react";
 import type { ChatMessagePart } from "../../lib/chat_page/types";
 import { BotMessageHtml } from "../chat_page/bot_message_html";
 import { InteractiveButtons } from "../chat_page/interactive_buttons";
+import { StructuredUiRenderer } from "../chat_page/structured_ui_renderer";
 import { ToolApprovalCard } from "../chat_page/tool_approval_card";
 import { SandboxArtifactFrame } from "../chat_page/sandbox_artifact_frame";
 import { WebSearchImagePart } from "../chat_page/web_search_image_part";
@@ -51,6 +52,13 @@ function SharedChatMessagePartsComponent({ fallbackText, parts }: SharedChatMess
           return (
             <div key={`buttons-${index}`} className="bot-message-part bot-message-part--buttons">
               <InteractiveButtons buttons={part.buttons} />
+            </div>
+          );
+        }
+        if (part.type === "structured_ui") {
+          return (
+            <div key={`structured-ui-${part.ui.id}`} className="bot-message-part bot-message-part--structured-ui">
+              <StructuredUiRenderer ui={part.ui} />
             </div>
           );
         }

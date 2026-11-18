@@ -3,7 +3,7 @@
 // Shared type definitions for the chat (home) screen: rooms, projects, messages and their parts (generated UI, choice buttons, approval cards),
 // history API payloads, the generation state saved to localStorage, and model options.
 
-import type { ToolApprovalApi } from "../../types/generated/api_schemas";
+import type { StructuredUiV1, ToolApprovalApi } from "../../types/generated/api_schemas";
 
 // ルームの種類。temporary（一時チャット）は本文を端末に保存しない。
 // Kind of room; a temporary chat never stores its text on the device.
@@ -149,6 +149,7 @@ export type WebSearchImageV1 = {
 // A part that makes up a message; everything other than text is rendered by a dedicated UI component.
 export type ChatMessagePart =
   | { type: "text"; text: string }
+  | { type: "structured_ui"; ui: StructuredUiV1 }
   | { type: "sandbox_artifact"; artifact: GenerativeUiArtifactV1 }
   | { type: "artifact_status"; status: GenerativeUiArtifactStatusV1 }
   | { type: "interactive_buttons"; buttons: InteractiveButtonsV1 }
@@ -256,6 +257,7 @@ export type ChatResponsePayload = {
   parts?: ChatMessagePart[];
   error?: string;
   roomTitle?: string;
+  assistantMessageId?: number;
 };
 
 // SSE の 1 ブロックを解析したイベント。event 名・連番の id・JSON の data を持つ。
@@ -295,6 +297,7 @@ export type TaskEditFormState = {
 export type StoredHistoryEntry = {
   text: string;
   sender: string;
+  serverId?: number;
   parts?: ChatMessagePart[];
 };
 

@@ -267,13 +267,11 @@ document.getElementById('app').textContent = 'ready';
         self.assertEqual(normalized.validation_errors, [])
         self.assertIsNone(normalized.parts)
 
-    def test_default_skill_keeps_ui_contract_compact_and_explicit(self):
-        """通常回答をUI化せず、明示依頼だけで専用フェンスを使う契約を検証する。"""
-        self.assertIn("UI_MODE = NONE` by default", GENERATIVE_UI_SKILL_INSTRUCTIONS)
-        self.assertIn("latest user request explicitly asks", GENERATIVE_UI_SKILL_INSTRUCTIONS)
-        self.assertIn("ordinary code/JSON means UI_MODE is NONE", GENERATIVE_UI_SKILL_INSTRUCTIONS)
-        # 出力形式は実行契約だけが持ち、Skill の指示は判定規則に絞る。
-        # The output format lives only in the execution contract; the Skill keeps the decision rules.
+    def test_default_skill_preserves_text_and_artifact_contracts(self):
+        """Keep ordinary code/text answers as prose and use the correct contract for requested UI."""
+        self.assertIn("brief answers, code examples, or explicit text-only requests", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertIn("STRUCTURED_UI", GENERATIVE_UI_SKILL_INSTRUCTIONS)
+        self.assertIn("2D` and `3D` require a working", GENERATIVE_UI_SKILL_INSTRUCTIONS)
         self.assertIn("exactly one complete ```chatcore-artifact", GENERATIVE_UI_EXECUTION_CONTRACT)
         self.assertNotIn("```chatcore-artifact", GENERATIVE_UI_SKILL_INSTRUCTIONS)
 

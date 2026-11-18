@@ -28,6 +28,7 @@ import {
   readShareChatRoomResponseFields,
 } from "./generated_contract";
 import { ToolApprovalApiSchema, type ToolApprovalApi } from "../../types/generated/api_schemas";
+import { getStructuredUiDeclaredChartPointCount, getStructuredUiRuntime, parseStructuredUiV1 } from "./structured_ui_contract";
 import { mergeUniqueChatRooms } from "./home_page_controller_utils";
 import { normalizeMessagePartsForDisplay } from "./message_parts_display";
 import { getStreamingGenerativeUiDisplayText, sanitizeTextPartsForStreaming } from "./generative_ui_stream";
@@ -113,6 +114,26 @@ const ARTIFACT_IMAGE_PATH_PATTERN = /^\/api\/chat\/web-images\/[0-9a-f]{32}\/[A-
 // services/message_parts_display.py の MAX_WEB_SEARCH_IMAGES_PER_REPLY と同じ値
 // Same value as MAX_WEB_SEARCH_IMAGES_PER_REPLY in services/message_parts_display.py
 const MAX_ARTIFACT_IMAGES = 5;
+const MAX_STRUCTURED_UI_BLOCKS_PER_REPLY = 6;
+const MAX_STRUCTURED_UI_NODES_PER_REPLY = 300;
+const MAX_STRUCTURED_UI_CHART_POINTS_PER_REPLY = 500;
+const MAX_STRUCTURED_UI_BYTES_PER_REPLY = 96 * 1024;
+
+function utf8JsonByteLength(value: unknown): number {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) return Number.POSITIVE_INFINITY;
+  return new TextEncoder().encode(serialized).byteLength;
+}
+
+function escapeStructuredUiFallbackText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;")
+    .replace(/!\[/g, "\\![");
+}
 
 // 日本語: 生成 UI に添える画像の参照を検証して残す。ref は 1〜5 の整数で重複不可、
 //         url は署名済みの中継パスだけ、出典 URL は http/https のみ許可する。
@@ -286,6 +307,10 @@ export function normalizeChatMessageParts(
 ): ChatMessagePart[] | undefined {
   if (!Array.isArray(rawParts)) return undefined;
   const parts: ChatMessagePart[] = [];
+  let structuredUiCount = 0;
+  let structuredUiNodes = 0;
+  let structuredUiChartPoints = 0;
+  let structuredUiBytes = 0;
   rawParts.forEach((rawPart) => {
     const part = asRecord(rawPart);
     if (part.type === "text") {
@@ -297,6 +322,32 @@ export function normalizeChatMessageParts(
       const normalized = normalizeArtifact(part.artifact);
       if (normalized.artifact) parts.push({ type: "sandbox_artifact", artifact: normalized.artifact });
       if (normalized.status) parts.push({ type: "artifact_status", status: normalized.status });
+      return;
+    }
+    if (part.type === "structured_ui") {
+      const rawUi = asRecord(part.ui);
+      const ui = parseStructuredUiV1(part.ui);
+      if (!ui) {
+        const fallbackText = optionalString(rawUi.fallback_text);
+        if (fallbackText?.trim()) parts.push({ type: "text", text: escapeStructuredUiFallbackText(fallbackText) });
+        return;
+      }
+      const uiBytes = utf8JsonByteLength(ui);
+      const chartPoints = getStructuredUiDeclaredChartPointCount(getStructuredUiRuntime(ui));
+      const exceedsReplyLimit =
+        structuredUiCount >= MAX_STRUCTURED_UI_BLOCKS_PER_REPLY ||
+        structuredUiNodes + ui.nodes.length > MAX_STRUCTURED_UI_NODES_PER_REPLY ||
+        chartPoints === null || structuredUiChartPoints + chartPoints > MAX_STRUCTURED_UI_CHART_POINTS_PER_REPLY ||
+        structuredUiBytes + uiBytes > MAX_STRUCTURED_UI_BYTES_PER_REPLY;
+      if (exceedsReplyLimit) {
+        parts.push({ type: "text", text: escapeStructuredUiFallbackText(ui.fallback_text) });
+        return;
+      }
+      structuredUiCount += 1;
+      structuredUiNodes += ui.nodes.length;
+      structuredUiChartPoints += chartPoints ?? 0;
+      structuredUiBytes += uiBytes;
+      parts.push({ type: "structured_ui", ui });
       return;
     }
     if (part.type === "artifact_status") {
@@ -501,6 +552,9 @@ export function normalizeChatResponsePayload(rawPayload: unknown): ChatResponseP
     ...(parts ? { parts } : {}),
     error,
     roomTitle: optionalString(payload.room_title),
+    ...(asPositiveNumber(payload.assistant_message_id) && Number.isInteger(payload.assistant_message_id)
+      ? { assistantMessageId: asPositiveNumber(payload.assistant_message_id)! }
+      : {}),
   };
 }
 
