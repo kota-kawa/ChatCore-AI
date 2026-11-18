@@ -1,15 +1,16 @@
 """チャットで選択された参照元（メモなど）の事前検索（services.selected_reference_context）を検証するテスト。
 結果の挿入位置、0 件時の書き換え再検索と試行上限、保存済み一覧の引き渡し、
-制御用マークアップのエスケープ、並列検索の順序を確かめる。
+制御用マークアップのエスケープ、並列検索の順序、リクエスト処理が使う非同期版で言い換えを 0 件のときだけ呼ぶことを確かめる。
 
 Tests for prefetching the references selected in chat (services.selected_reference_context): where results are inserted,
 retry with a rewritten query on zero hits and the attempt cap, handing over the saved inventory,
-escaping control markup, and a stable order for parallel lookups.
+escaping control markup, a stable order for parallel lookups, and that the async variant used by request
+handlers asks for a rewrite only after a zero-hit lookup.
 """
 
 import time
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from services.selected_reference_context import (
     MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS,
@@ -18,6 +19,7 @@ from services.selected_reference_context import (
     SHARED_PROMPT_SOURCE,
     CandidateQueryPlan,
     augment_messages_with_selected_references,
+    augment_messages_with_selected_references_async,
 )
 
 
@@ -434,6 +436,121 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
         self.assertLess(
             context.index("personal_knowledge_result"), context.index("shared_prompt_result")
         )
+
+
+# 日本語: リクエスト処理が使う非同期版が、原文で 0 件だった参照元のためだけに言い換えを呼ぶことを検証するテストクラス。
+# English: Test class checking that the async variant used by request handlers asks for a rewrite only for
+# sources whose original-query lookup found nothing.
+class SelectedReferenceContextAsyncTestCase(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        patcher = patch(
+            "services.selected_reference_context.rewrite_reference_query",
+            return_value=["沖縄 予算"],
+        )
+        self.rewrite = patcher.start()
+        self.addCleanup(patcher.stop)
+        self.messages = [
+            {"role": "system", "content": "base"},
+            {"role": "user", "content": "沖縄旅行の予算を整理して"},
+        ]
+        self.query = "沖縄旅行の予算を整理して"
+
+    # 日本語: 全参照元が原文で当たれば言い換えを呼ばず、組み立てる文脈は同期版と一致します。
+    # English: When every source hits the original query, no rewrite is requested and the context matches the sync variant.
+    async def test_original_hits_skip_the_rewrite_and_match_the_sync_context(self):
+        personal_payload = {"status": "ok", "memo_count": 1, "memos": [{"title": "沖縄メモ"}]}
+        shared_payload = {"status": "ok", "prompt_count": 1, "prompts": [{"title": "旅行計画テンプレ"}]}
+        personal_search = AsyncMock(return_value=personal_payload)
+        shared_search = AsyncMock(return_value=shared_payload)
+
+        augmented = await augment_messages_with_selected_references_async(
+            self.messages,
+            query=self.query,
+            personal_knowledge_search=personal_search,
+            shared_prompt_search=shared_search,
+        )
+
+        self.rewrite.assert_not_called()
+        personal_search.assert_awaited_once_with(self.query)
+        shared_search.assert_awaited_once_with(self.query)
+        self.assertEqual(
+            augmented,
+            augment_messages_with_selected_references(
+                self.messages,
+                query=self.query,
+                personal_knowledge_search=lambda _query: personal_payload,
+                shared_prompt_search=lambda _query: shared_payload,
+            ),
+        )
+
+    # 日本語: 一部の参照元だけ 0 件なら、その参照元だけを言い換えで引き直します。
+    # English: When only one source finds nothing, only that source is retried with the rewrite.
+    async def test_only_the_source_without_results_is_retried_with_the_rewrite(self):
+        personal_search = AsyncMock(
+            side_effect=[
+                {"status": "no_results", "query": self.query},
+                {"status": "ok", "memo_count": 1, "memos": [{"title": "沖縄メモ"}]},
+            ]
+        )
+        shared_search = AsyncMock(
+            return_value={"status": "ok", "prompt_count": 1, "prompts": [{"title": "旅行計画テンプレ"}]}
+        )
+
+        augmented = await augment_messages_with_selected_references_async(
+            self.messages,
+            query=self.query,
+            personal_knowledge_search=personal_search,
+            shared_prompt_search=shared_search,
+        )
+
+        self.rewrite.assert_called_once()
+        self.assertEqual(
+            [call.args[0] for call in personal_search.await_args_list],
+            [self.query, "沖縄 予算"],
+        )
+        shared_search.assert_awaited_once_with(self.query)
+        context = augmented[1]["content"]
+        self.assertIn("沖縄メモ", context)
+        self.assertIn("旅行計画テンプレ", context)
+
+    # 日本語: 複数の参照元が同時に 0 件になっても、言い換えは 1 回だけです。
+    # English: Sources that miss at the same time still share a single rewrite.
+    async def test_sources_missing_together_share_one_rewrite(self):
+        personal_search = AsyncMock(return_value={"status": "no_results", "query": self.query})
+        shared_search = AsyncMock(return_value={"status": "no_results", "query": self.query})
+
+        await augment_messages_with_selected_references_async(
+            self.messages,
+            query=self.query,
+            personal_knowledge_search=personal_search,
+            shared_prompt_search=shared_search,
+        )
+
+        self.rewrite.assert_called_once()
+        for search in (personal_search, shared_search):
+            self.assertEqual(
+                [call.args[0] for call in search.await_args_list],
+                [self.query, "沖縄 予算"],
+            )
+
+    # 日本語: 検索の失敗は 0 件と区別し、同じ検索語で一度引き直すだけで言い換えは呼びません。
+    # English: A failed lookup is not a zero-hit result: it is retried once with the same query and never rewritten.
+    async def test_failed_lookup_is_not_rewritten(self):
+        personal_search = AsyncMock(side_effect=RuntimeError("database unavailable"))
+
+        with self.assertLogs("services.selected_reference_context", level="WARNING"):
+            augmented = await augment_messages_with_selected_references_async(
+                self.messages,
+                query=self.query,
+                personal_knowledge_search=personal_search,
+            )
+
+        self.rewrite.assert_not_called()
+        self.assertEqual(
+            [call.args[0] for call in personal_search.await_args_list],
+            [self.query, self.query],
+        )
+        self.assertIn('"status":"failed"', augmented[1]["content"])
 
 
 # 日本語: 検索候補クエリの計画（原文→言い換えの順、言い換えは遅延・共有・失敗時は原文のみ）を検証するテストクラス。
