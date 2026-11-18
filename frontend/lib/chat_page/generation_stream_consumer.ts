@@ -329,7 +329,7 @@ function createStreamRenderer(
     cancelRender();
     const finalDisplayText = finalText || getStreamingGenerativeUiDisplayText(state.streamedText);
     const resolvedParts =
-      Array.isArray(parts) && parts.length > 0 ? parts : updateStreamingTextPart(state.streamingParts, finalDisplayText);
+      Array.isArray(parts) && parts.length > 0 ? parts : updateStreamingTextPart(state.streamingParts, finalDisplayText, true);
     const hasParts = Array.isArray(resolvedParts) && resolvedParts.length > 0;
     const persistAnswer = () => {
       if (persist && finalDisplayText && host.isActive()) {

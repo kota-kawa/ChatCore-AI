@@ -391,6 +391,44 @@ test("updateStreamingTextPart absorbs the newlines dropped between the trace and
   ]);
 });
 
+test("updateStreamingTextPart leaves the tail empty while the display is still inside the committed text", () => {
+  // 表示は語の境界まで巻き戻されるので、確定済みパーツより短い全文が渡ることがある。
+  // The display is pulled back to a word boundary, so the text can be shorter than the committed parts.
+  const parts: ChatMessagePart[] = [
+    { type: "text", text: ANSWER_TRACE },
+    { type: "text", text: "京都の紅葉は東福寺" },
+    INLINE_IMAGE,
+    { type: "text", text: "が有名です。" },
+  ];
+  const committed = [{ type: "text", text: ANSWER_TRACE }, { type: "text", text: "京都の紅葉は東福寺" }, INLINE_IMAGE];
+
+  for (const text of [`${ANSWER_TRACE}\n\n京都の紅葉は`, `${ANSWER_TRACE}\n\n`, ANSWER_TRACE]) {
+    assert.deepEqual(updateStreamingTextPart(parts, text), [...committed, { type: "text", text: "" }]);
+  }
+});
+
+test("updateStreamingTextPart keeps the delivered tail when the committed text is not in the full text", () => {
+  // 全文とパーツでトレースのHTMLが食い違っても、トレースを最後のパーツへ入れ直さない。
+  // A trace whose markup differs between the full text and the parts is not repeated in the last part.
+  const parts: ChatMessagePart[] = [
+    { type: "text", text: ANSWER_TRACE },
+    { type: "text", text: "比較します。" },
+    INLINE_IMAGE,
+    { type: "text", text: "以上が比較です。" },
+  ];
+  const text = `${ANSWER_TRACE.replace("参照したWebサイト", "参照した Web サイト")}\n\n比較します。\n\n以上が比較です。続き`;
+
+  assert.deepEqual(updateStreamingTextPart(parts, text), parts);
+  // 全文が確定していれば、欠落させずに全文1つへまとめる（トレースは表示規約どおり独立パーツになる）。
+  // A settled full text collapses into one text without loss; the trace is split off by the display contract.
+  const [trace, ...body] = text.split("\n\n");
+  assert.deepEqual(updateStreamingTextPart(parts, text, true), [
+    { type: "text", text: trace },
+    { type: "text", text: body.join("\n\n") },
+    INLINE_IMAGE,
+  ]);
+});
+
 test("updateStreamingTextPart keeps continuing when the separator newline is still in the parts", () => {
   const parts: ChatMessagePart[] = [
     { type: "text", text: "## 見頃と名所\n" },

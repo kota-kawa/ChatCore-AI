@@ -372,16 +372,25 @@ export function isGenerativeUiPending(text: string, parts?: ChatMessagePart[]) {
 
 // 確定済みのテキストパーツが全文の先頭に順に並んでいれば、その直後の位置を返す。
 // パーツはトレースと本文の間の改行や空白だけの区間を落として届くため、パーツの境目に
-// ある全文側の空白は読み飛ばして照合する。
+// ある全文側の空白は読み飛ばして照合する。表示は語の境界まで巻き戻されるので、全文が
+// 確定済みテキストの途中で終わることがある。その場合は続きがまだ無いので全文の末尾を返す。
 // Return the offset right after the committed text parts when they lead the full
 // text in order. Parts arrive without the newlines between the trace and the answer
 // or whitespace-only spans, so full-text whitespace at each part boundary is skipped.
+// The display is pulled back to a word boundary, so the full text can end inside the
+// committed text; nothing follows it yet, so the end of the full text is returned.
 function findCommittedTextEnd(text: string, committedSegments: string[]): number | null {
   let cursor = 0;
   for (const segment of committedSegments) {
     if (!text.startsWith(segment, cursor)) {
-      while (cursor < text.length && /\s/.test(text[cursor])) cursor += 1;
-      if (!text.startsWith(segment, cursor)) return null;
+      let afterWhitespace = cursor;
+      while (afterWhitespace < text.length && /\s/.test(text[afterWhitespace])) afterWhitespace += 1;
+      if (!text.startsWith(segment, afterWhitespace)) {
+        const endsInsideSegment =
+          segment.startsWith(text.slice(cursor)) || segment.startsWith(text.slice(afterWhitespace));
+        return endsInsideSegment ? text.length : null;
+      }
+      cursor = afterWhitespace;
     }
     cursor += segment.length;
   }
@@ -390,9 +399,11 @@ function findCommittedTextEnd(text: string, committedSegments: string[]): number
 
 // ストリーム中の全文に合わせてパーツ内のテキストを更新する。画像で区切られた前半のテキストは確定済みとして残し、最後のテキストだけを全文の残りに差し替える。
 // Updates the text parts to match the streaming full text. Text before an image stays committed and only the final text part is replaced with the remainder.
+// isFinalText は text が回答の全文として確定しているときに立てる。 / isFinalText marks text as the complete, settled answer.
 export function updateStreamingTextPart(
   parts: ChatMessagePart[] | undefined,
   text: string,
+  isFinalText = false,
 ): ChatMessagePart[] | undefined {
   if (!parts || parts.length === 0) return undefined;
 
@@ -411,10 +422,27 @@ export function updateStreamingTextPart(
     const committedSegments = textIndices
       .slice(0, -1)
       .map((index) => cloned[index].type === "text" ? cloned[index].text : "");
-    const committedEnd = committedSegments.join("") ? findCommittedTextEnd(text, committedSegments) : null;
-    const nextText = committedEnd === null ? text : text.slice(committedEnd).replace(/^\n+/, "");
-    cloned[lastTextIndex] = { type: "text", text: nextText };
-    return normalizeMessagePartsForDisplay(cloned);
+    if (!committedSegments.join("")) {
+      cloned[lastTextIndex] = { type: "text", text };
+      return normalizeMessagePartsForDisplay(cloned);
+    }
+    const committedEnd = findCommittedTextEnd(text, committedSegments);
+    if (committedEnd !== null) {
+      cloned[lastTextIndex] = { type: "text", text: text.slice(committedEnd).replace(/^\n+/, "") };
+      return normalizeMessagePartsForDisplay(cloned);
+    }
+    // 確定済みテキストを全文の中に見つけられないとき、最後のパーツへ全文を入れると確定済みの
+    // トレースと本文がもう一度表示される。生成中は届いたままの最後のパーツを残し、次の更新を待つ。
+    // 全文が確定しているなら待つ更新が無いので、テキストを全文1つにまとめて欠落も重複も防ぐ。
+    // When the committed text cannot be found in the full text, putting the full text in the
+    // last part shows the committed trace and prose twice. While streaming, the last part stays
+    // as delivered until the next update. A settled full text has no update to wait for, so the
+    // text parts collapse into that single text, which neither drops nor repeats anything.
+    if (!isFinalText) return normalizeMessagePartsForDisplay(cloned);
+    return normalizeMessagePartsForDisplay([
+      { type: "text", text },
+      ...cloned.filter((part) => part.type !== "text"),
+    ]);
   }
 
   if (!text) return cloned;
