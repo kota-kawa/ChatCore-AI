@@ -68,6 +68,7 @@ test("a done event finalizes with the payload response", () => {
     kind: "done",
     roomTitle: "紅葉の話",
     responseText: "完成した回答",
+    displayText: "完成した回答",
     parts: undefined,
   });
 });
@@ -411,4 +412,45 @@ test("malformed event blocks are rejected before interpretation", () => {
   assert.equal(parseStreamEventBlock("event: chunk"), null);
   assert.equal(parseStreamEventBlock(""), null);
   assert.equal(parseStreamEventBlock("data: 42"), null);
+});
+
+const COMPARISON_UI = {
+  version: 1,
+  id: "comparison",
+  fallback_text: "A: 10, B: 20",
+  root_id: "root",
+  nodes: [{ id: "root", type: "text", text: "A" }],
+  state: [],
+  expressions: [],
+  images: [],
+  sources: [],
+};
+// 旧クライアント向けの全文は UI の位置へ代替テキストを埋め込む。パーツは UI をそのまま持つ。
+// The legacy full text embeds the fallback at the UI's position; the parts carry the UI itself.
+const LEGACY_RESPONSE_WITH_UI = "比較します。\n\n\nA: 10, B: 20\n以上が比較";
+const PARTS_WITH_UI = [
+  { type: "text", text: "比較します。\n\n" },
+  { type: "structured_ui", ui: COMPARISON_UI },
+  { type: "text", text: "以上が比較" },
+];
+
+test("a parts update keeps the legacy fallback text of a structured UI out of the display text", () => {
+  const action = interpret("response_parts_updated", { response: LEGACY_RESPONSE_WITH_UI, parts: PARTS_WITH_UI });
+
+  assert.equal(action.kind, "parts_updated");
+  if (action.kind !== "parts_updated") return;
+  assert.equal(action.displayText, "比較します。\n\n以上が比較");
+  assert.deepEqual(action.parts?.map((part) => part.type), ["text", "structured_ui", "text"]);
+});
+
+test("a done event reveals text without the UI fallback while the saved text stays the legacy full text", () => {
+  const action = interpret("done", { response: LEGACY_RESPONSE_WITH_UI, parts: PARTS_WITH_UI });
+
+  assert.equal(action.kind, "done");
+  if (action.kind !== "done") return;
+  assert.equal(action.displayText, "比較します。\n\n以上が比較");
+  // 保存する text は従来どおり、空行の圧縮だけを受けた旧クライアント向けの全文。
+  // The saved text is, as before, the legacy full text with only blank-line collapsing applied.
+  assert.equal(action.responseText, "比較します。\n\nA: 10, B: 20\n以上が比較");
+  assert.deepEqual(action.parts?.map((part) => part.type), ["text", "structured_ui", "text"]);
 });
