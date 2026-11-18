@@ -286,7 +286,7 @@ class ContextFactRepository:
             value=[float(value) for value in embedding],
             type_=Vector(768),
         )
-        return ContextFact.embedding_vector.op("<=>")(query_vector)
+        return ContextFact.embedding_vector.cosine_distance(query_vector)
 
     # 日本語: 埋め込みのある行だけを対象に、距離が設定された最大距離以内のものを近い順に返す。
     # English: Searches only rows that have an embedding, returning those within the configured max distance, nearest first.

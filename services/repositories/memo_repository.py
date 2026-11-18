@@ -272,7 +272,7 @@ def _resolve_sort_expression(sort: str):
 # 日本語: pgvector のコサイン距離(<=>)の式。クエリ埋め込みは 768 次元。
 # English: pgvector cosine-distance expression (<=>) against the 768-dimension query embedding.
 def _vector_distance(embedding: list[float]):
-    return MemoEntry.embedding_vector.op("<=>")(
+    return MemoEntry.embedding_vector.cosine_distance(
         bindparam(
             "memo_query_embedding",
             value=[float(value) for value in embedding],

@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from sqlalchemy.dialects.postgresql import dialect
 
 from services.repositories.memo_repository import fetch_memo_summaries
+from tests.helpers.sql_helpers import bind_statement_parameters
 
 
 # mappings().all() が rows を返す DB 実行結果の代役を作る。
@@ -104,7 +105,12 @@ class MemoSearchRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         row_statement = session.execute.await_args.args[0]
         self.assertIn("embedding_vector <=>", str(count_statement.compile(dialect=dialect())))
         self.assertIn("embedding_vector <=>", str(row_statement.compile(dialect=dialect())))
-        self.assertIn(0.4, count_statement.compile(dialect=dialect()).params.values())
+        # しきい値は数値のまま、埋め込みは vector の文字列表現で束縛される。
+        # The threshold stays a number while the embedding is bound in pgvector's text form.
+        for statement in (count_statement, row_statement):
+            bound = bind_statement_parameters(statement)
+            self.assertIn(0.4, bound.values())
+            self.assertEqual(bound["memo_query_embedding"], "[0.1,0.2,0.3]")
 
     async def test_keyword_search_requires_every_term_and_escapes_wildcards(self):
         session = MagicMock()
