@@ -58,6 +58,40 @@ def split_answer_trace_block(text: str) -> tuple[str, str]:
     return "", text
 
 
+# Web検索の表示ブロック（「回答までのステップ」と旧形式の参照サイト一覧）は
+# <details class="web-search-sources …">…</details> として本文へ差し込まれる。
+# Web-search display blocks (the answer trace and the legacy source list) are injected
+# into the body as <details class="web-search-sources …">…</details>.
+_WEB_SEARCH_SOURCES_BLOCK_RE = re.compile(
+    r"<details\b[^>]*\bclass\s*=\s*(?P<quote>[\"'])[^\"']*web-search-sources[^\"']*(?P=quote)[^>]*>"
+    r"(?:(?!</?details\b)[\s\S])*?</details>",
+    re.IGNORECASE,
+)
+
+
+def strip_web_search_sources_html(text: str) -> str:
+    """本文から Web 検索の表示ブロックを、入れ子も含めてすべて取り除く。
+
+    表示専用のHTMLなので、本文だけを見たい処理（意図の判定、代替UIの生成、モデルへ戻す履歴）では先に除く。
+
+    Remove every web-search display block, nested ones included.
+
+    The blocks are display-only markup, so callers that need the prose alone (intent
+    inference, fallback UI generation, history replayed to the model) strip them first.
+    """
+    if "web-search-sources" not in text:
+        return text
+    # 正規表現だけではネスト全体を一度に消せないため、内側から消して安定するまで繰り返す。
+    # A regular expression cannot remove a whole nest at once, so the innermost blocks go
+    # first and the pass repeats until nothing changes.
+    current = text
+    while True:
+        stripped = _WEB_SEARCH_SOURCES_BLOCK_RE.sub("", current)
+        if stripped == current:
+            return current
+        current = stripped
+
+
 def apply_visual_part_contract(parts: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     """視覚パーツの排他規則を適用し、書かれた順序は保つ。
 

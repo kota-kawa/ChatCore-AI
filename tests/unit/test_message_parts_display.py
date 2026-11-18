@@ -9,6 +9,7 @@ from services.message_parts_display import (
     apply_visual_part_contract,
     normalize_message_parts_for_display,
     split_answer_trace_block,
+    strip_web_search_sources_html,
 )
 from services.web_search import WebSearchResult, WebSearchSource
 from services.web_search_trace import (
@@ -168,6 +169,26 @@ class ApplyVisualPartContractTestCase(unittest.TestCase):
         contracted = apply_visual_part_contract([text_part, IMAGE_PART])
 
         self.assertEqual(contracted, [text_part, IMAGE_PART])
+
+
+# 日本語: Web 検索の表示ブロックを本文から取り除く処理を検証するテストクラス。
+# English: Test class for stripping web-search display blocks out of prose.
+class StripWebSearchSourcesHtmlTestCase(unittest.TestCase):
+    # 日本語: 入れ子のステップ、旧形式の参照サイト一覧、単一引用符のクラス指定をすべて除き、本文と通常の details は残すことを検証します。
+    # English: Verify nested steps, the legacy source list and single-quoted classes are all removed while prose and ordinary details stay.
+    def test_strips_every_sources_block_and_keeps_other_markup(self):
+        text = (
+            '<details class="web-search-sources web-search-sources--trace"><summary>回答までのステップ</summary>'
+            '<details class="web-search-sources__step-details"><summary>検索</summary>出典</details></details>\n\n'
+            "本文です。<details><summary>補足</summary>残す</details>\n\n"
+            "<details class='web-search-sources'><summary>参照したWebサイト</summary>一覧</details>"
+        )
+
+        self.assertEqual(
+            strip_web_search_sources_html(text),
+            "\n\n本文です。<details><summary>補足</summary>残す</details>\n\n",
+        )
+        self.assertEqual(strip_web_search_sources_html("本文のみ"), "本文のみ")
 
 
 if __name__ == "__main__":

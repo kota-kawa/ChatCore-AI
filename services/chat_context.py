@@ -14,6 +14,7 @@ from typing import Any
 
 from services.chat_images import IMAGE_INPUTS_KEY, estimate_image_input_tokens
 from services.chat_prompt import build_runtime_context_message, insert_before_latest_user_message
+from services.message_parts_display import strip_web_search_sources_html
 from services.user_skills import (
     GENERATIVE_UI_EXECUTION_CONTRACT,
     USER_SKILLS_TOKEN_BUDGET,
@@ -115,6 +116,16 @@ def estimate_token_count(text: str) -> int:
 # Clean and normalize the message text
 def normalize_message_text(text: str) -> str:
     normalized = text if isinstance(text, str) else str(text)
+    # 過去の回答の先頭にある「回答までのステップ」は表示専用のHTMLで、モデルへ戻す前に取り除く。
+    # 残すとモデルがブロックごと真似て、システムが前置するステップと二重になる。検索の根拠は
+    # 別経路（過去ターンの検索コンテキスト）で渡るので、ここで落としても失われない。実体参照を
+    # 戻す前に除く。出典タイトルにエスケープされた `</details>` があると、戻した後ではブロックが途中で閉じる。
+    # The answer-steps block that leads an earlier answer is display-only markup and is
+    # stripped before replay: left in place the model imitates the whole block, which then
+    # doubles the steps the system prepends. Search evidence reaches the model through the
+    # prior-turn search context, so nothing is lost here. This runs before entities are
+    # decoded: an escaped `</details>` in a source title must not close the block early.
+    normalized = strip_web_search_sources_html(normalized)
     # HTML実体参照のデコードと改行・空白の整理
     # Decode HTML entities and organize newlines/spaces
     normalized = html.unescape(normalized)
