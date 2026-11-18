@@ -1,0 +1,92 @@
+{
+  "dataset_id": "generative_ui_mode_selection_v1",
+  "criteria": [
+    "Select STRUCTURED_UI when a native visual materially helps compare, calculate, or explain a system, even when the user does not name a UI format.",
+    "Keep a requested diagram in STRUCTURED_UI when the native node graph represents it clearly.",
+    "Preserve explicit 3D requests as the existing 3D Artifact mode.",
+    "Select NONE for an explicit text-only request; normal choice-button behavior remains separate unless the user explicitly rejects buttons.",
+    "Select the Generative UI Skill exactly when ui_mode is not NONE, and return only the required JSON object."
+  ],
+  "cases": [
+    {
+      "id": "compare_two_options",
+      "messages": [
+        {
+          "role": "user",
+          "content": "次の2案の違いと、どんな条件ならどちらを選ぶかを比較してください。A案は初期費用が低く、保守作業が多めです。B案は初期費用が高く、保守作業が少なめです。"
+        }
+      ],
+      "expect": {
+        "baseline_ui_mode": "NONE",
+        "ui_mode": "STRUCTURED_UI",
+        "ui_skill_selected": true,
+        "explicit_text_only": false
+      },
+      "rationale": "A compact side-by-side comparison makes the trade-off and decision conditions easier to understand, although the user did not explicitly request a visual."
+    },
+    {
+      "id": "loan_payment_scenarios",
+      "messages": [
+        {
+          "role": "user",
+          "content": "借入額4,000万円、返済期間35年、元利均等返済で、年利0.6%、1.1%、1.6%の毎月返済額を比べてください。金利を調整した場合の差も確認できると助かります。"
+        }
+      ],
+      "expect": {
+        "baseline_ui_mode": "NONE",
+        "ui_mode": "STRUCTURED_UI",
+        "ui_skill_selected": true,
+        "explicit_text_only": false
+      },
+      "rationale": "The calculation and request to compare adjusted assumptions benefit from a small native calculator and comparison view."
+    },
+    {
+      "id": "system_request_flow",
+      "messages": [
+        {
+          "role": "user",
+          "content": "ブラウザからAPIサーバー、サービス層、データベースまで、チャット送信のリクエストがどう流れるか新人向けに図解してください。各段階の役割も短く示してください。"
+        }
+      ],
+      "expect": {
+        "baseline_ui_mode": "2D",
+        "ui_mode": "STRUCTURED_UI",
+        "ui_skill_selected": true,
+        "explicit_text_only": false
+      },
+      "rationale": "A sequence of labeled boxes and edges is represented by the native diagram nodes without requiring a free-form canvas."
+    },
+    {
+      "id": "rotatable_three_dimensional_model",
+      "messages": [
+        {
+          "role": "user",
+          "content": "地球と月の大きさの比が分かる、視点を回転して見られる3Dモデルを表示してください。"
+        }
+      ],
+      "expect": {
+        "baseline_ui_mode": "3D",
+        "ui_mode": "3D",
+        "ui_skill_selected": true,
+        "explicit_text_only": false
+      },
+      "rationale": "The user explicitly asks for a rotatable spatial model, which remains an existing 3D Artifact use case."
+    },
+    {
+      "id": "text_only_options",
+      "messages": [
+        {
+          "role": "user",
+          "content": "レポートに含める章を選べるよう、概要・費用・リスク・日程の4つを短く説明してください。文章だけで、ボタンやUIや図は出さないでください。"
+        }
+      ],
+      "expect": {
+        "baseline_ui_mode": "NONE",
+        "ui_mode": "NONE",
+        "ui_skill_selected": false,
+        "explicit_text_only": true
+      },
+      "rationale": "Explicit text-only wording overrides the helpfulness of a native choice UI; options should appear in prose."
+    }
+  ]
+}
