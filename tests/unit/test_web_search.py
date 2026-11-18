@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 from services import url_fetcher, web_search
 from services.chat_prompt import BASE_SYSTEM_PROMPT
 from services.url_fetcher import FetchedImage, FetchedLink
+from services.web_search_trace import answer_step, build_web_search_trace_markdown, search_step
 
 
 # 取得済みページ (FetchedUrlDocument) を最小限の引数で作るテスト用ヘルパー。リダイレクトは無いものとして final_url を同じ URL にする。
@@ -1550,6 +1551,37 @@ class WebSearchEvidenceTestCase(unittest.TestCase):
         self.assertEqual(
             web_search.strip_web_search_citation_html(unclosed_tag),
             "前置きラベル。続きの本文です。",
+        )
+
+    # 日本語: 先頭の「回答までのステップ」にある出典の favicon は残し、本文のチップだけを取り除くことを検証します。
+    # English: Verify the favicons in the leading answer-steps block survive while chips in the body are removed.
+    def test_strip_citation_html_keeps_the_leading_answer_trace_intact(self):
+        result = web_search.WebSearchResult(
+            query="高山 観光",
+            searched_at="2026-08-19T00:00:00+00:00",
+            sources=(
+                web_search.WebSearchSource(
+                    url="https://example.com/a",
+                    title="観光8選",
+                    hostname="example.com",
+                    age="",
+                    snippets=(),
+                ),
+            ),
+        )
+        trace_block = build_web_search_trace_markdown(
+            result,
+            steps=[search_step(result), answer_step([result])],
+        )
+        self.assertIn("web-search-citation__favicon", trace_block)
+        echoed_chip = (
+            '<a class="web-search-citation" href="https://example.com/a" target="_blank" title="観光8選">'
+            '<span class="web-search-citation__label">観光8選</span></a>'
+        )
+
+        self.assertEqual(
+            web_search.strip_web_search_citation_html(f"{trace_block}\n\n古い町並です{echoed_chip}。"),
+            f"{trace_block}\n\n古い町並です。",
         )
 
     # 日本語: 引用チップ以外の通常のリンクや本文は変更しないことを検証します。

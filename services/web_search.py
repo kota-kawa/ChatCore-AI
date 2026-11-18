@@ -44,6 +44,7 @@ from services.llm_daily_limit import (
     consume_brave_web_search_monthly_quota,
     get_seconds_until_monthly_reset,
 )
+from services.message_parts_display import split_answer_trace_block
 from services.url_fetcher import (
     FetchedUrlDocument,
     canonicalize_url,
@@ -670,10 +671,15 @@ def strip_web_search_citation_html(text: str) -> str:
     if CITATION_CHIP_CLASS not in text.lower():
         return text
 
-    cleaned = text
+    # 先頭の「回答までのステップ」はシステムが組み立てたHTMLで、出典の favicon に同じクラス名を
+    # 使っている。ここまで消すと favicon が失われ、閉じタグだけが残ってブロックが壊れる。
+    # The leading answer-steps block is markup the system built, and its source favicons share
+    # the chip class names. Stripping it too drops the favicons and leaves a stray closing tag.
+    trace_block, _ = split_answer_trace_block(text)
+    cleaned = text[len(trace_block) :]
     for pattern in _CITATION_CHIP_HTML_PATTERNS:
         cleaned = pattern.sub("", cleaned)
-    return cleaned
+    return f"{trace_block}{cleaned}"
 
 
 def _split_trailing_citation_chip_html(text: str) -> tuple[str, str]:
