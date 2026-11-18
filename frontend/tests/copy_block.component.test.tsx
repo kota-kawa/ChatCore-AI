@@ -5,6 +5,7 @@ import { render } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BotMessageHtml } from "../components/chat_page/bot_message_html";
+import { renderEveryStreamingUpdate } from "./stream_render_clock";
 
 const EMAIL_BODY = ["開発チーム各位", "", "お疲れさまです。4月25日に説明会を実施します。"].join("\n");
 const COPY_FENCE = ["```chatcore-copy メール本文", EMAIL_BODY, "```"].join("\n");
@@ -93,6 +94,8 @@ describe("copy card clipboard behaviour", () => {
 });
 
 describe("copy card while the answer streams", () => {
+  renderEveryStreamingUpdate();
+
   it("shows the card before the closing fence arrives without reflowing the body", () => {
     // key:value に見える行は、フェンス外なら箇条書きへ整形される。生成中の
     // メール本文がその整形に掛かると、閉じフェンスが届いた瞬間に組み替わる。

@@ -5,6 +5,7 @@ import { render } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { BotMessageHtml } from "../components/chat_page/bot_message_html";
+import { renderEveryStreamingUpdate } from "./stream_render_clock";
 
 describe("BotMessageHtml web-search citations", () => {
   it("renders a site-specific favicon and falls back when loading fails", () => {
@@ -294,6 +295,8 @@ describe("BotMessageHtml streaming stability", () => {
       Element.prototype.scrollIntoView = () => {};
     }
   });
+
+  renderEveryStreamingUpdate();
 
   it("keeps the citation pill and its favicon state across streaming frames", () => {
     const { container, rerender } = render(

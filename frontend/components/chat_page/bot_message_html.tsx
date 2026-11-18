@@ -1,11 +1,14 @@
-// AI 回答の本文（Markdown 由来のテキスト）をサニタイズ済み HTML として描画する。生成中は末尾の語をフェードインさせる。
-// Renders the AI answer body as sanitized HTML, fading in the trailing words while it is still streaming.
-import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+// AI 回答の本文（Markdown 由来のテキスト）をサニタイズ済み HTML として描画する。生成中は末尾の語をフェードインさせ、
+// 描き直しが重いときは頻度を落とす。
+// Renders the AI answer body as sanitized HTML. While it is still streaming, the trailing words fade in
+// and heavy re-renders are spaced out.
+import { memo, useEffect, useLayoutEffect, useRef } from "react";
 
 import { formatLLMOutput } from "../../scripts/chat/chat_ui";
 import { initMessageCopyButtons } from "../../scripts/chat/message_copy_buttons";
 import { patchSanitizedHTML } from "../../scripts/chat/message_utils";
 import { prefersReducedMotion } from "../../lib/chat_page/dom";
+import { streamRenderGapMs } from "../../lib/chat_page/streaming_render_pace";
 import {
   applyStreamingWordReveal,
   clearStreamingWordReveal
@@ -36,9 +39,14 @@ function BotMessageHtmlComponent({ text, streaming = false }: BotMessageHtmlProp
   // 語ごとの初出時刻。再描画でアニメーションが巻き戻らないように保持する
   // Per-word first-seen times, kept so re-renders do not restart the animation
   const revealTimelineRef = useRef<WordRevealTimeline | null>(null);
-  // テキストが変わった場合のみフォーマット済みHTMLを再計算する
-  // Recompute formatted HTML only when text changes
-  const formatted = useMemo(() => formatLLMOutput(text), [text]);
+  // 間引いている間に届いた最新の内容。予約した描き直しは、予約時ではなく実行時の内容を描く。
+  // The latest props received while renders are spaced out: a deferred render draws what is current
+  // when it runs, not what was current when it was scheduled.
+  const latestRef = useRef({ text, streaming });
+  // 次に描き直してよい時刻と、そこまで待っている予約。
+  // The earliest time the next render may run, and the timer waiting for it.
+  const nextRenderAtRef = useRef(0);
+  const deferredRenderTimerRef = useRef<number | null>(null);
 
   // 出典UIのイベントはマウント時に一度だけ委譲する。生成中の再描画ごとに貼り替えると
   // 開閉アニメーションが打ち切られ、クリックが無視されてしまう。本文の挿入より先に
@@ -64,24 +72,70 @@ function BotMessageHtmlComponent({ text, streaming = false }: BotMessageHtmlProp
   // DOMへの書き込みはレイアウト計算前に行う必要があるためuseIsomorphicLayoutEffectを使用する
   // Use useIsomorphicLayoutEffect as DOM writes must occur before layout calculations
   useIsomorphicLayoutEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    // 差分適用の前に単語spanを畳み、実DOMをHTMLと同じ形に戻す。
-    // Fold away the reveal spans first so the live DOM matches the incoming HTML.
-    clearStreamingWordReveal(container);
-    // innerHTML を丸ごと置き換えず差分だけ反映するので、ストリーミング中も既存のノード（選択範囲やコピーボタンなど）が保たれる
-    // Apply only the diff instead of replacing innerHTML, so existing nodes (selection, copy buttons, etc.) survive while streaming
-    patchSanitizedHTML(container, formatted);
-    // 生成が終わった描画ではspanを付けないため、完成後のDOMに残骸は残らない
-    // The finished render adds no spans, so completed messages keep a clean DOM
-    if (streaming && !prefersReducedMotion()) {
-      if (!revealTimelineRef.current) revealTimelineRef.current = new WordRevealTimeline();
-      applyStreamingWordReveal(container, revealTimelineRef.current);
-    } else {
-      revealTimelineRef.current = null;
+    latestRef.current = { text, streaming };
+
+    const cancelDeferredRender = () => {
+      if (deferredRenderTimerRef.current === null) return;
+      window.clearTimeout(deferredRenderTimerRef.current);
+      deferredRenderTimerRef.current = null;
+    };
+
+    const renderLatest = () => {
+      const container = containerRef.current;
+      if (!container) return;
+      const latest = latestRef.current;
+      const startedAt = performance.now();
+      // 差分適用の前に単語spanを畳み、実DOMをHTMLと同じ形に戻す。
+      // Fold away the reveal spans first so the live DOM matches the incoming HTML.
+      clearStreamingWordReveal(container);
+      // innerHTML を丸ごと置き換えず差分だけ反映するので、ストリーミング中も既存のノード（選択範囲やコピーボタンなど）が保たれる
+      // Apply only the diff instead of replacing innerHTML, so existing nodes (selection, copy buttons, etc.) survive while streaming
+      patchSanitizedHTML(container, formatLLMOutput(latest.text));
+      // 生成が終わった描画ではspanを付けないため、完成後のDOMに残骸は残らない
+      // The finished render adds no spans, so completed messages keep a clean DOM
+      if (latest.streaming && !prefersReducedMotion()) {
+        if (!revealTimelineRef.current) revealTimelineRef.current = new WordRevealTimeline();
+        applyStreamingWordReveal(container, revealTimelineRef.current);
+      } else {
+        revealTimelineRef.current = null;
+      }
+      syncWebSearchSourcesState(container);
+      const finishedAt = performance.now();
+      nextRenderAtRef.current = finishedAt + streamRenderGapMs(finishedAt - startedAt);
+    };
+
+    // 生成が終わった本文は待たせずに描く。確定した内容を、予約済みの古い描き直しが後から触ることもない。
+    // A finished body is rendered without waiting, and no deferred render is left to touch it afterwards.
+    if (!streaming) {
+      cancelDeferredRender();
+      renderLatest();
+      return;
     }
-    syncWebSearchSourcesState(container);
-  }, [formatted, streaming]);
+    // 予約済みの描き直しが、実行時に最新の本文を拾う。
+    // A render that is already scheduled picks up the latest text when it runs.
+    if (deferredRenderTimerRef.current !== null) return;
+
+    const waitMs = nextRenderAtRef.current - performance.now();
+    if (waitMs <= 0) {
+      renderLatest();
+      return;
+    }
+    deferredRenderTimerRef.current = window.setTimeout(() => {
+      deferredRenderTimerRef.current = null;
+      renderLatest();
+    }, waitMs);
+  }, [text, streaming]);
+
+  // 予約した描き直しを、外した後のコンテナへ走らせない。
+  // Never let a deferred render run after unmount.
+  useEffect(
+    () => () => {
+      if (deferredRenderTimerRef.current === null) return;
+      window.clearTimeout(deferredRenderTimerRef.current);
+      deferredRenderTimerRef.current = null;
+    },
+    [],
+  );
 
   return <div ref={containerRef}></div>;
 }
