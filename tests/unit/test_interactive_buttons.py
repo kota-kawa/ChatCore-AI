@@ -480,6 +480,10 @@ class InteractiveButtonsPromptContractTests(unittest.TestCase):
                 self.assertIn(f'"type":"{button_type}"', section)
         self.assertIn(f"2 to {MAX_INTERACTIVE_BUTTON_OPTIONS} short", section)
         self.assertIn(f"at most {MAX_INTERACTIVE_BUTTONS_QUESTION_CHARS} characters", section)
+        self.assertIn("fills the chat input as a draft", section)
+        self.assertIn("presses Send to submit it", section)
+        self.assertIn("explicitly asks for text only", section)
+        self.assertIn("Turning the Generative UI Skill off by itself does not disable", section)
 
     def test_prompt_example_passes_the_validator(self):
         section = BASE_SYSTEM_PROMPT.split("## Choice buttons\n", 1)[1].split("\n## ", 1)[0]

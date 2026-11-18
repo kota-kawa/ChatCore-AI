@@ -166,6 +166,23 @@ test("a normal streaming sequence renders, finalizes and persists the answer", a
   assert.ok(recorder.generationStateClears() >= 1);
 });
 
+test("a completed stream attaches its persisted answer id to both the message and local history", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({ clock });
+  seedThinkingMessage(recorder);
+
+  const stream = createScriptedStream([
+    sseBlock(1, "chunk", { text: "保存された回答" }),
+    sseBlock(2, "done", { response: "保存された回答", assistant_message_id: 111 }),
+  ]);
+
+  assert.equal(await settleStream(consumeGenerationStream(stream.response, recorder.host), clock), true);
+  assert.equal(assistantMessages(recorder.messages())[0]?.serverId, 111);
+  assert.deepEqual(recorder.persistedAnswers(), [
+    { text: "保存された回答", sender: "bot", serverId: 111 },
+  ]);
+});
+
 // 文字送りは1フレームずつ進む。完了前の途中フレームでは全文が出ていない。
 // The reveal advances frame by frame: a mid-flight frame shows less than the whole answer.
 test("streamed text is revealed gradually instead of appearing all at once", async () => {

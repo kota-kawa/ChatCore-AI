@@ -14,6 +14,7 @@ from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.generative_ui import (
     NormalizedGenerativeResponse,
     artifact_status_part,
+    is_text_only_request,
     normalize_response_with_artifact_retry,
     normalize_response_with_artifacts,
 )
@@ -25,6 +26,8 @@ from services.message_parts_display import (
     WEB_SEARCH_IMAGE_PART_TYPE,
     normalize_message_parts_for_display,
 )
+from services.structured_ui import has_structured_ui_source
+from services.structured_ui_citations import resolve_message_part_citations
 from services.tool_approval_parts import TOOL_APPROVAL_PART_TYPE
 
 from .chat_answer_continuation import FinalAnswerContinuationStalledError
@@ -206,18 +209,28 @@ class ChatGenerationFinalizationMixin(ChatGenerationJobBase):
         bot_reply: str,
         latest_user_message: str,
     ) -> NormalizedGenerativeResponse:
-        if state.final_answer_incomplete is not None:
+        native_turn = str(self._ui_mode) in {"STRUCTURED_UI", "MIXED_2D", "MIXED_3D"} or has_structured_ui_source(bot_reply)
+        if state.final_answer_incomplete is not None or (native_turn and (state.budget.llm_turns_exhausted or self._cancelled)):
             return normalize_response_with_artifacts(
                 bot_reply,
                 recover_truncated=True,
+                explicit_text_only=is_text_only_request(latest_user_message),
                 ui_mode=self._ui_mode,
                 explicit_ui_opt_out=self._explicit_ui_opt_out,
             )
+        def generate_repair(messages: list[dict[str, Any]], model: str) -> str | None:
+            if native_turn:
+                if state.budget.llm_turns_exhausted or self._cancelled:
+                    return None
+                state.budget.start_llm_turn()
+                state.telemetry.llm_turns = state.budget.llm_turns
+            return with_answer_output_budget(get_llm_response)(messages, model)
+
         return normalize_response_with_artifact_retry(
             bot_reply,
             conversation_messages=state.answer_context_messages or state.current_messages,
             model=self._model,
-            generate_response=with_answer_output_budget(get_llm_response),
+            generate_response=generate_repair,
             user_request=latest_user_message,
             ui_mode=self._ui_mode,
             explicit_ui_opt_out=self._explicit_ui_opt_out,
@@ -246,6 +259,8 @@ class ChatGenerationFinalizationMixin(ChatGenerationJobBase):
         )
         resolved_citations: tuple[WebSearchCitation, ...] = ()
         if citation_evidence is None:
+            if message_parts and any(part.get("type") == "structured_ui" for part in message_parts):
+                message_parts = resolve_message_part_citations(message_parts, None)
             return bot_reply, message_parts, resolved_citations
 
         citation_resolution = resolve_web_search_citations(
@@ -262,14 +277,7 @@ class ChatGenerationFinalizationMixin(ChatGenerationJobBase):
         bot_reply = citation_resolution.text
         resolved_citations = citation_resolution.citations
         if message_parts:
-            message_parts = [
-                (
-                    {**part, "text": bot_reply}
-                    if part.get("type") == "text"
-                    else part
-                )
-                for part in message_parts
-            ]
+            message_parts = resolve_message_part_citations(message_parts, citation_evidence)
         return bot_reply, message_parts, resolved_citations
 
     # 回答が無いターンを成功として保存せず、エラーとして通知するフェーズ。
@@ -407,6 +415,11 @@ class ChatGenerationFinalizationMixin(ChatGenerationJobBase):
             reason_codes=normalized_response.artifact_reason_codes,
             repair_attempted=normalized_response.repair_attempted,
         )
+        self._telemetry.structured_ui_repair_attempted = normalized_response.structured_ui_repair_attempted
+        self._telemetry.structured_ui_repair_succeeded = normalized_response.structured_ui_repair_succeeded
+        self._telemetry.structured_ui_blocks = sum(part.get("type") == "structured_ui" for part in normalized_response.parts or [])
+        self._telemetry.structured_ui_validation_failures = len(normalized_response.structured_ui_errors)
+        self._telemetry.structured_ui_quality_failures = len(normalized_response.structured_ui_quality_errors)
         self._artifact_status_payload = normalized_response.status_payload()
         if normalized_response.validation_errors:
             logger.warning(
@@ -460,7 +473,7 @@ class ChatGenerationFinalizationMixin(ChatGenerationJobBase):
         # citation resolution, realize the placement plan returned by the selector
         # so persisted history matches what the stream revealed.
         if state.selected_web_search_images:
-            # 生成UIは検索画像パーツと排他だが、番号で参照した画像は生成UIの中に表示する。
+            # Artifactは検索画像パーツと排他。宣言的UIは共存し、番号で選定済み画像を参照できる。
             # A generated UI excludes image parts, yet shows the images it references by number.
             message_parts = attach_web_search_images_to_artifacts(
                 message_parts,

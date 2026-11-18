@@ -9,6 +9,7 @@ import { useHomePageGenerationActions } from "../hooks/chat_page/use_home_page_g
 import { LocaleProvider } from "../contexts/locale_context";
 import { createGenerationGuard } from "../lib/chat_page/generation_guard";
 import { readStoredGenerationState, readStoredHistory, writeStoredGenerationState, writeStoredHistory } from "../lib/chat_page/storage";
+import { clearStructuredUiMetrics, readStructuredUiMetrics, recordStructuredUiMetric } from "../lib/chat_page/structured_ui_metrics";
 import type { ChatRoom, UiChatMessage } from "../lib/chat_page/types";
 import { resilientFetch } from "../scripts/core/resilient_fetch";
 
@@ -62,7 +63,74 @@ function createStreamResponse(blocks: string[], generationId?: string) {
 }
 
 describe("generation identity", () => {
-  beforeEach(() => resilientFetchMock.mockReset());
+  beforeEach(() => {
+    resilientFetchMock.mockReset();
+    clearStructuredUiMetrics();
+    localStorage.clear();
+  });
+
+  it("sends scoped UI metrics and the UI version header on a normal logged-in request", async () => {
+    localStorage.setItem("chatcore.chat.userScope", "user:42");
+    const scopeKey = "user%3A42:room-1";
+    recordStructuredUiMetric(scopeKey, "budget-ui", {
+      render_ms: 9,
+      action_count: 2,
+      action_error_count: 1,
+      compose_count: 1,
+    });
+    resilientFetchMock.mockImplementation(async (url) =>
+      String(url) === "/api/chat"
+        ? createJsonResponse(200, { response: "回答", assistant_message_id: 81 })
+        : createJsonResponse(500, {}),
+    );
+
+    const { result } = renderHook(() => useGenerationHarness());
+    await act(async () => { await result.current.actions.generateResponse("質問", "model", "room-1"); });
+
+    const [requestUrl, requestInit] = resilientFetchMock.mock.calls[0] ?? [];
+    expect(requestUrl).toBe("/api/chat");
+    expect(requestInit?.headers).toEqual({
+      "Content-Type": "application/json",
+      "X-ChatCore-UI-Version": "1",
+    });
+    expect(JSON.parse(String(requestInit?.body)).ui_metrics).toEqual([
+      { block_id: "budget-ui", render_ms: 9, action_count: 2, action_error_count: 1, compose_count: 1 },
+    ]);
+    expect(readStructuredUiMetrics(scopeKey)).toBeNull();
+    expect(readStoredHistory("room-1").at(-1)).toMatchObject({ text: "回答", serverId: 81 });
+    expect(result.current.state.messages.find((message) => message.sender === "assistant")?.serverId).toBe(81);
+  });
+
+  it("does not send structured UI metrics for temporary rooms", async () => {
+    localStorage.setItem("chatcore.chat.userScope", "user:42");
+    const scopeKey = "user%3A42:room-1";
+    recordStructuredUiMetric(scopeKey, "budget-ui", { action_count: 1 });
+    resilientFetchMock.mockImplementation(async (url) =>
+      String(url) === "/api/chat" ? createJsonResponse(200, { response: "回答" }) : createJsonResponse(500, {}),
+    );
+
+    const { result } = renderHook(() => useGenerationHarness());
+    await act(async () => {
+      await result.current.actions.generateResponse("質問", "model", "room-1", undefined, "temporary");
+    });
+
+    const request = resilientFetchMock.mock.calls.find(([url]) => String(url) === "/api/chat");
+    expect(JSON.parse(String(request?.[1]?.body)).ui_metrics).toBeUndefined();
+  });
+
+  it("drops a metrics snapshot when the normal send fails", async () => {
+    localStorage.setItem("chatcore.chat.userScope", "user:42");
+    const scopeKey = "user%3A42:room-1";
+    recordStructuredUiMetric(scopeKey, "budget-ui", { action_count: 1 });
+    resilientFetchMock.mockImplementation(async (url) =>
+      String(url) === "/api/chat" ? createJsonResponse(500, { error: "failed" }) : createJsonResponse(500, {}),
+    );
+
+    const { result } = renderHook(() => useGenerationHarness());
+    await act(async () => { await result.current.actions.generateResponse("質問", "model", "room-1"); });
+
+    expect(readStructuredUiMetrics(scopeKey)).toBeNull();
+  });
 
   it("pins initial request recovery to the id sent before losing the POST response", async () => {
     let requestGenerationId = "";

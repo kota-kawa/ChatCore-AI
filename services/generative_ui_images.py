@@ -154,6 +154,16 @@ def attach_web_search_images_to_artifacts(
 
     attached_parts: list[dict[str, Any]] = []
     for part in parts:
+        if part.get("type") == "structured_ui":
+            ui = part["ui"]
+            refs = {node["ref"] for node in ui["nodes"] if node["type"] == "image"}
+            images = valid_generated_ui_images([
+                {"ref": number, "url": build_web_search_image_proxy_path(numbered_images[number]["url"]),
+                 "source_url": numbered_images[number]["source_url"], "source_title": numbered_images[number]["source_title"]}
+                for number in refs if number in numbered_images
+            ])
+            attached_parts.append({**part, "ui": {**ui, "images": images}})
+            continue
         artifact = part.get("artifact")
         if part.get("type") not in GENERATIVE_UI_PART_TYPES or not isinstance(artifact, dict):
             attached_parts.append(part)

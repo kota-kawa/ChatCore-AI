@@ -89,6 +89,13 @@ files = [
     "services/env_settings.py",
     "services/error_messages.py",
     "services/runtime_config.py",
+    "services/structured_ui.py",
+    "services/structured_ui_models.py",
+    "services/structured_ui_response.py",
+    "services/structured_ui_quality.py",
+    "services/structured_ui_citations.py",
+    "services/structured_ui_delivery.py",
+
 ]
 # 日本語: 未検査モジュールからのエラーは報告せず、対象モジュールの型だけを厳格に見ます。
 # English: Errors from modules outside the enforced surface stay silent so only the targets are held strict.

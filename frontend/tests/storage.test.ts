@@ -25,6 +25,7 @@ import {
 import { __test__ as historyCacheTestConstants } from "../lib/chat_page/history_cache";
 import type { StoredHistoryEntry } from "../lib/chat_page/types";
 import { STORAGE_KEYS } from "../scripts/core/constants";
+import { readStructuredUiMetrics, recordStructuredUiMetric } from "../lib/chat_page/structured_ui_metrics";
 
 class FakeLocalStorage implements Storage {
   private readonly values = new Map<string, string>();
@@ -92,6 +93,35 @@ test("writeStoredHistory reports a successful full write", () => {
     droppedEntries: 0,
   });
   assert.deepEqual(readStoredHistory("room-a"), [{ text: "hello", sender: "user" }]);
+});
+
+test("stored history retains the database id of an assistant answer", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+
+  writeStoredHistory("room-server-id", [{ text: "saved", sender: "bot", serverId: 73 }]);
+
+  assert.deepEqual(readStoredHistory("room-server-id"), [
+    { text: "saved", sender: "bot", serverId: 73 },
+  ]);
+});
+
+test("room cleanup removes only the current user's structured UI selections", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+  storage.setItem("chatcore.chat.userScope", "user:alice");
+  const ownKey = "chatcore.structured-ui:user%3Aalice:room%3Awith%3Acolon:server%3A73:block";
+  const otherUserKey = "chatcore.structured-ui:user%3Abob:room%3Awith%3Acolon:server%3A73:block";
+  storage.setItem(ownKey, JSON.stringify({ version: 1, selected: {}, tabs: {} }));
+  storage.setItem(otherUserKey, JSON.stringify({ version: 1, selected: {}, tabs: {} }));
+  const metricsScope = "user%3Aalice:room%3Awith%3Acolon";
+  recordStructuredUiMetric(metricsScope, "block", { action_count: 1 });
+
+  removeStoredHistory("room:with:colon");
+
+  assert.equal(storage.getItem(ownKey), null);
+  assert.notEqual(storage.getItem(otherUserKey), null);
+  assert.equal(readStructuredUiMetrics(metricsScope), null);
 });
 
 test("writeStoredHistory reports quota truncation and keeps newest messages", () => {
@@ -469,6 +499,10 @@ test("clearAllHomePagePersistedState wipes chat text, generation state, drafts a
   storage.setItem(STORAGE_KEYS.tasksCachePrefix + "list", "[]");
   storage.setItem(STORAGE_KEYS.setupInfoDraft, "draft text");
   storage.setItem(STORAGE_KEYS.memoComposeDraft, JSON.stringify({ owner: "1", ai_response: "memo draft" }));
+  const uiStateKey = "chatcore.structured-ui:user%3A42:room-a:server%3A7:block";
+  storage.setItem(uiStateKey, JSON.stringify({ version: 1, selected: {}, tabs: {} }));
+  const metricsScope = "user%3A42:room-a";
+  recordStructuredUiMetric(metricsScope, "block", { action_count: 1 });
 
   clearAllHomePagePersistedState();
 
@@ -479,6 +513,8 @@ test("clearAllHomePagePersistedState wipes chat text, generation state, drafts a
   assert.equal(storage.getItem(STORAGE_KEYS.tasksCachePrefix + "list"), null);
   assert.equal(storage.getItem(STORAGE_KEYS.setupInfoDraft), null);
   assert.equal(storage.getItem(STORAGE_KEYS.memoComposeDraft), null);
+  assert.equal(storage.getItem(uiStateKey), null);
+  assert.equal(readStructuredUiMetrics(metricsScope), null);
 });
 
 test("reconcileStoredUserScope records the first user without wiping anything", () => {

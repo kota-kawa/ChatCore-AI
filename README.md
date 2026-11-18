@@ -24,7 +24,7 @@ ChatCore-AI grew out of the friction of retyping the same prompts. Tasks provide
 | --- | --- |
 | Tasks and Skills | Save instructions and import useful public prompts |
 | Chat | Streaming replies, history, temporary conversations, sharing, document attachments, and private image input |
-| Search and generated UI | Source citations and interactive 2D/3D visuals inside the conversation |
+| Search and generated UI | Cited answers with native comparison cards, charts, calculators and diagrams, plus 2D/3D sandbox Artifacts |
 | Personal knowledge | Editable memos, collections, sharing/export, and typed personal context facts |
 | External AI integration | Read and write authorized data through MCP, and reuse it across clients |
 
@@ -102,13 +102,13 @@ flowchart TD
     Decide -->|Write requiring user approval| Approval["Validate the proposal and create an approval card"]
     Approval --> Answer["Generate the answer"]
     Decide -->|Answer| Answer
-    Answer --> Output["Stream text and finalize citations, validated UI, and cards"]
+    Answer --> Output["Stream text, validated native UI / Artifacts, and cards"]
     Output --> Save["Save the reply and send the terminal event"]
     Approval -.-> Gate["After user approval, recheck access and revision"]
     Gate --> Write["Execute the authorized write"]
 ```
 
-Search and reading have separate budgets. When tools are exhausted, the model answers from the evidence collected so far and is instructed to state uncertainty. Pending write proposals close the turn with an answer and an approval card. Eligible writes can use a previously granted automatic approval; external content or unconfirmed personal context suppresses it. Generated UI runs only after validation, inside an isolated iframe.
+Search and reading have separate budgets. When tools are exhausted, the model answers from the evidence collected so far and is instructed to state uncertainty. Pending write proposals close the turn with an answer and an approval card. Eligible writes can use a previously granted automatic approval; external content or unconfirmed personal context suppresses it. Native UI uses validated components and bounded local calculations; custom simulations and 3D keep using the isolated iframe. Choices prepare an editable chat message before the user sends it.
 
 Implementation: [Input and context preparation](services/chat_use_case.py) · [Skill selection](services/chat_skill_selection.py) · [AI decision loop](services/chat_generation_agent_loop.py) · [Tool execution](services/chat_generation_tools.py)
 
@@ -229,7 +229,7 @@ Design decisions are recorded in the [ADR index](docs/decisions/README.md).
 
 ## Handling AI output
 
-Generated UI passes validation and runs in an isolated iframe. Chat writes use approval cards; eligible automatic approvals are suppressed after external or unconfirmed context is read. Public Prompt creation always requires approval. API cost accounting checks personal daily/weekly limits and a shared monthly budget before new AI work starts; in-flight turns can exceed a limit. The admin console issues one demo code per recipient; entering it opens a dedicated, sample-filled account with every feature, deleted 30 days after first use and capped in spend for its whole period.
+Native UI passes schema validation and uses a restricted component registry; generated HTML/JavaScript stays inside the isolated iframe. Chat writes use approval cards; eligible automatic approvals are suppressed after external or unconfirmed context is read. Public Prompt creation always requires approval. API cost accounting checks personal daily/weekly limits and a shared monthly budget before new AI work starts; in-flight turns can exceed a limit. The admin console issues one demo code per recipient; entering it opens a dedicated, sample-filled account with every feature, deleted 30 days after first use and capped in spend for its whole period.
 
 Implementation: [Generated UI](services/generative_ui.py) · [Write tools](services/chat_workspace_tools/runner.py) · [Usage limits](services/usage_limits.py)
 
@@ -290,7 +290,7 @@ Copyright (c) 2026 Kota Kawagoe. Licensed under [Apache License 2.0](LICENSE).
 | --- | --- |
 | タスク・Skill | 自分用の指示を登録し、少ない入力で会話を開始。公開プロンプトからも取り込める |
 | AI チャット | 複数モデルを選択し、SSE で応答を逐次表示。履歴・一時チャット・共有・文書添付・画像入力に対応 |
-| Web 検索・生成 UI | 出典を付けた回答や、会話内で操作できる 2D／3D の図・グラフを表示 |
+| Web 検索・生成 UI | 出典付きの回答に、比較カード・表・操作できる試算・図解を組み合わせ、2D／3D Artifactも表示 |
 | メモ・マイコンテキスト | メモを編集・整理・共有・エクスポートし、好みやプロジェクト情報などの個人の事実を保存・検索 |
 | MCP 連携 | 外部 AI から公開プロンプトを扱い、本人のメモ・コンテキストを読み書き。クライアントを変えても知識を再利用 |
 
@@ -370,13 +370,13 @@ flowchart TD
     Decide -->|都度承認が必要な書き込み| Approval["提案を検証して承認カードを作成"]
     Approval --> Answer["回答を生成"]
     Decide -->|回答| Answer
-    Answer --> Output["本文を逐次配信し、引用・検証済み UI・カードを仕上げる"]
+    Answer --> Output["本文と検証済みネイティブUI／Artifactを順に配信"]
     Output --> Save["回答を保存し、終端イベントを通知"]
     Approval -.-> Gate["利用者の承認後、権限・版番号を再確認"]
     Gate --> Write["許可された書き込みを実行"]
 ```
 
-検索と読み取りには別々の予算を設けています。ツールの予算が尽きた場合は、それまでの根拠で回答し、不確実性を明示するよう指示します。書き込みが承認待ちになった場合は、回答と承認カードでターンを締めます。対応する操作には事前に設定した「常に承認」を使えますが、外部本文や本人未確認のコンテキストを読んだターンでは自動実行を抑止します。生成 UI は検証を通過したものだけを隔離 iframe で実行します。
+検索と読み取りには別々の予算を設けています。ツールの予算が尽きた場合は、それまでの根拠で回答し、不確実性を明示するよう指示します。書き込みが承認待ちになった場合は、回答と承認カードでターンを締めます。対応する操作には事前に設定した「常に承認」を使えますが、外部本文や本人未確認のコンテキストを読んだターンでは自動実行を抑止します。生成 UI は、カード・図表・入力付き計算をネイティブ部品で描画し、自由なシミュレーションや3Dは従来の隔離 iframe で実行します。選択内容は入力欄で確認してから送信できます。
 
 実装: [入力と文脈の準備](services/chat_use_case.py) · [Skill 選択](services/chat_skill_selection.py) · [AI の判断ループ](services/chat_generation_agent_loop.py) · [ツール実行](services/chat_generation_tools.py)
 
@@ -494,7 +494,7 @@ sequenceDiagram
 
 ## AI の出力をアプリで扱う工夫
 
-**生成 UI は検証してから隔離 iframe で実行**します。HTML・CSS・JavaScript の契約を検証し、検索画像もサーバーが許可した署名付き中継 URL を使います。
+**生成 UI は検証してから描画**します。宣言的UIは許可部品と上限付き計算だけを扱い、HTML・CSS・JavaScriptは従来の隔離 iframe で実行します。検索画像は署名付き中継 URL を使います。
 
 **チャットからの書き込みは承認カードを経由**します。対応する操作に「常に承認」を設定していても、外部本文や本人未確認のコンテキストを読んだターンでは自動実行を抑止します。公開 Prompt の新規投稿は毎回の承認が必要です。
 

@@ -13,6 +13,7 @@ import re
 from typing import Any
 
 from services.chat_prompt import insert_before_latest_user_message
+from services.structured_ui_prompt import STRUCTURED_UI_EXECUTION_CONTRACT
 
 # 「UI・図を作らない」と読める表現だけを拾う。UIについて説明を求める文とは区別する。
 # Match only phrasings that refuse a visual, never a request to explain one.
@@ -42,24 +43,53 @@ _EXPLICIT_OPT_OUT_PATTERNS: tuple[re.Pattern[str], ...] = (
 # The decided mode is injected into the generation prompt. Letting the classifier and the
 # answering pass guess independently produces "classified 2D, answered in prose", which the
 # later stages can only resolve by discarding output.
-_MODE_INSTRUCTION = (
-    "Generated UI mode for this turn is already decided: {mode}. The decision is final; do not "
-    "re-evaluate it. Producing exactly one ```chatcore-artifact fenced JSON block is required in "
-    "this answer, in addition to a short prose introduction. The JSON must contain version, title, "
-    "description, height, html, css, and js, and the html must contain id=\"app\". "
-    "{mode_requirement}"
-)
-_MODE_REQUIREMENTS = {
+_ARTIFACT_INSTRUCTIONS = {
     "2D": (
-        "Build a complete, responsive 2D interface with meaningful initial content; do not use "
-        "Three.js or WebGL."
+        "A complete chatcore-artifact block is required: produce exactly one ```chatcore-artifact "
+        "fenced JSON block in addition to a short "
+        "prose introduction. The JSON must contain version, title, description, height, html, css, "
+        "and js, and html must contain id=\"app\". Build a complete, responsive 2D interface with "
+        "meaningful initial content; do not use Three.js or WebGL."
     ),
     "3D": (
-        "Declare libraries:[\"three\"] and build a complete Three.js scene with a renderer, camera, "
-        "lighting, and visible geometry using the existing global THREE."
+        "A complete chatcore-artifact block is required: produce exactly one ```chatcore-artifact "
+        "fenced JSON block in addition to a short "
+        "prose introduction. The JSON must contain version, title, description, height, html, css, "
+        "and js, and html must contain id=\"app\". Declare libraries:[\"three\"] and build a complete "
+        "Three.js scene with a renderer, camera, lighting, and visible geometry using the existing "
+        "global THREE."
     ),
 }
-_INJECTABLE_MODES = frozenset(_MODE_REQUIREMENTS)
+_MODE_INSTRUCTIONS = {
+    "STRUCTURED_UI": STRUCTURED_UI_EXECUTION_CONTRACT,
+    **_ARTIFACT_INSTRUCTIONS,
+    "MIXED_2D": (
+        "Produce both at least one native structured UI block and exactly one complete 2D "
+        "chatcore-artifact block. "
+        + STRUCTURED_UI_EXECUTION_CONTRACT
+        + "\n\n"
+        + _ARTIFACT_INSTRUCTIONS["2D"]
+    ),
+    "MIXED_3D": (
+        "Produce both at least one native structured UI block and exactly one complete 3D "
+        "chatcore-artifact block. "
+        + STRUCTURED_UI_EXECUTION_CONTRACT
+        + "\n\n"
+        + _ARTIFACT_INSTRUCTIONS["3D"]
+    ),
+}
+_INJECTABLE_MODES = frozenset(_MODE_INSTRUCTIONS)
+_UNDECIDED_MODE_INSTRUCTION = (
+    "The pre-answer Generative UI classification was unresolved, so no presentation mode is set. "
+    "Choose the mode from the user's request while following the execution contract: use STRUCTURED_UI "
+    "when a native comparison, calculation, explanation, or requested diagram materially helps; use "
+    "2D or 3D Artifact only for a requested free-form canvas or spatial model; use NONE for brief "
+    "answers, ordinary code examples, and explicit text-only requests. Preserve an explicit request "
+    "for a visual instead of silently answering only in prose. The chatcore-ui schema and safety "
+    "rules in the execution contract apply if you choose STRUCTURED_UI."
+    "\n\n"
+    + STRUCTURED_UI_EXECUTION_CONTRACT
+)
 
 # 「操作・状態変化を求める」依頼だけを拾う。UIモード自体（平面/立体/無し）は
 # 「表示してほしい」全般で選ばれるため、可視化そのものの依頼と、それを操作できる
@@ -72,6 +102,7 @@ _INJECTABLE_MODES = frozenset(_MODE_REQUIREMENTS)
 _JA_INTERACTIVE_OPERATION = (
     r"操作(?:できる|可能)|動かせる|いじれる|"
     r"(?:操作して|調整して|触って)[^。\n]{0,20}(?:できる|られる|めるように|変わ|切り替わ)|"
+    r"(?:条件|前提|金利|利率|数値|パラメータ)[^。\n]{0,16}(?:調整|変更|変え|変えた)[^。\n]{0,30}(?:差|結果|返済額|比較|推移|変化|確認|見られる|分かる)|"
     r"再生(?:できる|可能|して)|一時停止|巻き戻し|早送り|"
     r"スライダー(?:で|を)|ドラッグ(?:で|して)|つまみ(?:で|を)|"
     r"ボタン(?:を押すと|を押して|で(?:切り替|操作|選|再生|変更))|押すと(?:変わ|切り替わ)|"
@@ -79,6 +110,7 @@ _JA_INTERACTIVE_OPERATION = (
 )
 _EN_INTERACTIVE_OPERATION = (
     r"\binteractive\b|\b(?:adjustable|draggable|playable|clickable|toggleable)\b|"
+    r"\bwhat[- ]if\b|\b(?:adjust|change)\b[^.\n]{0,24}\b(?:assumptions?|parameters?|rates?)\b|"
     r"\b(?:drag|slide|toggle|press|click)\b[^.\n]{0,20}\bto\b[^.\n]{0,20}"
     r"\b(?:change|update|adjust|control|reveal)\b|"
     r"\bplay(?:\s*/\s*pause|back)?\b[^.\n]{0,20}\b(?:button|control)\b"
@@ -124,20 +156,37 @@ def inject_generative_ui_mode_instruction(
 ) -> list[dict[str, Any]]:
     """Return a copy of the conversation carrying the decided UI mode as a requirement.
 
-    元のリストとメッセージ辞書は変更しない。モードが 2D/3D 以外のときは複製だけを返す。
-    Neither the list nor its message dicts are mutated. Modes other than 2D/3D return a copy.
+    元のリストとメッセージ辞書は変更しない。NONE・不明なモードでは複製だけを返す。
+    Neither the list nor its message dicts are mutated. NONE and unknown modes return a copy.
     """
     messages = [dict(message) for message in conversation_messages or []]
     normalized_mode = str(mode or "").strip().upper()
+    if mode is None:
+        return insert_before_latest_user_message(
+            messages,
+            {"role": "system", "content": _UNDECIDED_MODE_INSTRUCTION},
+        )
     if normalized_mode not in _INJECTABLE_MODES:
         return messages
+    if normalized_mode == "STRUCTURED_UI":
+        from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT
+
+        messages = [
+            message
+            for message in messages
+            if not (
+                message.get("role") == "system"
+                and message.get("content") == GENERATIVE_UI_EXECUTION_CONTRACT
+            )
+        ]
     return insert_before_latest_user_message(
         messages,
         {
             "role": "system",
-            "content": _MODE_INSTRUCTION.format(
-                mode=normalized_mode,
-                mode_requirement=_MODE_REQUIREMENTS[normalized_mode],
+            "content": (
+                f"Generated UI mode for this turn is already decided: {normalized_mode}. "
+                "The decision is final; do not re-evaluate it. "
+                + _MODE_INSTRUCTIONS[normalized_mode]
             ),
         }
     )

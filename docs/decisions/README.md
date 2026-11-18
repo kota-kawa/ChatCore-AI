@@ -26,6 +26,8 @@
 - [0020: 判断ステップの本文は、確定前に表示専用の下書きとして先に流す](0020-provisional-answer-draft-streaming.md)
 - [0021: デモは配布先ごとのアクセスコードで、期限付きの専用アカウントに入れる](0021-demo-access-codes.md)
 
+- [0022: 宣言的UIとsandbox Artifactを併用する](0022-native-and-sandbox-generated-ui.md)
+
 ## 追加・更新の基準
 
 判断が複数機能に影響する、後から覆すと移行コストが高い、またはセキュリティ・データ整合性に関わる場合に ADR を追加します。各 ADR には少なくとも「状態」「背景」「判断」「影響」を記載します。コードの詳細は `ARCHITECTURE.md` または専門文書へリンクし、ADR に複製しません。

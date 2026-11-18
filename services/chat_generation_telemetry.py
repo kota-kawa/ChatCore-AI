@@ -27,6 +27,12 @@ class ChatGenerationTelemetry:
     Mutable per-turn counters rendered into one structured log record.
     """
 
+    structured_ui_repair_attempted: bool = False
+    structured_ui_repair_succeeded: bool = False
+    structured_ui_blocks: int = 0
+    structured_ui_validation_failures: int = 0
+    structured_ui_quality_failures: int = 0
+    first_visible_ui_ms: int | None = None
     model: str = ""
     # 会話モデルの推論ターン数と、実際に実行したツール数を別々に数える。
     # Count model reasoning turns separately from executed tool calls.
@@ -268,6 +274,12 @@ class ChatGenerationTelemetry:
             "workspace_tool_results": list(self.workspace_tool_results),
             "approval_pending_turn": self.approval_pending_turn,
             "auto_approval_suppressed_by_untrusted_input": self.auto_approval_suppressed_by_untrusted_input,
+            "structured_ui_repair_attempted": self.structured_ui_repair_attempted,
+            "structured_ui_repair_succeeded": self.structured_ui_repair_succeeded,
+            "structured_ui_blocks": self.structured_ui_blocks,
+            "structured_ui_validation_failures": self.structured_ui_validation_failures,
+            "structured_ui_quality_failures": self.structured_ui_quality_failures,
+            "first_visible_ui_ms": self.first_visible_ui_ms,
             "ui_mode": self.ui_mode,
             "ui_mode_decision_status": self.ui_mode_decision_status,
             "explicit_ui_opt_out": self.explicit_ui_opt_out,

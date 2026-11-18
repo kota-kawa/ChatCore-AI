@@ -3,6 +3,7 @@
 import { memo } from "react";
 
 import { decodeStoredMessage, normalizeSharedSender } from "../../lib/shared_chat/message_text";
+import { normalizeChatMessageParts } from "../../lib/chat_page/api_contract";
 import type { SharedChatMessage } from "../../lib/shared_chat/types";
 import { SharedChatMessageParts } from "./shared_chat_message_parts";
 import { SharedChatUserMessage } from "./shared_chat_user_message";
@@ -29,6 +30,7 @@ function SharedChatMessageListComponent({ emptyLabel, messages }: SharedChatMess
       {messages.map((message, index) => {
         const sender = normalizeSharedSender(message.sender);
         const decoded = decodeStoredMessage(message.message || "");
+        const normalizedParts = normalizeChatMessageParts(message.message_parts, undefined, sender === "assistant");
         // メッセージに固有の ID が無いため、送信者・位置・時刻を組み合わせてキーにする
         // Messages carry no unique ID here, so the key combines sender, position and timestamp
         const rowKey = `${sender}-${index}-${message.timestamp || ""}`;
@@ -49,7 +51,7 @@ function SharedChatMessageListComponent({ emptyLabel, messages }: SharedChatMess
           <div key={rowKey} className="chat-message-row">
             <div className="message-wrapper bot-message-wrapper">
               <div className="bot-message">
-                <SharedChatMessageParts fallbackText={decoded} parts={message.message_parts} />
+                <SharedChatMessageParts fallbackText={decoded} parts={normalizedParts} />
               </div>
             </div>
           </div>

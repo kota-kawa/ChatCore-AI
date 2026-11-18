@@ -64,8 +64,8 @@ class UserSkillPromptTests(unittest.TestCase):
         self.assertIn("## 生成UI", prompt or "")
         self.assertIn(GENERATIVE_UI_SKILL_INSTRUCTIONS, prompt or "")
         self.assertIn("### Few-shot examples", prompt or "")
-        self.assertIn("<expected_behavior>Choose 2D", prompt or "")
-        self.assertIn("<expected_behavior>Choose NONE", prompt or "")
+        self.assertIn("preselected STRUCTURED_UI mode", prompt or "")
+        self.assertIn("preselected NONE mode", prompt or "")
         self.assertNotIn("## Generative UI", BASE_SYSTEM_PROMPT)
 
     def test_disabling_generative_ui_removes_skill_and_execution_contract(self):

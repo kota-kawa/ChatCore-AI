@@ -18,7 +18,8 @@ import { InlineLoading } from "../ui/inline_loading";
 import { MAX_CHAT_MESSAGE_LENGTH } from "../../lib/chat_page/constants";
 import { parseTaskLaunchMessage } from "../../lib/chat_page/task_utils";
 import type { ToolApprovalDecision } from "../../lib/chat_page/tool_approval_api";
-import type { NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
+import type { ChatRoomMode, NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
+import { createStructuredUiStateScope } from "../../lib/chat_page/structured_ui_scope";
 import { stripCopyBlockFences } from "../../scripts/chat/copy_block_markdown";
 import { stripWebSearchArtifacts } from "../../scripts/chat/memo_text";
 import { BotMessageParts } from "./bot_message_parts";
@@ -182,12 +183,16 @@ export function hasLaterUserMessage(
 // Shared props passed to every ChatMessageRow via react-window's rowProps mechanism.
 type ChatMessageRowProps = {
   rows: ChatMessageListRow[];
+  currentRoomId: string | null;
+  currentRoomMode: ChatRoomMode;
+  loggedIn: boolean;
+  userScope: string | null;
   isGenerating: boolean;
   isLoadingOlder: boolean;
   loadOlderChatHistory: () => Promise<void>;
   onRegenerate: () => void;
   onContinue: () => void;
-  onChoiceSubmit: (text: string) => void;
+  onCompose: (text: string) => void;
   onToolApprovalDecide: (approvalId: string, decision: ToolApprovalDecision, acknowledgeWarnings?: boolean) => Promise<void>;
   editingMessageId: string | null;
   onEditStart: (messageId: string) => void;
@@ -215,12 +220,16 @@ type ChatMessageRowComponentProps = ChatMessageRowProps & {
 function ChatMessageRow({
   ariaAttributes,
   index,
+  currentRoomId,
+  currentRoomMode,
+  loggedIn,
+  userScope,
   isGenerating,
   isLoadingOlder,
   loadOlderChatHistory,
   onRegenerate,
   onContinue,
-  onChoiceSubmit,
+  onCompose,
   onToolApprovalDecide,
   editingMessageId,
   onEditStart,
@@ -397,11 +406,22 @@ function ChatMessageRow({
       >
         <div className={`bot-message ${isActivelyStreaming ? "bot-message--streaming" : ""}`.trim()}>
           <BotMessageParts
+            key={JSON.stringify([currentRoomId, message.id])}
             fallbackText={message.text}
             parts={message.parts}
             streaming={isActivelyStreaming}
-            onChoiceSubmit={onChoiceSubmit}
-            choicesDisabled={choicesDisabled}
+            onCompose={onCompose}
+            composeDisabled={choicesDisabled}
+            getStructuredUiStateScope={(blockId) =>
+              createStructuredUiStateScope({
+                loggedIn,
+                roomMode: currentRoomMode,
+                roomId: currentRoomId,
+                userScope,
+                answerId: message.serverId ? `server:${message.serverId}` : `local:${message.id}`,
+                blockId,
+              })
+            }
             onToolApprovalDecide={onToolApprovalDecide}
             approvalsDisabled={choicesDisabled}
           />
@@ -457,6 +477,9 @@ function ChatMessageRow({
 type ChatMessageListProps = {
   chatMessagesRef: MutableRefObject<HTMLDivElement | null>;
   currentRoomId: string | null;
+  currentRoomMode: ChatRoomMode;
+  loggedIn: boolean;
+  userScope: string | null;
   setupInfo?: string;
   historyHasMore: boolean;
   historyNextBeforeId: number | null;
@@ -469,7 +492,7 @@ type ChatMessageListProps = {
   messages: UiChatMessage[];
   onRegenerate: () => void;
   onContinue: () => void;
-  onChoiceSubmit: (text: string) => void;
+  onCompose: (text: string) => void;
   onToolApprovalDecide: (approvalId: string, decision: ToolApprovalDecision, acknowledgeWarnings?: boolean) => Promise<void>;
   onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
   onSwitchBranch: (messageId: number) => void;
@@ -481,6 +504,9 @@ type ChatMessageListProps = {
 function ChatMessageListComponent({
   chatMessagesRef,
   currentRoomId,
+  currentRoomMode,
+  loggedIn,
+  userScope,
   setupInfo,
   historyHasMore,
   historyNextBeforeId,
@@ -493,7 +519,7 @@ function ChatMessageListComponent({
   messages,
   onRegenerate,
   onContinue,
-  onChoiceSubmit,
+  onCompose,
   onToolApprovalDecide,
   onEditAndRegenerate,
   onSwitchBranch,
@@ -588,12 +614,16 @@ function ChatMessageListComponent({
   const rowProps = useMemo<ChatMessageRowProps>(
     () => ({
       rows,
+      currentRoomId,
+      currentRoomMode,
+      loggedIn,
+      userScope,
       isGenerating,
       isLoadingOlder,
       loadOlderChatHistory,
       onRegenerate,
       onContinue,
-      onChoiceSubmit,
+      onCompose,
       onToolApprovalDecide,
       editingMessageId,
       onEditStart: handleEditStart,
@@ -604,12 +634,16 @@ function ChatMessageListComponent({
     }),
     [
       rows,
+      currentRoomId,
+      currentRoomMode,
+      loggedIn,
+      userScope,
       isGenerating,
       isLoadingOlder,
       loadOlderChatHistory,
       onRegenerate,
       onContinue,
-      onChoiceSubmit,
+      onCompose,
       onToolApprovalDecide,
       editingMessageId,
       handleEditStart,

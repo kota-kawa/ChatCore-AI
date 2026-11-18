@@ -72,6 +72,16 @@ test("a done event finalizes with the payload response", () => {
   });
 });
 
+test("terminal stream events carry the saved assistant message id", () => {
+  const done = interpret("done", { response: "answer", assistant_message_id: 51 });
+  const incomplete = interpret("incomplete", { response: "partial", assistant_message_id: 52 });
+  const aborted = interpret("aborted", { response: "stopped", assistant_message_id: 53 });
+
+  assert.equal(done.kind === "done" ? done.assistantMessageId : null, 51);
+  assert.equal(incomplete.kind === "incomplete" ? incomplete.assistantMessageId : null, 52);
+  assert.equal(aborted.kind === "aborted" ? aborted.assistantMessageId : null, 53);
+});
+
 test("a done event without a response falls back to the received text", () => {
   const action = interpret("done", {}, "受信済みの本文");
 

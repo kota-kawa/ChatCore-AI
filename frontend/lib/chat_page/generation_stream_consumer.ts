@@ -148,6 +148,7 @@ type PendingFinalization = {
   finalText: string;
   persist: boolean;
   parts?: ChatMessagePart[];
+  assistantMessageId?: number;
 };
 
 type StreamSessionState = {
@@ -321,6 +322,7 @@ function createStreamRenderer(
     // 途中までの回答として保存されたターンに印を付け、続きを生成する導線を出す。
     // Mark a turn saved as a partial answer so the "continue" affordance can appear.
     markPartial = false,
+    assistantMessageId?: number,
   ) => {
     // 確定テキストを保留中の途中描画で上書きしないようにキャンセルする。
     // Cancel any pending partial render so it cannot overwrite the final text.
@@ -334,6 +336,7 @@ function createStreamRenderer(
         storage.persistAssistantAnswer({
           text: finalDisplayText,
           sender: "bot",
+          ...(assistantMessageId ? { serverId: assistantMessageId } : {}),
           ...(hasParts ? { parts: resolvedParts } : {}),
         });
       }
@@ -348,6 +351,7 @@ function createStreamRenderer(
             id: messages.createMessageId("assistant"),
             sender: "assistant",
             text: finalDisplayText,
+            ...(assistantMessageId ? { serverId: assistantMessageId } : {}),
             ...(hasParts ? { parts: resolvedParts } : {}),
             ...(markPartial ? { partial: true } : {}),
           },
@@ -366,6 +370,7 @@ function createStreamRenderer(
           ? {
               ...message,
               text: finalDisplayText || message.text,
+              ...(assistantMessageId ? { serverId: assistantMessageId } : {}),
               ...(hasParts ? { parts: resolvedParts } : {}),
               streaming: false,
               generativeUiPending: false,
@@ -388,7 +393,7 @@ function createStreamRenderer(
     if (!pending) return;
     state.pendingFinalization = null;
     clearFinalRevealDeadlineTimer();
-    finalizeStreamingMessage(pending.finalText, pending.persist, pending.parts);
+    finalizeStreamingMessage(pending.finalText, pending.persist, pending.parts, false, pending.assistantMessageId);
     resolveRevealCompletion?.();
     resolveRevealCompletion = null;
   };
@@ -554,8 +559,8 @@ function createStreamRenderer(
     // complete after the remaining text and fade have drained. The remainder is
     // flushed within FINAL_REVEAL_WINDOW_MS, so a long answer does not keep the
     // stop button up for long.
-    queueFinalization(finalText: string, persist = true, parts?: ChatMessagePart[]) {
-      state.pendingFinalization = { finalText, persist, parts };
+    queueFinalization(finalText: string, persist = true, parts?: ChatMessagePart[], assistantMessageId?: number) {
+      state.pendingFinalization = { finalText, persist, parts, assistantMessageId };
       if (!revealCompletionPromise) {
         revealCompletionPromise = new Promise<void>((resolve) => {
           resolveRevealCompletion = resolve;
@@ -756,7 +761,7 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         host.messages.applyRoomTitle(action.roomTitle);
         renderer.ensureStreamingMessage();
         state.streamedText = action.responseText;
-        renderer.queueFinalization(action.responseText, true, action.parts);
+        renderer.queueFinalization(action.responseText, true, action.parts, action.assistantMessageId);
         host.lastEventIdByRoom.delete(roomId);
         return;
       case "empty_answer":
@@ -774,7 +779,13 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         progress.completed = true;
         renderer.discardDraft();
         host.messages.applyRoomTitle(action.roomTitle);
-        renderer.finalizeStreamingMessage(action.finalText, false, action.parts, true);
+        renderer.finalizeStreamingMessage(
+          action.finalText,
+          Boolean(action.assistantMessageId),
+          action.parts,
+          true,
+          action.assistantMessageId,
+        );
         host.messages.appendErrorMessage(action.message);
         host.lastEventIdByRoom.delete(roomId);
         host.storage.clearGenerationState();
@@ -782,7 +793,13 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
       case "aborted":
         progress.completed = true;
         renderer.discardDraft();
-        renderer.finalizeStreamingMessage(action.finalText, false, action.parts);
+        renderer.finalizeStreamingMessage(
+          action.finalText,
+          Boolean(action.assistantMessageId),
+          action.parts,
+          false,
+          action.assistantMessageId,
+        );
         host.storage.clearGenerationState();
         return;
       case "error":

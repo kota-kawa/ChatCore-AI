@@ -194,7 +194,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             )
 
         payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(payload, {"response": "assistant reply"})
+        self.assertEqual(payload, {"response": "assistant reply", "assistant_message_id": 2})
         # ルームツリーを読むのは1リクエストにつき1回だけ。応答保存後の要約は、このターンの
         # 履歴に保存済みの応答を足して組み立てるため、読み直しを伴わない。
         # The room tree is read exactly once per request; the post-reply summary is built from this

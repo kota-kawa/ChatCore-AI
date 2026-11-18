@@ -198,6 +198,7 @@ class GeneratedUiIntentReliabilityTests(unittest.TestCase):
             "グラフの範囲を調整して詳細を確認できるようにして",
             "アイコンを触ってON/OFFを切り替えられるようにして",
             "スライダーで年を変えると地図が変わるようにしてください",
+            "金利を調整した場合の差も確認できるようにしてください",
             "ボタンで切り替えてください",
         )
         plain_visual_requests = (
@@ -234,6 +235,35 @@ class GeneratedUiIntentReliabilityTests(unittest.TestCase):
         ]
         self.assertEqual(len(mode_messages), 1)
         self.assertIn("required", str(mode_messages[0]["content"]).lower())
+
+    def test_native_and_mixed_modes_inject_their_distinct_output_contracts(self):
+        original = [
+            {"role": "system", "content": GENERATIVE_UI_EXECUTION_CONTRACT},
+            {"role": "user", "content": "2案を比較して説明して"},
+        ]
+
+        structured = inject_generative_ui_mode_instruction(original, "STRUCTURED_UI")
+        mixed_2d = inject_generative_ui_mode_instruction(original, "MIXED_2D")
+        mixed_3d = inject_generative_ui_mode_instruction(original, "MIXED_3D")
+
+        structured_instruction = "\n".join(str(message.get("content") or "") for message in structured)
+        mixed_2d_instruction = "\n".join(str(message.get("content") or "") for message in mixed_2d)
+        mixed_3d_instruction = "\n".join(str(message.get("content") or "") for message in mixed_3d)
+        self.assertIn("chatcore-ui", structured_instruction)
+        self.assertNotIn("chatcore-artifact", structured_instruction)
+        self.assertNotIn(GENERATIVE_UI_EXECUTION_CONTRACT, structured_instruction)
+        self.assertIn("chatcore-ui", mixed_2d_instruction)
+        self.assertIn("chatcore-artifact", mixed_2d_instruction)
+        self.assertIn(GENERATIVE_UI_EXECUTION_CONTRACT, mixed_2d_instruction)
+        self.assertIn("chatcore-ui", mixed_3d_instruction)
+        self.assertIn("libraries:[\"three\"]", mixed_3d_instruction)
+        self.assertEqual(
+            original,
+            [
+                {"role": "system", "content": GENERATIVE_UI_EXECUTION_CONTRACT},
+                {"role": "user", "content": "2案を比較して説明して"},
+            ],
+        )
 
     def test_required_mode_without_an_artifact_has_a_machine_readable_failure_reason(self):
         normalized = normalize_response_with_artifacts(

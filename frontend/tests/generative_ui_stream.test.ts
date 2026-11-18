@@ -29,6 +29,32 @@ test("stripGenerativeUiFencesForStreaming removes complete artifact fences", () 
   assert.doesNotMatch(stripped, /chatcore-artifact/);
 });
 
+test("chatcore-ui fences stay out of streamed prose but remain visible as code examples", () => {
+  const text = [
+    "前置きです。",
+    "```chatcore-ui json",
+    '{"version":1,"id":"ui","fallback_text":"表示用","root_id":"root","nodes":[{"id":"root","type":"text","text":"表示"}]}',
+    "```",
+    "続きです。",
+  ].join("\n");
+
+  assert.equal(stripGenerativeUiFencesForStreaming(text), "前置きです。\n\n続きです。");
+  assert.equal(generativeUiFenceKind(text), "exact");
+  assert.equal(hasGenerativeUiFenceStart(text), true);
+
+  const codeExample = [
+    "説明用の例です。",
+    "````text",
+    "```chatcore-ui",
+    '{"version":1}',
+    "```",
+    "````",
+  ].join("\n");
+  assert.equal(stripGenerativeUiFencesForStreaming(codeExample), codeExample);
+  assert.equal(generativeUiFenceKind(codeExample), null);
+  assert.equal(hasGenerativeUiFenceStart(codeExample), false);
+});
+
 test("stripGenerativeUiFencesForStreaming removes supported artifact aliases", () => {
   const text = [
     "前置きです。",

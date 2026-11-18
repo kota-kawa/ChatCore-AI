@@ -68,6 +68,10 @@ OCCURRENCE_FIELDS = (
     "input_limit_recoveries",
     "research_output_limit_recoveries",
     "truncated_evidence_payloads",
+    "structured_ui_validation_failures",
+    "structured_ui_quality_failures",
+    "structured_ui_repair_attempted",
+    "structured_ui_repair_succeeded",
     "artifact_repair_attempted",
     "artifact_repair_succeeded",
     # 利用者のデータ（メモなど）のツール。承認待ちで締めたターン、外部の内容で自動承認を止めたターン、
@@ -94,6 +98,8 @@ MEDIAN_FIELDS = (
     "final_answer_input_tokens",
     "final_answer_output_chars",
     "first_visible_text_ms",
+    "first_visible_ui_ms",
+    "structured_ui_blocks",
     "duration_seconds",
 )
 

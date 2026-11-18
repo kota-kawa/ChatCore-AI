@@ -11,6 +11,7 @@ import type { SharedChatPayload } from "../../lib/shared_chat/types";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { useTranslation } from "../../contexts/locale_context";
 import { useImportActionState } from "../../hooks/use_import_action";
+import { withChatCoreUiVersionHeader } from "../../lib/chat_page/api_headers";
 
 // ページコンポーネントに渡されるProps型
 // Props passed to the SharedChatPage component
@@ -102,7 +103,9 @@ export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async
   let payload: SharedChatPayload;
 
   try {
-    const res = await resilientFetch(`${backendUrl}/api/shared_chat_room?token=${encodeURIComponent(token)}`);
+    const res = await resilientFetch(`${backendUrl}/api/shared_chat_room?token=${encodeURIComponent(token)}`, {
+      headers: withChatCoreUiVersionHeader(),
+    });
     const data: SharedChatResponse = await res.json().catch(() => ({}));
     // バックエンドのステータスコードをそのままクライアントに転送する
     // Forward the backend status code to the client response

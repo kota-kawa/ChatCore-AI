@@ -44,36 +44,36 @@ PROMPT_TOOLS_SYSTEM_SKILL_KEY = "prompt_tools"
 
 # 生成UIに関するプロンプトは、この Skill の指示と下の実行契約だけが持つ。基本プロンプトや
 # 他のプロンプトには生成UIの記述を置かない（Skill を切ったときに何も残らないようにするため）。
-# 役割分担: この指示は「いつ 2D / 3D / NONE を選ぶか」の判定規則と例、実行契約は出力の形式・
-# 品質・サンドボックスの制約。サンドボックスの検証はプロンプトとは別の実行時の規則。
+# 役割分担: モード選択は回答前の Skill 選択で一度だけ行い、この指示は選択済みモードに従う。
+# 実行契約は Artifact の出力形式・品質・サンドボックス制約を持ち、別の実行時規則が検証する。
 # Every Generative UI prompt line lives in this Skill's instructions or in the execution
 # contract below; the base prompt and other prompts carry none, so turning the Skill off leaves
-# nothing behind. Split: these instructions decide when to choose 2D / 3D / NONE, with examples;
-# the contract owns output format, quality and sandbox limits. The sandbox validator remains a
-# separate runtime rule.
+# nothing behind. The pre-answer classifier chooses the mode once; this Skill follows it. The
+# contract owns Artifact output format, quality and sandbox limits; a separate runtime rule validates it.
 GENERATIVE_UI_SKILL_INSTRUCTIONS = """
-- Use `UI_MODE = NONE` by default. Select 2D when the latest user request explicitly asks to create a visual, diagram, chart, flow, timeline, generative UI, simulation, or interactive demo. Treat those requests as explicit even when the user writes them in Japanese or another language. Do not substitute a Markdown explanation for that requested result.
-- Select 3D when the request explicitly asks for 3D / ３D, Three.js, a solid shape, spatial model, orbit, rotation, or a 3D graph. A 3D request is a request for a working Three.js Artifact, not for an explanation or a code sample.
-- A request for text only, no UI, no diagram, or ordinary code/JSON means UI_MODE is NONE. Do not turn comparisons, procedures, calculations, classifications, explanations, code examples, or JSON examples into an Artifact unless the user explicitly requested visual or interactive output.
-- Never output UI_MODE itself. When UI_MODE is 2D or 3D, follow the generative UI execution contract for the Artifact's format and limits.
+- If the turn's system instructions state a decided presentation mode, follow it exactly and do not reconsider it. If no mode was decided, the pre-answer classification was unresolved: choose the safest mode from the user's request using the execution contract, preserving explicit visual requests and using `NONE` for brief answers, code examples, or explicit text-only requests.
+- `NONE` means no generated UI. It does not disable standard chat choice buttons. If the user explicitly asks for text only, answer in prose and express any options in prose without choice buttons.
+- `STRUCTURED_UI` and `MIXED_2D` / `MIXED_3D` use the `chatcore-ui` contract in the turn's system instruction. In a `MIXED_*` mode, also provide the requested Artifact.
+- `2D` and `3D` require a working `chatcore-artifact` as specified in the execution contract. A 3D request needs a Three.js Artifact, not an explanation or code sample.
+- Never output the selected mode itself.
 
 ### Few-shot examples
 <examples>
 <example>
 <user_request>この申請手順をフローチャートで可視化して</user_request>
-<expected_behavior>Choose 2D and return one complete chatcore-artifact that renders the flow.</expected_behavior>
+<expected_behavior>Follow the preselected STRUCTURED_UI mode and render the flow with a chatcore-ui block.</expected_behavior>
 </example>
 <example>
 <user_request>太陽系を回転して見られる3Dモデルで表示して</user_request>
-<expected_behavior>Choose 3D and return one complete chatcore-artifact using the available global THREE and the three library declaration.</expected_behavior>
+<expected_behavior>Follow the preselected 3D mode and return one complete chatcore-artifact using the available global THREE and the three library declaration.</expected_behavior>
 </example>
 <example>
 <user_request>売上比較の考え方を文章だけで説明して。図はいらない</user_request>
-<expected_behavior>Choose NONE and answer in ordinary prose without an Artifact.</expected_behavior>
+<expected_behavior>Follow the preselected NONE mode and answer in ordinary prose without generated UI.</expected_behavior>
 </example>
 <example>
 <user_request>Reactでグラフを実装するコード例をください</user_request>
-<expected_behavior>Choose NONE and provide an ordinary code example because the user asked for code, not a rendered visual.</expected_behavior>
+<expected_behavior>Follow the preselected NONE mode and provide an ordinary code example because the user asked for code, not a rendered visual.</expected_behavior>
 </example>
 </examples>
 """.strip()
@@ -85,14 +85,15 @@ GENERATIVE_UI_SKILL_INSTRUCTIONS = """
 # Generative UI instruction part of the same default capability.
 _GENERATIVE_UI_EXECUTION_CONTRACT_TEMPLATE = """
 <generative_ui_execution_contract>
-This is the final output contract to apply right before you answer, using the UI_MODE chosen under the Generative UI Skill (NONE / 2D / 3D). Never output UI_MODE itself.
+This is the final output contract to apply right before you answer, using the preselected UI mode (NONE / STRUCTURED_UI / 2D / 3D / MIXED_2D / MIXED_3D). Never output the mode itself.
 
 Visual exclusivity:
-- Generated UI and web-search image parts are mutually exclusive within one turn. If UI_MODE is 2D or 3D, output the generated UI only; the application will not attach web-search images beside it, and the only way to show one is inside the Artifact through `generated_ui_images` (see the sandbox requirements below). When UI_MODE is NONE, do not create an Artifact merely to accompany images.
+- STRUCTURED_UI can appear with the application's separate web-search image parts. Do not emit image URLs or image-link markup yourself.
+- A 2D, 3D, or MIXED mode includes an Artifact, so separate web-search image parts will not appear beside it. If a selected `generated_ui_images` catalog is supplied, use only its refs inside the Artifact as described below. When UI_MODE is NONE, do not create generated UI merely to accompany images.
 - If UI_MODE is NONE and the application shows web-search images, a separate selection pass using the selected conversation model has already decided their inline placement. Do not emit image or image-link markup in the prose.
 - Never substitute links for a requested visual. Replying to "show me photos of X" with gallery, image-search, or photo-library URLs, or with one link per item, is prohibited; describe the appearance in prose as well and let the application attach suitable images.
 
-When UI_MODE is 2D or 3D:
+When the selected mode is 2D, 3D, MIXED_2D, or MIXED_3D:
 - Always output exactly one complete ```chatcore-artifact fenced block right after a short introduction. An answer that ends with explanation alone is incomplete.
 - The JSON must be one valid object containing version, title, html, css, and js, and the html must contain an element with id="app".
 - Do not output separate HTML, CSS, JavaScript, or JSON code blocks. The fenced Artifact is the requested deliverable.

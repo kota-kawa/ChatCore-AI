@@ -115,6 +115,7 @@ class DemoAccessCodeRevokeResponse(ResponsePayloadModel):
 # 日本語: チャットボットの応答テキストを含むJSONレスポンスモデル。
 # English: JSON response model containing the chatbot's text response.
 class ChatJsonResponse(ApiErrorPayload):
+    assistant_message_id: int | None = None
     response: str | None = None
 
 

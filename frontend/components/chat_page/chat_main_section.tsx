@@ -31,6 +31,7 @@ import { isNearBottom } from "../../lib/chat_page/dom";
 import { extractUrlsFromText, getUrlDomain } from "../../lib/chat_page/url_utils";
 import { useTranslation } from "../../contexts/locale_context";
 import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
+import { readStoredUserScope } from "../../lib/chat_page/storage";
 
 type ChatMessageListWithoutPreviewProps = Omit<ComponentProps<typeof ChatMessageList>, "setupInfo">;
 
@@ -111,6 +112,8 @@ function ChatMainSectionComponent() {
     handleSwitchBranch,
     applyToolApproval,
   } = useHomePageChatContext();
+
+  const userScope = loggedIn ? readStoredUserScope() : null;
 
   // DOM 要素への直接参照。入力欄のフォーカス・高さ調整、ファイル選択ダイアログ、
   // サイドバースクロールセンチネルなどで使用する。
@@ -211,6 +214,25 @@ function ChatMainSectionComponent() {
   const handleContinuePartialAnswer = useCallback(() => {
     handleSendMessage(t("chat.continueAnswerPrompt"));
   }, [handleSendMessage, t]);
+
+  // 選択UIの内容は送信せず、今ある下書きの末尾へ追加して入力欄へ戻す。
+  // Choice UI adds to the end of the current draft and focuses the composer without sending.
+  const handleCompose = useCallback((text: string) => {
+    const composedText = text.trim();
+    if (!composedText) return;
+
+    const separator = chatInput && !chatInput.endsWith("\n") ? "\n" : "";
+    const nextDraft = `${chatInput}${separator}${composedText}`;
+    if (nextDraft.length > MAX_CHAT_MESSAGE_LENGTH) return;
+
+    setChatInput(nextDraft);
+    window.requestAnimationFrame(() => {
+      const input = chatInputRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    });
+  }, [chatInput, setChatInput]);
 
   // 承認カードの決定を送る。決定してもチャットは送信しない。
   // Send approval-card decisions; a decision never sends a chat message.
@@ -613,6 +635,9 @@ function ChatMainSectionComponent() {
             key={`chat-message-list:${chatMessageListResetKey}`}
             chatMessagesRef={chatMessagesRef}
             currentRoomId={currentRoomId}
+            currentRoomMode={currentRoomMode}
+            loggedIn={loggedIn}
+            userScope={userScope}
             historyHasMore={historyHasMore}
             historyNextBeforeId={historyNextBeforeId}
             isChatLaunching={isChatLaunching}
@@ -624,7 +649,7 @@ function ChatMainSectionComponent() {
             messages={messages}
             onRegenerate={handleRegenerateMessage}
             onContinue={handleContinuePartialAnswer}
-            onChoiceSubmit={handleSendMessage}
+            onCompose={handleCompose}
             onToolApprovalDecide={handleToolApprovalDecide}
             onEditAndRegenerate={handleEditAndRegenerateMessage}
             onSwitchBranch={handleSwitchBranch}

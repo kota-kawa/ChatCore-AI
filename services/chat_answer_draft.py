@@ -19,6 +19,7 @@ from dataclasses import dataclass
 
 from .chat_turn_state import TurnStateUpdateFilter, starts_like_bare_turn_state_update
 from .llm_protocol_leak import REASONING_CLOSE_TAG, reasoning_answer_start
+from .structured_ui import StructuredUiStream
 from .web_search import (
     resolve_web_search_citations,
     split_web_search_citation_stream_text,
@@ -68,6 +69,7 @@ class AnswerDraftFilter:
     # Reset the state for a new segment (the start, or just after a `</think>`)
     def _start_segment(self) -> None:
         self._envelope_filter = TurnStateUpdateFilter()
+        self._native_ui_filter = StructuredUiStream()
         # 下書きを出し始める前に溜めている、封筒を除いた本文。
         # Body, envelopes removed, waiting until drafting may begin.
         self._held = ""
@@ -132,5 +134,6 @@ class AnswerDraftFilter:
     # 引用マーカーが途中で切れていれば次のチャンクまで保留し、完結したものは下書きから除く。
     # A marker cut off mid-way waits for the next chunk; complete ones are removed from the draft.
     def _display_text(self, visible: str) -> str:
+        visible = self._native_ui_filter.feed(visible)
         complete, self._citation_tail = split_web_search_citation_stream_text(f"{self._citation_tail}{visible}")
         return resolve_web_search_citations(strip_web_search_citation_html(complete), None).text
