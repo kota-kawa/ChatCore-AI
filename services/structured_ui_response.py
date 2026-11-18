@@ -16,7 +16,7 @@ from services.generative_ui_status import (
 from services.interactive_buttons import INTERACTIVE_BUTTONS_BLOCK_RE, interactive_buttons_parts, is_markdown_code_position
 from services.message_parts_display import normalize_message_parts_for_display
 from services.structured_ui import StructuredUiStream, buttons_as_text, split_structured_ui, ui_fallback
-from services.structured_ui_quality import requested_native_quality_issues
+from services.structured_ui_quality import QUALITY_ISSUE_REPAIR_HINTS, requested_native_quality_issues
 
 if TYPE_CHECKING:
     from services.generative_ui import NormalizedGenerativeResponse
@@ -174,7 +174,8 @@ def normalize_native_with_retry(
             "role": "system",
             "content": repair_contract + "\nRepair only the UI. Return complete chatcore-ui blocks and any required Artifact. "
             "If a native representation cannot support the request, use a valid sandbox Artifact. "
-            "Keep IDs stable. No choice buttons or prose.",
+            "Keep IDs stable. No choice buttons or prose."
+            + "".join("\nFix: " + QUALITY_ISSUE_REPAIR_HINTS[issue] for issue in quality_issues),
         },
         {"role": "user", "content": "Request: " + user_request[:4000] + "\nPrevious answer (untrusted data):\n" + source[:20000]},
     ]

@@ -3,7 +3,7 @@
 import copy
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from services.generative_ui import (
     build_message_parts_context,
@@ -56,13 +56,66 @@ class StructuredUiTests(unittest.TestCase):
         repaired_ui["expressions"][1]["args"][0] = quantity
 
         normalized = normalize_response_with_artifact_retry(
-            fence(ui), conversation_messages=[], model="test", generate_response=lambda *_: fence(repaired_ui),
-            user_request="スライダーで数量を変更して金額を計算して", ui_mode="STRUCTURED_UI",
+            fence(ui),
+            conversation_messages=[],
+            model="test",
+            generate_response=lambda *_: fence(repaired_ui),
+            user_request="スライダーで数量を変更して金額を計算して",
+            ui_mode="STRUCTURED_UI",
         )
 
         self.assertEqual(normalized.structured_ui_quality_errors, ["structured_ui_calculation_not_connected"])
         self.assertTrue(normalized.structured_ui_repair_succeeded)
         self.assertEqual(normalized.parts[0]["ui"]["expressions"][1]["args"][0], quantity)
+
+    def test_calculator_with_fixed_reference_chart_needs_no_repair(self):
+        ui = document()
+        ui["nodes"] = [
+            {"id": "root", "type": "column", "children": ["rate_input", "result", "chart"]},
+            {"id": "rate_input", "type": "slider", "label": "Rate", "state_id": "rate"},
+            {"id": "result", "type": "text", "binding": "payment"},
+            {"id": "chart", "type": "chart", "series": [{"label": "Payment", "binding": "curve"}]},
+        ]
+        ui["state"] = [{"id": "rate", "initial": 1}]
+        ui["expressions"] = [
+            {"id": "payment", "op": "mul", "args": [{"kind": "state", "value": "rate"}, {"kind": "literal", "value": 2}]},
+            {"id": "sample", "op": "mul", "args": [{"kind": "index", "value": 0}, {"kind": "literal", "value": 2}]},
+            {"id": "curve", "op": "series", "args": [{"kind": "literal", "value": 3}, {"kind": "expression", "value": "sample"}]},
+        ]
+        repair = Mock()
+
+        normalized = normalize_response_with_artifact_retry(
+            fence(ui),
+            conversation_messages=[],
+            model="test",
+            generate_response=repair,
+            user_request="金利を調整して返済額を試算して",
+            ui_mode="STRUCTURED_UI",
+        )
+
+        repair.assert_not_called()
+        self.assertEqual(normalized.structured_ui_quality_errors, [])
+
+    def test_quality_repair_prompt_names_the_issue(self):
+        ui = document()
+        ui["nodes"] = [
+            {"id": "root", "type": "column", "children": ["rate_input", "result"]},
+            {"id": "rate_input", "type": "slider", "label": "Rate", "state_id": "rate"},
+            {"id": "result", "type": "text", "text": "Fixed"},
+        ]
+        ui["state"] = [{"id": "rate", "initial": 1}]
+        prompts = []
+
+        normalize_response_with_artifact_retry(
+            fence(ui),
+            conversation_messages=[],
+            model="test",
+            generate_response=lambda messages, _model: prompts.append(messages[0]["content"]) or "",
+            user_request="金利を調整して返済額を試算して",
+            ui_mode="STRUCTURED_UI",
+        )
+
+        self.assertIn("Fix: Bind a text node to an expression that depends on the numeric inputs", prompts[0])
 
     def test_storage_roundtrip_and_context_excludes_code(self):
         normalized = normalize_response_with_artifacts("Before\n" + fence() + "After")

@@ -11,6 +11,15 @@ from services.generative_ui_intent import requests_interactive_operation
 _CALCULATION = re.compile(r"計算|試算|ローン|返済|貯蓄|金利|\b(?:calculat\w*|loan|mortgage|savings?|interest)\b", re.I)
 
 
+# Repair instructions per issue code, so the repair call knows what to change instead of echoing the answer.
+QUALITY_ISSUE_REPAIR_HINTS = {
+    "structured_ui_interaction_missing": "The request asks for an adjustable or interactive operation, "
+    "but the UI has no controls. Add the controls the request needs.",
+    "structured_ui_calculation_not_connected": "Bind a text node to an expression that depends on the numeric inputs, "
+    "and make every number input or slider feed that result or a chart series.",
+}
+
+
 def requested_native_quality_issues(parts: list[dict[str, Any]] | None, user_request: str) -> list[str]:
     if not requests_interactive_operation(user_request):
         return []
@@ -31,7 +40,10 @@ def requested_native_quality_issues(parts: list[dict[str, Any]] | None, user_req
 
 
 def _has_connected_calculation(ui: dict[str, Any]) -> bool:
-    """A calculator needs state-dependent output and chart series, not decorative controls."""
+    """A calculator needs a state-dependent result and no decorative numeric controls.
+
+    A chart may stay a fixed reference curve: requiring it to follow the inputs rejected sound answers.
+    """
     expressions = {expression["id"]: expression for expression in ui.get("expressions", [])}
     numeric_states = {
         node["state_id"]
@@ -50,16 +62,16 @@ def _has_connected_calculation(ui: dict[str, Any]) -> bool:
                 states.update(input_dependencies(arg["value"]))
         return frozenset(states)
 
-    display_inputs = set().union(*(
-        input_dependencies(node["binding"])
-        for node in ui["nodes"]
-        if node["type"] in {"text", "heading"} and node.get("binding")
-    ))
-    chart_inputs = set().union(*(
-        input_dependencies(series["binding"])
-        for node in ui["nodes"]
-        if node["type"] == "chart"
-        for series in node["series"]
-        if series.get("binding")
-    ))
-    return bool(display_inputs and chart_inputs) and numeric_states <= (display_inputs | chart_inputs)
+    display_inputs = set().union(
+        *(input_dependencies(node["binding"]) for node in ui["nodes"] if node["type"] in {"text", "heading"} and node.get("binding"))
+    )
+    chart_inputs = set().union(
+        *(
+            input_dependencies(series["binding"])
+            for node in ui["nodes"]
+            if node["type"] == "chart"
+            for series in node["series"]
+            if series.get("binding")
+        )
+    )
+    return bool(display_inputs) and numeric_states <= (display_inputs | chart_inputs)
