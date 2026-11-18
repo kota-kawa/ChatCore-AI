@@ -30,7 +30,7 @@
   --md-quote-wash: rgba(15, 23, 42, 0.035);
   --md-box-line: rgba(15, 23, 42, 0.22);
   --md-rule: rgba(15, 23, 42, 0.1);
-  --md-rule-soft: rgba(15, 23, 42, 0.06);
+  --md-rule-soft: rgba(15, 23, 42, 0.12);
   --md-zebra: rgba(15, 23, 42, 0.022);
   --md-code-ink: var(--primary-dark, #0f7a51);
   --md-block-bg: #101724;
@@ -611,7 +611,7 @@
   /* The raw brand colour sinks into the dark surface, so it is lifted toward white */
   --md-accent-ink: color-mix(in srgb, var(--primary-color, #19c37d) 62%, #ffffff);
   --md-rule: rgba(148, 163, 184, 0.28);
-  --md-rule-soft: rgba(148, 163, 184, 0.16);
+  --md-rule-soft: rgba(148, 163, 184, 0.26);
   --md-zebra: rgba(148, 163, 184, 0.05);
   --md-code-ink: color-mix(in srgb, var(--primary-color, #19c37d) 55%, #ffffff);
   --md-block-bg: #0b1220;

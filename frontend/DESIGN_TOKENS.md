@@ -19,7 +19,7 @@
 | アクセントの淡い面 | `--primary-soft`、`--primary-subtle`、`--primary-alpha-06`〜`--primary-alpha-28`、`--primary-border` | `#e8f9f3`、緑の 6〜28% | 同じ | 選択中・ホバーの背景、緑の枝線。面の区別には `--border-default` を併用する |
 | 文字 | `--text-dark` / `--text-secondary` / `--text-light` | `#1a1a1a` / `#6b7280` / `#ffffff` | `#e5e7eb` / `#9ca3af` / `#f9fafb` | 本文 17.4:1、副次 4.8:1。補助文字は不透明度ではなく `--text-secondary` |
 | 面 | `--surface-primary` / `--surface-secondary` / `--surface-tertiary` / `--surface-sidebar` | `#ffffff` / `#f9fafb` / `#f2f5f3` / `#f7f8f7` | `#0f172a` / `#111827` / `#0b1220` / `#111827` | 面どうしの差は 1.05〜1.10:1 しかないので、区切りは必ず `--border-default` か余白で作る |
-| 罫線 | `--border-default` / `--border-light` | 黒 8% / 5% | 灰青 28% / 22% | カード、区切り線、入力欄の枠 |
+| 罫線 | `--border-default` / `--border-light` | 黒 13% / 8% | 灰青 36% / 28% | カード、区切り線、入力欄の枠。これより薄いと白や灰緑の面で枠が消えるので、新しい枠もこの 2 つから選ぶ |
 | 成功 | `--success-color` / `--success-strong` | `#15803d` / `#0f5132` | `#4ade80` / `#34d399` | 保存済み・完了の表示 |
 | 失敗 | `--danger-color` / `--danger-hover` | `#dc2626` / `#b91c1c` | **上書きなし** | エラー表示だけに使う。ダーク面ではコントラスト 3.7:1 で不足するため、`--modal-danger`／`--settings-danger`（ダークで `#f87171`）のように文脈側トークンを使う |
 | 情報 | `--info-color` / `--info-hover` | `#2563eb` / `#1d4ed8` | **上書きなし** | 現状は中立的な通知にだけ使っている。装飾に青を足すとアクセントが 2 色になる点に注意 |

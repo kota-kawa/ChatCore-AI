@@ -64,7 +64,7 @@ body.memo-page.modal-open {
   overflow: hidden;
   transition: width 0.26s cubic-bezier(0.4, 0, 0.2, 1);
   background: rgba(255, 255, 255, 0.97);
-  border: 1px solid rgba(217, 119, 6, 0.18);
+  border: 1px solid var(--memo-border);
   border-radius: 20px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 6px 20px rgba(0, 0, 0, 0.06);
 }
@@ -2509,7 +2509,7 @@ body.memo-page {
   z-index: 60;
   width: min(72rem, calc(100% - 2rem));
   margin: 0 auto;
-  border: 1px solid rgba(217, 119, 6, 0.12);
+  border: 1px solid var(--memo-border);
   border-radius: 18px;
   padding: 0.7rem 0.95rem;
   background: rgba(255, 255, 255, 0.72);
@@ -2770,7 +2770,7 @@ body.memo-page {
   overflow: visible;
   border-radius: var(--radius-2xl);
   background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--memo-border);
   box-shadow:
     0 1px 2px rgba(60, 64, 67, 0.08),
     0 1px 3px 1px rgba(60, 64, 67, 0.06);
@@ -2787,7 +2787,7 @@ body.memo-page {
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture.is-expanded {
-  border-color: rgba(0, 0, 0, 0.08);
+  border-color: var(--memo-border);
   box-shadow:
     0 1px 2px rgba(60, 64, 67, 0.1),
     0 2px 6px 2px rgba(60, 64, 67, 0.12);
@@ -3816,7 +3816,7 @@ body.memo-page {
   --memo-amber: #fbbc04;
   --memo-amber-strong: #f9ab00;
   --memo-amber-soft: rgba(251, 188, 4, 0.16);
-  --memo-border: rgba(148, 163, 184, 0.22);
+  --memo-border: rgba(148, 163, 184, 0.3);
   --memo-text: #f3f6f8;
   --memo-text-muted: #a8b3c2;
   --memo-card: rgba(28, 32, 38, 0.94);

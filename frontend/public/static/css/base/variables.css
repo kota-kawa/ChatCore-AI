@@ -65,8 +65,8 @@
   --surface-secondary: #f9fafb;
   --surface-tertiary: #f2f5f3;
   --surface-sidebar: #f7f8f7;
-  --border-default: rgba(0, 0, 0, 0.08);
-  --border-light: rgba(0, 0, 0, 0.05);
+  --border-default: rgba(0, 0, 0, 0.13);
+  --border-light: rgba(0, 0, 0, 0.08);
   --border-card-hover: transparent;
   --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -112,8 +112,8 @@
   --modal-overlay: rgba(15, 23, 42, 0.5);
   --modal-surface: #ffffff;
   --modal-surface-muted: #f4f5f7;
-  --modal-border: rgba(15, 23, 42, 0.12);
-  --modal-border-soft: rgba(15, 23, 42, 0.08);
+  --modal-border: rgba(15, 23, 42, 0.16);
+  --modal-border-soft: rgba(15, 23, 42, 0.11);
   --modal-shadow: 0 20px 56px rgba(15, 23, 42, 0.22);
   --modal-radius: 14px;
   --modal-text: #16202c;
@@ -167,7 +167,7 @@
   --settings-content-bg: #ffffff;
   --settings-card-bg: #ffffff;
   --settings-text-muted: #6c757d;
-  --settings-border-color: #dee2e6;
+  --settings-border-color: #d5dade;
   --settings-input-bg: #ffffff;
   /* 設定画面（pages/user_settings）の面・強調・危険色。不透明な面と 1px 罫線で組む前提のトークン。
      Settings page (pages/user_settings) surface, accent and danger tokens for opaque surfaces with 1px borders. */
@@ -221,15 +221,15 @@
   --surface-secondary: #111827;
   --surface-tertiary: #0b1220;
   --surface-sidebar: #111827;
-  --border-default: rgba(148, 163, 184, 0.28);
-  --border-light: rgba(148, 163, 184, 0.22);
-  --border-card-hover: rgba(148, 163, 184, 0.42);
+  --border-default: rgba(148, 163, 184, 0.36);
+  --border-light: rgba(148, 163, 184, 0.28);
+  --border-card-hover: rgba(148, 163, 184, 0.52);
   --shadow-card-hover: none;
   --modal-overlay: rgba(2, 6, 23, 0.7);
   --modal-surface: #111827;
   --modal-surface-muted: #1b2333;
-  --modal-border: rgba(148, 163, 184, 0.26);
-  --modal-border-soft: rgba(148, 163, 184, 0.16);
+  --modal-border: rgba(148, 163, 184, 0.34);
+  --modal-border-soft: rgba(148, 163, 184, 0.22);
   --modal-shadow: 0 20px 56px rgba(2, 6, 23, 0.6);
   --modal-text: #e5e7eb;
   --modal-text-muted: #9ca3af;
@@ -259,7 +259,7 @@
   --settings-content-bg: #0b1220;
   --settings-card-bg: #111827;
   --settings-text-muted: #9ca3af;
-  --settings-border-color: rgba(148, 163, 184, 0.3);
+  --settings-border-color: rgba(148, 163, 184, 0.36);
   --settings-input-bg: #0f172a;
   --settings-text-primary: #e5e7eb;
   --settings-surface-muted: #1b2333;
