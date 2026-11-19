@@ -119,8 +119,7 @@ class CandidateQueryPlan:
 
     入力したままの発話を最初に試すので、当たれば追加の費用はかからない。それで 0 件のときだけ、直前の発話を踏まえて
     最新の発話を解釈する検索語プランナーを呼ぶ。モデルが失敗するか使える検索語を返さなければ、元の発話だけが検索語になり、
-    機械的なトークン分割での代替はしない。反復は遅延評価なので、同期版の経路では、どの参照元も最初の候補で当たれば言い換えは呼ばれない
-    （非同期版は先に全候補を展開する）。
+    機械的なトークン分割での代替はしない。反復は遅延評価なので、どの参照元も最初の候補で当たれば言い換えは呼ばれない。
 
     The original turn followed by LLM-produced structured query rewrites.
 
@@ -333,7 +332,7 @@ async def _run_lookup_once_async(
 
 async def _run_lookup_async(
     search: Callable[[str], Any],
-    candidates: Sequence[str],
+    candidates: CandidateQueryPlan,
     *,
     query: str,
     source_label: str,
@@ -344,7 +343,15 @@ async def _run_lookup_async(
     """
     attempted_queries: list[str] = []
     payload: dict[str, Any] = {}
-    for candidate in candidates:
+    iterator = iter(candidates)
+    while True:
+        # 言い換えの LLM 呼び出しはブロッキングなので、次の候補はワーカースレッドで取り出す。
+        # 当たった参照元は次を取り出さないため、全参照元が原文で当たれば言い換えは呼ばれない。
+        # The rewrite LLM call blocks, so the next candidate is pulled on a worker thread. A source
+        # that hit never asks for another, so the rewrite is skipped when every source hits the original.
+        candidate = await run_blocking(next, iterator, None)
+        if candidate is None:
+            break
         attempted_queries.append(candidate)
         payload = await _run_lookup_once_async(search, candidate, source_label=source_label)
         for _ in range(MAX_SELECTED_REFERENCE_FAILURE_RETRIES):
@@ -367,7 +374,7 @@ async def _run_lookup_async(
 
 async def _run_lookups_async(
     lookups: Sequence[tuple[str, Callable[[str], Any]]],
-    candidates: Sequence[str],
+    candidates: CandidateQueryPlan,
     *,
     query: str,
 ) -> list[dict[str, Any]]:
@@ -643,10 +650,7 @@ async def augment_messages_with_selected_references_async(
         return messages
 
     candidate_plan = CandidateQueryPlan(normalized_query, previous_user_message(messages))
-    # 日本語: 言い換えの LLM 呼び出しはブロッキングなので、ワーカースレッドで全候補を先に展開する（遅延評価にはならない）。
-    # English: The rewrite LLM call blocks, so expand all candidates up front on a worker thread (no lazy evaluation here).
-    candidates: list[str] = await run_blocking(list, candidate_plan)
-    payloads = await _run_lookups_async(lookups, candidates, query=normalized_query)
+    payloads = await _run_lookups_async(lookups, candidate_plan, query=normalized_query)
 
     if trace_results is not None:
         trace_results.extend(
