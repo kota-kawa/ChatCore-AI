@@ -118,7 +118,7 @@ flowchart LR
 | `blueprints/chat/` | チャット、部屋、タスク、プロフィール、設定、プロジェクト | `/api` |
 | `blueprints/prompt_share/` | 公開プロンプト、検索、管理、メディア | `/prompt_share`, `/prompt_manage`, `/search` |
 | `blueprints/memo/` | メモ、コレクション、共有、エクスポート | `/memo` |
-| `blueprints/context_vault/` | パーソナル・コンテキスト（画面名は「記憶」）と候補の承認 | `/api/context-facts` |
+| `blueprints/context_vault/` | パーソナル・コンテキスト（画面名は「記憶」）、チャットから自動保存した記憶の一覧、上限で保存できなかった候補の承認 | `/api/context-facts` |
 | `blueprints/admin/` | 管理画面と管理 API（デモ用アクセスコードの発行・停止を含む） | `/admin` |
 | `blueprints/mcp_oauth.py` | MCP OAuth クライアント・接続管理 | `/api/mcp/oauth` |
 

@@ -80,7 +80,16 @@ describe("ContextCandidatePanel", () => {
     expect(screen.getByText("出典: チャット")).toBeInTheDocument();
   });
 
-  it("keeps automatic extraction off by default and explicitly enables it", async () => {
+  it("explains that chat content is saved automatically and only overflow waits for approval", async () => {
+    renderCandidatePanel({ api: { loadSettings: vi.fn().mockResolvedValue({ enabled: true }) } });
+
+    const toggle = await screen.findByRole("switch", { name: "チャットからの自動保存" });
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
+    expect(screen.getByRole("heading", { name: "承認待ちの提案" })).toBeInTheDocument();
+    expect(screen.getByText(/有効な記憶が上限（200件）に達していて保存できなかったものだけ/)).toBeInTheDocument();
+  });
+
+  it("shows a disabled setting as off and explicitly enables it", async () => {
     let resolveUpdate: ((value: { enabled: boolean }) => void) | undefined;
     const updateSettings = vi.fn().mockImplementation(
       () =>
@@ -90,11 +99,11 @@ describe("ContextCandidatePanel", () => {
     );
     renderCandidatePanel({ api: { updateSettings } });
 
-    const toggle = await screen.findByRole("switch", { name: "チャットからの自動抽出" });
+    const toggle = await screen.findByRole("switch", { name: "チャットからの自動保存" });
     expect(toggle).toHaveAttribute("aria-checked", "false");
     expect(
       screen.getByText(
-        "有効にすると、今後のチャットから保存候補を非同期で提案します。候補は承認するまで記憶に保存されません",
+        "有効にすると、チャットの内容から覚えておく価値のあるものを自動で記憶に保存し、チャット内でお知らせします。その場で取り消せます。有効な記憶が上限に達しているときは、保存せずに承認待ちになります",
       ),
     ).toBeInTheDocument();
 
@@ -106,11 +115,11 @@ describe("ContextCandidatePanel", () => {
     await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
   });
 
-  it("reports extraction setting update errors and keeps opt-in disabled", async () => {
+  it("reports setting update errors and keeps the setting off", async () => {
     const updateSettings = vi.fn().mockRejectedValue(new Error("設定を更新できませんでした。"));
     renderCandidatePanel({ api: { updateSettings } });
 
-    const toggle = await screen.findByRole("switch", { name: "チャットからの自動抽出" });
+    const toggle = await screen.findByRole("switch", { name: "チャットからの自動保存" });
     fireEvent.click(toggle);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("設定を更新できませんでした。");

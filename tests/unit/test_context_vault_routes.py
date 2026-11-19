@@ -14,6 +14,7 @@ from blueprints.context_vault.routes import (
     api_approve_context_fact_candidate,
     api_create_context_fact,
     api_get_context_extraction_settings,
+    api_list_auto_saved_context_facts,
     api_list_context_fact_candidates,
     api_list_context_facts,
     api_reject_context_fact_candidate,
@@ -22,6 +23,8 @@ from blueprints.context_vault.routes import (
 )
 from services.api_errors import ApiServiceError
 from services.response_models import (
+    ContextAutoSavedFactListResponse,
+    ContextAutoSavedFactResponse,
     ContextExtractionSettingsResponse,
     ContextFactCandidateApprovalResponse,
     ContextFactCandidateListResponse,
@@ -243,6 +246,31 @@ class ContextVaultRouteTestCase(unittest.TestCase):
             response = asyncio.run(api_update_context_extraction_settings(request))
         self.assertEqual(json.loads(response.body), {"status": "success", "enabled": True})
         update_settings.assert_awaited_once_with(7, True)
+
+    def test_auto_saved_route_requires_login_and_a_valid_room_and_scopes_by_session_user(self):
+        anonymous = build_request(method="GET", path="/api/context-facts/auto-saved", session={})
+        self.assertEqual(asyncio.run(api_list_auto_saved_context_facts(anonymous, room_id="room-1")).status_code, 401)
+
+        request = build_request(method="GET", path="/api/context-facts/auto-saved", session={"user_id": 7})
+        list_auto_saved = AsyncMock(
+            return_value=ContextAutoSavedFactListResponse(
+                enabled=True,
+                facts=[ContextAutoSavedFactResponse(id=31, message_id=55, title="Rust", revision=2)],
+            )
+        )
+        with patch("blueprints.context_vault.routes.list_auto_saved_facts", new=list_auto_saved):
+            for invalid_room in ("", "x" * 201):
+                response = asyncio.run(api_list_auto_saved_context_facts(request, room_id=invalid_room))
+                self.assertEqual(response.status_code, 400)
+            list_auto_saved.assert_not_awaited()
+
+            response = asyncio.run(api_list_auto_saved_context_facts(request, room_id="room-1"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            json.loads(response.body),
+            {"enabled": True, "facts": [{"id": 31, "message_id": 55, "title": "Rust", "revision": 2}]},
+        )
+        list_auto_saved.assert_awaited_once_with(7, "room-1")
 
 
 if __name__ == "__main__":

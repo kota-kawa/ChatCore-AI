@@ -1,8 +1,8 @@
-"""文脈の候補サービス（保存の opt-in、一覧のカーソル、承認時の埋め込みスケジュール、却下）
-を検証するテスト。
+"""記憶の自動抽出サービス（保存の設定確認、保存した事実の埋め込み予約、自動保存した事実の一覧、候補の一覧のカーソル、
+承認時の埋め込みスケジュール、却下）を検証するテスト。
 
-Tests the context candidate service: opt-in on store, list cursors, scheduling embeddings on approval, and
-rejection.
+Tests the memory auto-extraction service: the setting check on store, embedding scheduling for saved facts,
+listing auto-saved facts, candidate list cursors, scheduling embeddings on approval, and rejection.
 """
 
 import unittest
@@ -11,11 +11,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from services.api_errors import ApiServiceError
 from services.context_vault_candidate_service import (
     approve_candidate,
+    list_auto_saved_facts,
     list_candidates,
     reject_candidate,
-    store_extracted_candidates,
+    store_extracted_facts,
 )
 from services.error_messages import ERROR_CONTEXT_FACT_CANDIDATE_CURSOR_INVALID
+from services.repositories.context_fact_candidate_repository import ExtractedStoreResult
 
 
 # 日本語: 候補テーブルの 1 行分の辞書を作ります。
@@ -71,7 +73,8 @@ def _repo():
     repo = MagicMock()
     for name in (
         "get_extraction_settings",
-        "store_candidates",
+        "store_extracted",
+        "list_auto_saved_in_room",
         "list_candidates",
         "count_pending",
         "approve_candidate",
@@ -84,21 +87,20 @@ def _repo():
 # 日本語: リポジトリをモックし、サービス層の入出力の整形と呼び出し順を確認します。
 # English: Mock the repository and check the service layer's input/output shaping and call order.
 class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
-    async def test_store_candidates_requires_opt_in_and_normalizes_input(self):
+    async def test_store_extracted_facts_requires_setting_and_normalizes_input(self):
         repo = _repo()
         repo.get_extraction_settings.side_effect = [False, True]
-        repo.store_candidates.return_value = 1
+        repo.store_extracted.return_value = ExtractedStoreResult([], 1)
         with patch("services.context_vault_candidate_service._repository", return_value=repo):
-            self.assertEqual(
-                await store_extracted_candidates(
-                    7,
-                    candidates=[{"fact_type": "project", "title": "T", "content": "C"}],
-                    source_ref="room-123",
-                    session=object(),
-                ),
-                0,
+            disabled = await store_extracted_facts(
+                7,
+                candidates=[{"fact_type": "project", "title": "T", "content": "C"}],
+                source_ref="room-123",
+                session=object(),
             )
-            inserted = await store_extracted_candidates(
+            self.assertEqual(disabled, ExtractedStoreResult([], 0))
+            repo.store_extracted.assert_not_awaited()
+            stored = await store_extracted_facts(
                 7,
                 candidates=[
                     {
@@ -114,11 +116,64 @@ class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
                 source_ref="  room-123  ",
                 session=object(),
             )
-        self.assertEqual(inserted, 1)
-        prepared = repo.store_candidates.call_args.args[1]
+        self.assertEqual(stored.queued_count, 1)
+        prepared = repo.store_extracted.call_args.args[1]
+        self.assertEqual(len(prepared), 1)
         self.assertEqual(prepared[0]["title"], "Chat-Core")
+        self.assertEqual(prepared[0]["source_kind"], "chat")
         self.assertEqual(prepared[0]["source_ref"], "room-123")
         self.assertEqual(len(prepared[0]["fingerprint"]), 64)
+
+    async def test_store_extracted_facts_schedules_embedding_for_each_saved_fact_after_commit(self):
+        saved = [_fact(id=31, revision=1), _fact(id=32, title="Second", content="Other", revision=1)]
+        candidates = [{"fact_type": "project", "title": "T", "content": "C"}]
+        with patch(
+            "services.context_vault_candidate_service._transaction",
+            new=AsyncMock(return_value=ExtractedStoreResult(saved, 0)),
+        ), patch("services.context_vault_candidate_service.schedule_embedding") as schedule:
+            result = await store_extracted_facts(7, candidates=candidates, source_ref="chat:r:message:1")
+        self.assertEqual(result.saved_facts, saved)
+        self.assertEqual([call.args[0] for call in schedule.call_args_list], [31, 32])
+        schedule.assert_any_call(32, "project", "Second", "Other", 1)
+
+        # 呼び出し側のセッションを使う場合は、コミット前に予約しない。
+        # With a caller-supplied session nothing is scheduled before the caller commits.
+        repo = _repo()
+        repo.get_extraction_settings.return_value = True
+        repo.store_extracted.return_value = ExtractedStoreResult(saved, 0)
+        with patch("services.context_vault_candidate_service._repository", return_value=repo), patch(
+            "services.context_vault_candidate_service.schedule_embedding"
+        ) as schedule:
+            await store_extracted_facts(7, candidates=candidates, source_ref="chat:r:message:1", session=object())
+        schedule.assert_not_called()
+
+    async def test_store_extracted_facts_without_valid_candidates_does_not_touch_repository(self):
+        repo = _repo()
+        with patch("services.context_vault_candidate_service._repository", return_value=repo):
+            result = await store_extracted_facts(
+                7,
+                candidates=[{"fact_type": "bogus", "title": "Bad", "content": "Bad"}, "not-a-dict"],  # type: ignore[list-item]
+                source_ref="room-123",
+                session=object(),
+            )
+        self.assertEqual(result, ExtractedStoreResult([], 0))
+        repo.get_extraction_settings.assert_not_awaited()
+
+    async def test_list_auto_saved_facts_extracts_message_id_and_reports_setting(self):
+        repo = _repo()
+        repo.get_extraction_settings.return_value = True
+        repo.list_auto_saved_in_room.return_value = [
+            {"id": 31, "title": "Rust", "revision": 2, "source_ref": "chat:room-1:message:55"},
+            {"id": 32, "title": "Odd", "revision": 1, "source_ref": "chat:room-1:message:oops"},
+        ]
+        with patch("services.context_vault_candidate_service._repository", return_value=repo):
+            result = await list_auto_saved_facts(7, "room-1", session=object())
+        self.assertTrue(result.enabled)
+        self.assertEqual(
+            [fact.model_dump() for fact in result.facts],
+            [{"id": 31, "message_id": 55, "title": "Rust", "revision": 2}],
+        )
+        repo.list_auto_saved_in_room.assert_awaited_once_with(7, "room-1")
 
     async def test_list_candidates_returns_cursor_and_allowlisted_dto(self):
         repo = _repo()

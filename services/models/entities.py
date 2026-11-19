@@ -74,7 +74,7 @@ class User(Base):
     is_verified: Mapped[bool] = mapped_column(Boolean, nullable=True, server_default=text("FALSE"))
     created_at: Mapped[datetime | None] = _timestamp()
     llm_profile_context: Mapped[str | None] = mapped_column(Text)
-    context_auto_extract_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("FALSE"))
+    context_auto_extract_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
     generative_ui_skill_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
     memo_tools_skill_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
     prompt_tools_skill_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
