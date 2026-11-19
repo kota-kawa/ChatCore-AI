@@ -39,7 +39,7 @@ export function normalizeAutoSavedMemoryList(payload: unknown): AutoSavedMemoryL
     const { id, message_id: messageId, title, revision } = parsed.data;
     memories.push({ id, messageId, title, revision });
   }
-  return { enabled: payload.enabled !== false, memories };
+  return { enabled: payload.enabled === true, memories };
 }
 
 // 指定した部屋で自動保存された有効な記憶を取る。サーバーが所有者で絞る。失敗（未ログイン・サーバーエラー・

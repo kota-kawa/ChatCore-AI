@@ -226,12 +226,14 @@ class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("a_b%", like_values[0])
         self.assertIn("a/_b/%", like_values[0])
 
-    async def test_get_extraction_settings_defaults_to_on_when_no_user_row_exists(self):
+    async def test_get_extraction_settings_is_disabled_when_the_user_row_cannot_be_read(self):
+        # 列は NOT NULL。None は行が読めないときだけなので、有効扱いにせず抽出が走らない側へ倒す。
+        # The column is NOT NULL, so None means the row could not be read; it must not count as enabled.
         session = MagicMock()
         session.scalar = AsyncMock(side_effect=[None, False, True])
         repo = ContextFactCandidateRepository(session)
 
-        self.assertTrue(await repo.get_extraction_settings(7))
+        self.assertFalse(await repo.get_extraction_settings(7))
         self.assertFalse(await repo.get_extraction_settings(7))
         self.assertTrue(await repo.get_extraction_settings(7))
 

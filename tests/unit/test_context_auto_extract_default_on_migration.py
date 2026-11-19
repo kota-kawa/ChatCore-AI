@@ -11,7 +11,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 from services.models import User
-from services.repositories.context_fact_candidate_repository import DEFAULT_CONTEXT_EXTRACTION_ENABLED
 
 migration_path = (
     Path(__file__).resolve().parents[2]
@@ -62,10 +61,9 @@ class ContextAutoExtractDefaultOnMigrationTestCase(unittest.TestCase):
             ["ALTER TABLE users ALTER COLUMN context_auto_extract_enabled SET DEFAULT FALSE"],
         )
 
-    def test_model_default_and_application_default_match_the_migration(self):
+    def test_model_server_default_matches_the_migration(self):
         server_default = User.__table__.c.context_auto_extract_enabled.server_default
         self.assertEqual(str(server_default.arg).upper(), "TRUE")
-        self.assertTrue(DEFAULT_CONTEXT_EXTRACTION_ENABLED)
 
 
 if __name__ == "__main__":

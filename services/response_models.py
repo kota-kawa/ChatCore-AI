@@ -416,7 +416,7 @@ class ContextFactCandidateApprovalResponse(ResponsePayloadModel):
 # 日本語: 会話からの事実の自動抽出が有効かどうか。
 # English: Whether automatic fact extraction from conversations is enabled.
 class ContextExtractionSettingsResponse(ResponsePayloadModel):
-    enabled: bool = True
+    enabled: bool = False
 
 
 # 日本語: あるチャットのメッセージから自動保存された事実 1 件。取り消し(PUT で deprecated にする)に必要な revision を含む。
@@ -431,7 +431,7 @@ class ContextAutoSavedFactResponse(ResponsePayloadModel):
 # 日本語: 指定した部屋で自動保存された事実の一覧と、自動抽出が有効かどうか(無効ならクライアントは取り直さない)。
 # English: Facts auto-saved in one room plus whether auto-extraction is enabled (clients stop re-fetching when it is off).
 class ContextAutoSavedFactListResponse(ResponsePayloadModel):
-    enabled: bool = True
+    enabled: bool = False
     facts: list[ContextAutoSavedFactResponse] = Field(default_factory=list)
 
 

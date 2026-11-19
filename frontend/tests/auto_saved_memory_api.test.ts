@@ -26,6 +26,10 @@ test("normalizeAutoSavedMemoryList reports a disabled setting and drops malforme
   assert.deepEqual(result, { enabled: false, memories: [{ id: 2, messageId: 3, title: "ok", revision: 1 }] });
 });
 
+test("normalizeAutoSavedMemoryList treats a missing enabled flag as disabled", () => {
+  assert.equal(normalizeAutoSavedMemoryList({ facts: [] })?.enabled, false);
+});
+
 test("normalizeAutoSavedMemoryList returns null for an unreadable payload", () => {
   assert.equal(normalizeAutoSavedMemoryList(null), null);
   assert.equal(normalizeAutoSavedMemoryList({ enabled: true }), null);

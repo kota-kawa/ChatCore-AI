@@ -33,10 +33,6 @@ from services.repositories.context_fact_repository import MAX_ACTIVE_CONTEXT_FAC
 # English: Per-user cap on pending candidates, and the maximum number of existing documents used for BM25 duplicate detection.
 MAX_PENDING_CONTEXT_FACT_CANDIDATES = 100
 MAX_CONTEXT_DEDUPLICATION_DOCUMENTS = 500
-# 日本語: 自動抽出の初期値(users.context_auto_extract_enabled の server_default と同じ)。ユーザー行が見つからないときの既定にも使う。
-# English: Default for automatic extraction (same as the server_default of users.context_auto_extract_enabled),
-# also used when no user row is found.
-DEFAULT_CONTEXT_EXTRACTION_ENABLED = True
 # 日本語: advisory lock の名前空間(第 1 キー)。context_fact_repository と同じ値で、第 2 キーに user_id を渡すため、
 # 同一ユーザーの候補と事実の更新が同じロックで直列化される。
 # English: Advisory-lock namespace (first key), the same value as in context_fact_repository; with user_id as the second key,
@@ -521,11 +517,16 @@ class ContextFactCandidateRepository:
             status="fail",
         )
 
+    # 日本語: 列は NOT NULL なので None はユーザー行が読めなかったときだけ。その場合は無効として扱い、
+    # 読めない相手に抽出が走らないようにする。
+    # 初期オンは列の server_default(と migration)だけで表す。
+    # English: The column is NOT NULL, so None only means the user row could not be read. That counts as disabled, so no
+    # extraction runs for a user we cannot read. The on-by-default behavior lives only in the column's server_default (and the migration).
     async def get_extraction_settings(self, user_id: int) -> bool:
         enabled = await self.session.scalar(
             select(User.context_auto_extract_enabled).where(User.id == user_id)
         )
-        return bool(enabled) if enabled is not None else DEFAULT_CONTEXT_EXTRACTION_ENABLED
+        return bool(enabled) if enabled is not None else False
 
     async def update_extraction_settings(self, user_id: int, enabled: bool) -> bool:
         statement = (
