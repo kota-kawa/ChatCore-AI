@@ -35,7 +35,9 @@ export type GenerationStreamAction =
   | { kind: "parts_updated"; displayText: string; parts: ChatMessagePart[] | null }
   // 回答までのステップの全体スナップショット。差分ではなく、後のものが前のものを置き換える。
   // A whole snapshot of the steps to the answer; not a delta, and a later one replaces an earlier one.
-  | { kind: "answer_trace_updated"; trace: AnswerTraceV1 }
+  // null は「出すステップが無くなった」。表示中の実行記録を消す。
+  // null means no step is left to show, so the record on screen is dropped.
+  | { kind: "answer_trace_updated"; trace: AnswerTraceV1 | null }
   | { kind: "thinking_status"; text: string; phase: ChatGenerationPhase }
   // responseText は旧クライアント向けの全文（保存する text）。displayText は UI の代替テキストを除いた、文字送りの表示用。
   // responseText is the legacy full text (the saved text); displayText is the reveal text without the UI fallback text.
@@ -347,8 +349,10 @@ export function interpretGenerationStreamEvent(
   }
 
   if (parsed.event === "answer_trace_updated") {
-    // 形の合わないスナップショットは捨て、表示中の実行記録を消さない。
-    // A malformed snapshot is dropped so the record on screen is never erased.
+    // サーバーが明示した null だけが実行記録を消す。形の合わないスナップショットは捨て、表示中の記録を消さない。
+    // Only an explicit null from the server clears the record. A malformed snapshot is dropped so the
+    // record on screen is never erased.
+    if (data.trace === null) return { kind: "answer_trace_updated", trace: null };
     const trace = normalizeAnswerTrace(data.trace);
     return trace ? { kind: "answer_trace_updated", trace } : IGNORED;
   }

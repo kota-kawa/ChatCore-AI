@@ -492,7 +492,7 @@ class ChatGenerationFinalizationMixin(ChatGenerationJobBase):
         # record as the leading part.
         if message_parts:
             message_parts = normalize_message_parts_for_display(message_parts) or None
-        message_parts = with_answer_trace_part(message_parts, bot_reply, self._answer_trace)
+        message_parts = with_answer_trace_part(message_parts, bot_reply, self._settled_answer_trace())
         # 承認カードは本文と画像の後ろ、回答の最後に置く。
         # Approval cards close the reply, after the body and the images.
         message_parts = _with_tool_approval_parts(message_parts, bot_reply, state.tool_approval_parts)

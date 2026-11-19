@@ -58,6 +58,9 @@ from .web_search import (
 )
 from .web_search_trace import (
     TraceStep,
+    known_page_read_step,
+    running_known_page_read_step,
+    running_reference_step,
     selected_reference_step,
 )
 
@@ -70,20 +73,17 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
     # 検索系ツールの結果を回答トレースの1ステップへ変換する。参照元はイベント種別から決まる。
     # Turn a lookup tool result into one answer-trace step; the source follows the event prefix.
     @staticmethod
+    def _lookup_source(event_prefix: str) -> str:
+        return PERSONAL_KNOWLEDGE_SOURCE if event_prefix == "personal_knowledge_search" else SHARED_PROMPT_SOURCE
+
+    @classmethod
     def _lookup_trace_step(
+        cls,
         event_prefix: str,
         payload: dict[str, Any],
         query: str,
     ) -> TraceStep:
-        return selected_reference_step(
-            (
-                PERSONAL_KNOWLEDGE_SOURCE
-                if event_prefix == "personal_knowledge_search"
-                else SHARED_PROMPT_SOURCE
-            ),
-            payload,
-            query=query,
-        )
+        return selected_reference_step(cls._lookup_source(event_prefix), payload, query=query)
 
     # 検索系ツール呼び出しの受け付け判定フェーズ。実行できない場合は結果を積んで None を返す。
     # The admission phase for a lookup tool call; on refusal it appends the tool result
@@ -190,6 +190,13 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
         if admitted is None:
             return None
         step, query = admitted
+        # 検索を始めた時点で「実行中」のステップを見せ、結果が出たら置き換える。
+        # Show a running step as soon as the lookup starts, and replace it once the result is in.
+        running = (
+            self._begin_trace_step(trace_steps, running_reference_step(self._lookup_source(event_prefix), query))
+            if trace_steps is not None
+            else None
+        )
         # 受け付け判定を通った時点で search は None ではない。
         # Admission guarantees a callable search here.
         try:
@@ -224,9 +231,9 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
                 query=query,
                 status="failed",
             )
-            if trace_steps is not None:
-                trace_steps.append(
-                    self._lookup_trace_step(event_prefix, {"status": "failed"}, query)
+            if trace_steps is not None and running is not None:
+                self._finish_trace_step(
+                    trace_steps, running, self._lookup_trace_step(event_prefix, {"status": "failed"}, query)
                 )
             return None
 
@@ -253,8 +260,8 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
                 {"query": query, "step": step, "max_steps": budget.max_steps},
             )
             current_messages.append(_tool_result_message(tool_call, payload))
-            if trace_steps is not None:
-                trace_steps.append(self._lookup_trace_step(event_prefix, payload, query))
+            if trace_steps is not None and running is not None:
+                self._finish_trace_step(trace_steps, running, self._lookup_trace_step(event_prefix, payload, query))
             return payload
 
         self._publish(
@@ -268,8 +275,13 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
             },
         )
         current_messages.append(_tool_result_message(tool_call, payload))
-        if trace_steps is not None and status != "already_searched":
-            trace_steps.append(self._lookup_trace_step(event_prefix, payload, query))
+        if trace_steps is not None and running is not None:
+            # 事前検索と同じ検索語で、検索し直していない場合はステップを残さない。
+            # A query already prefetched was not searched again, so it leaves no step.
+            result_steps = (
+                () if status == "already_searched" else (self._lookup_trace_step(event_prefix, payload, query),)
+            )
+            self._finish_trace_step(trace_steps, running, *result_steps)
         return payload
 
     # モデルへ提示するツール定義を決めるフェーズ。
@@ -504,15 +516,18 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
             state.telemetry.tool_calls = budget.tool_calls
             arguments = tool_call.get("function", {}).get("arguments", "{}")
             if name == READ_WEB_PAGE_TOOL_NAME:
-                payload = state.web_page_reader.execute_read_web_page(
-                    arguments, max_chars=budget.read_message_limit,
-                )
-                if payload.get("status") == "ok":
-                    state.web_search_trace_steps.append(TraceStep(
-                        title="参照先のページ本文を確認",
-                        detail="以前に見つけたURLから、回答に必要な箇所を読みました。",
-                        kind="read",
-                    ))
+                # 読み始めた時点で「実行中」のステップを見せる。読めなかったときはステップを残さない。
+                # Show a running step once the read starts; a page that could not be read leaves no step.
+                running = self._begin_trace_step(state.web_search_trace_steps, running_known_page_read_step())
+                read_steps: tuple[TraceStep, ...] = ()
+                try:
+                    payload = state.web_page_reader.execute_read_web_page(
+                        arguments, max_chars=budget.read_message_limit,
+                    )
+                    if payload.get("status") == "ok":
+                        read_steps = (known_page_read_step(),)
+                finally:
+                    self._finish_trace_step(state.web_search_trace_steps, running, *read_steps)
             else:
                 payload = state.evidence_store.execute_get_evidence(
                     arguments, max_chars=budget.read_message_limit,

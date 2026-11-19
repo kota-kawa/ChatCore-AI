@@ -483,6 +483,29 @@
   color: var(--ws-surface);
 }
 
+/* ─── 実行中のステップ ───
+   まだ結果の出ていないステップ。丸印を塗りつぶさず、外へ広がる輪で動いていることを示す。
+   状態は文字（「実行中」のバッジ）でも伝えるので、動きを止めても区別できる。
+   A step with no result yet: the dot is left unfilled and a ring spreading outwards shows it is
+   working. The state is also stated in text (the "実行中" badge), so it stays distinguishable with
+   motion turned off. */
+:where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step--running > .web-search-sources__step-marker {
+  border-color: var(--ws-accent);
+  background: var(--ws-surface);
+  color: var(--ws-accent-text);
+  animation: web-search-sources-step-running 1.4s ease-out infinite;
+}
+
+@keyframes web-search-sources-step-running {
+  from {
+    box-shadow: 0 0 0 3px var(--ws-surface), 0 0 0 3px var(--ws-accent-border);
+  }
+
+  to {
+    box-shadow: 0 0 0 3px var(--ws-surface), 0 0 0 10px transparent;
+  }
+}
+
 /* ─── ステップの中身 ─── */
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-card,
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-summary {
@@ -866,6 +889,10 @@
 
 /* ─── モーション軽減 ─── */
 @media (prefers-reduced-motion: reduce) {
+  :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step--running > .web-search-sources__step-marker {
+    animation: none;
+  }
+
   :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__link:hover,
   :where(body.chat-page, .chat-page-shell) .bot-message .web-search-citation:hover {
     transform: none;

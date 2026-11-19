@@ -115,6 +115,10 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
             tool_approval_parts=self._tool_approval_parts,
             untrusted_input_ingested=self._starts_with_external_input(),
         )
+        # 生成前に済ませた参照元の検索は、最初の判断を待たずに「回答までのステップ」として見せる。
+        # Reference lookups finished before generation show up as steps to the answer without
+        # waiting for the first decision.
+        self._publish_answer_trace_progress(state.web_search_trace_steps)
         self._register_pasted_url_pages(state)
         for prior_result in self._prior_web_search_results:
             turn_state.record_search(

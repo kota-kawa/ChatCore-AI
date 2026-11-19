@@ -8,7 +8,7 @@
 // the final fade) and the reconnect backoff are user-visible, so the logic
 // moved out of the hook keeps its original order.
 
-import { isSameAnswerTrace, withAnswerTracePart } from "./answer_trace";
+import { isAnswerTracePart, isSameAnswerTrace, withAnswerTracePart } from "./answer_trace";
 import {
   generativeUiFenceKind,
   getStreamingGenerativeUiDisplayText,
@@ -179,6 +179,11 @@ type StreamSessionState = {
   // of the part list on every render: the generation-time parts updates (response_parts_updated) do not know it,
   // so mixing it into those parts would let an update erase it.
   answerTrace: AnswerTraceV1 | null;
+  // 吹き出しが実行記録だけを見せていて、その下に思考中の表示を残している間は true。本文か下書きが
+  // 加わった時点で思考中の表示を外す。
+  // True while the bubble shows only the execution record and the thinking indicator stays below it;
+  // the indicator is removed once prose or a draft joins the bubble.
+  thinkingKeptBelowMessage: boolean;
   pendingFinalization: PendingFinalization | null;
 };
 
@@ -229,11 +234,12 @@ function createStoredGenerationStateSync(
     // ID だけが進んで実行記録が欠けた状態を作らない。
     // The execution record is saved in the same write as the last event id. A reconnect only replays events
     // after that id, so the id must never run ahead of a record that is missing.
-    const answerTrace = hasPendingAnswerTrace ? readAnswerTrace() : null;
     const updates = {
       ...(pendingLastEventId > 0 ? { lastEventId: pendingLastEventId } : {}),
       ...(hasPendingStreamedText ? { streamedText: readStreamedText() } : {}),
-      ...(answerTrace ? { answerTrace } : {}),
+      // 実行記録が無くなった場合は、保存済みの記録も消す。
+      // When the record is gone, the stored one is removed as well.
+      ...(hasPendingAnswerTrace ? { answerTrace: readAnswerTrace() ?? undefined } : {}),
     };
     pendingLastEventId = 0;
     hasPendingStreamedText = false;
@@ -322,8 +328,59 @@ function createStreamRenderer(
     return withAnswerTracePart(bodyParts ?? (displayText ? [{ type: "text", text: displayText }] : []), state.answerTrace);
   };
 
+  // 実行記録だけの吹き出しを、思考中の表示の上に作る。本文より先に届いた「回答までのステップ」を見せるため。
+  // 思考中の表示は残し、本文か下書きが加わった時に外す。
+  // Create a bubble holding only the execution record, above the thinking indicator, so steps to the
+  // answer that arrive before the prose are visible. The indicator stays and is removed once prose or a
+  // draft joins the bubble.
+  const ensureRecordMessage = () => {
+    if (state.streamingMessageId || !state.answerTrace) return;
+    state.streamingMessageId = messages.createMessageId("assistant-stream");
+    const newId = state.streamingMessageId;
+    const recordParts = withAnswerTracePart([], state.answerTrace);
+    state.thinkingKeptBelowMessage = true;
+    messages.updateActiveMessages((previous) => [
+      ...removeThinkingMessages(previous),
+      { id: newId, sender: "assistant", text: "", streaming: true, ...(recordParts ? { parts: recordParts } : {}) },
+      ...previous.filter((message) => message.sender === "thinking"),
+    ]);
+  };
+
+  // 本文も下書きも無く、実行記録だけを見せている吹き出しを取り除く。記録だけでは回答にならない。
+  // Remove a bubble that shows only the execution record, with neither prose nor a draft; a record alone
+  // is not an answer.
+  // restoreThinking: 生成がまだ続く場合に立てる。吹き出しと一緒に思考中の表示まで無くなっていたら戻す
+  // （下書きが本文に入った時点で思考中の表示は外れているため）。
+  // restoreThinking is set while generation continues: if the thinking indicator is gone along with the
+  // bubble (a draft joining the bubble had removed it), it is brought back.
+  const dropRecordOnlyMessage = (restoreThinking = false) => {
+    const streamId = state.streamingMessageId;
+    if (!streamId || readShownText() || state.streamingParts?.length) return;
+    cancelRender();
+    state.streamingMessageId = null;
+    state.thinkingKeptBelowMessage = false;
+    state.messageHeldByDraft = false;
+    const thinkingMessage: UiChatMessage = {
+      id: messages.createMessageId("thinking"),
+      sender: "thinking",
+      text: host.localize("思考中", "Preparing an answer"),
+      generationPhase: "generating",
+    };
+    messages.updateActiveMessages((previous) => {
+      const rest = previous.filter((message) => message.id !== streamId);
+      const hasThinking = rest.some((message) => message.sender === "thinking");
+      return restoreThinking && !hasThinking ? [...rest, thinkingMessage] : rest;
+    });
+  };
+
   const ensureStreamingMessage = () => {
-    if (state.streamingMessageId) return state.streamingMessageId;
+    if (state.streamingMessageId) {
+      if (state.thinkingKeptBelowMessage) {
+        state.thinkingKeptBelowMessage = false;
+        messages.updateActiveMessages((previous) => removeThinkingMessages(previous));
+      }
+      return state.streamingMessageId;
+    }
     state.streamingMessageId = messages.createMessageId("assistant-stream");
     const newId = state.streamingMessageId;
     const shownText = readShownText();
@@ -364,7 +421,13 @@ function createStreamRenderer(
     // The parts of a terminal event are the settled whole, execution record included, so they are used as they are.
     const resolvedParts =
       Array.isArray(parts) && parts.length > 0 ? parts : composeParts(finalDisplayText, true);
-    const hasParts = Array.isArray(resolvedParts) && resolvedParts.length > 0;
+    // 実行記録だけ（本文も他のパーツも無い）では回答にならない。記録だけの吹き出しを確定した回答として残さない。
+    // An execution record alone, with neither prose nor any other part, is not an answer, so a bubble
+    // holding only the record is never left behind as a settled answer.
+    const hasAnswerParts =
+      Array.isArray(resolvedParts) &&
+      resolvedParts.some((part) => !isAnswerTracePart(part) && (part.type !== "text" || Boolean(part.text)));
+    const hasParts = Array.isArray(resolvedParts) && resolvedParts.length > 0 && (Boolean(finalDisplayText) || hasAnswerParts);
     const persistAnswer = () => {
       if (persist && finalDisplayText && host.isActive()) {
         storage.persistAssistantAnswer({
@@ -398,6 +461,15 @@ function createStreamRenderer(
     }
 
     const streamId = state.streamingMessageId;
+    state.thinkingKeptBelowMessage = false;
+    if (!finalDisplayText && !hasParts) {
+      state.streamingMessageId = null;
+      messages.updateActiveMessages((previous) =>
+        removeThinkingMessages(previous).filter((message) => message.id !== streamId),
+      );
+      persistAnswer();
+      return;
+    }
     messages.updateActiveMessages((previous) =>
       removeThinkingMessages(previous).map((message) =>
         message.id === streamId
@@ -432,11 +504,10 @@ function createStreamRenderer(
     resolveRevealCompletion = null;
   };
 
-  // 下書きだけで作った吹き出しを取り除き、表示ペースを最初に戻す。
-  // Remove the bubble a draft alone created and return the display pace to its start.
+  // 下書きだけを本文に持つ吹き出しを片付け、表示ペースを最初に戻す。
+  // Clear the bubble whose only prose is a draft and return the display pace to its start.
   const dropDraftMessage = (restoreThinking: boolean) => {
     const streamId = state.streamingMessageId;
-    state.streamingMessageId = null;
     state.messageHeldByDraft = false;
     streamPace.length = 0;
     streamPace.rate = 0;
@@ -448,8 +519,20 @@ function createStreamRenderer(
       text: host.localize("思考中", "Preparing an answer"),
       generationPhase: "generating",
     };
+    // 実行記録を見せている吹き出しは取り除かず、本文だけを空に戻す。表示済みのステップを消さないため。
+    // A bubble showing the execution record is kept and only its prose is emptied, so steps already
+    // on screen do not disappear.
+    const recordParts = state.answerTrace ? withAnswerTracePart([], state.answerTrace) : undefined;
+    if (!recordParts) state.streamingMessageId = null;
+    state.thinkingKeptBelowMessage = Boolean(recordParts) && restoreThinking;
     messages.updateActiveMessages((previous) => {
-      const rest = removeThinkingMessages(previous).filter((message) => message.id !== streamId);
+      const rest = recordParts
+        ? removeThinkingMessages(previous).map((message) =>
+            message.id === streamId
+              ? { ...message, text: "", parts: recordParts, generativeUiPending: false, generativeUiFenceKind: undefined }
+              : message,
+          )
+        : removeThinkingMessages(previous).filter((message) => message.id !== streamId);
       return restoreThinking ? [...rest, thinkingMessage] : rest;
     });
   };
@@ -549,6 +632,8 @@ function createStreamRenderer(
     scheduleRender,
     cancelRender,
     ensureStreamingMessage,
+    ensureRecordMessage,
+    dropRecordOnlyMessage,
     finalizeStreamingMessage,
 
     settleEmptiedDraft,
@@ -679,10 +764,14 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
     // 再読み込みの後は、保存しておいた実行記録から再開する（再接続は保存後のイベントしか再送しない）。
     // After a reload, resume from the saved record (a reconnect only replays events after the save).
     answerTrace: storedGeneration?.answerTrace ?? null,
+    thinkingKeptBelowMessage: false,
     pendingFinalization: null,
   };
 
   const renderer = createStreamRenderer(host, state, timers, getStreamingGenerativeUiDisplayText(restoredText).length);
+  // 再読み込みの前に見えていた実行記録は、本文がまだ無くてもすぐに戻す。
+  // A record that was on screen before a reload comes back at once, even with no prose yet.
+  if (!restoredText) renderer.ensureRecordMessage();
   const storedStateSync = createStoredGenerationStateSync(
     host.storage,
     timers,
@@ -696,6 +785,7 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
 
   const persistInterruptedStream = (message: string) => {
     renderer.discardDraft();
+    renderer.dropRecordOnlyMessage();
     if (state.streamedText.trim()) {
       renderer.finalizeStreamingMessage(
         getStreamingGenerativeUiDisplayText(state.streamedText),
@@ -743,7 +833,9 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         renderer.scheduleRender();
         return;
       case "answer_draft": {
-        const createdByDraft = state.streamingMessageId === null;
+        // 吹き出しが無いときも、実行記録だけの吹き出しに入るときも、本文はこの下書きだけになる。
+        // Whether there is no bubble yet or only one holding the execution record, this draft is its only prose.
+        const createdByDraft = state.streamingMessageId === null || state.thinkingKeptBelowMessage;
         // 初回の描画が下書き全体をペース制御なしで描かないよう、吹き出しを先に作ってから追記する。
         // Create the bubble before appending so its first render does not paint the whole draft unpaced.
         renderer.ensureStreamingMessage();
@@ -776,12 +868,16 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         return;
       case "answer_trace_updated":
         // 下書きには触れない。同じ内容の再送は描き直さず、本文の描画に任せて次のフレームで載せ替える。
-        // 吹き出しがまだ無ければ保持だけして、吹き出しができた時に先頭へ載せる。
+        // 吹き出しがまだ無ければ、実行記録だけの吹き出しを思考中の表示の上に作る。記録が無くなったら、
+        // 記録だけの吹き出しは取り除く。
         // The draft is left alone. A resent snapshot with the same content does not redraw; otherwise the next
-        // frame swaps it in. With no bubble yet it is only kept, and laid at the head once the bubble exists.
+        // frame swaps it in. With no bubble yet, one holding only the record is created above the thinking
+        // indicator; when the record is gone, a bubble holding nothing else is removed.
         if (isSameAnswerTrace(state.answerTrace, action.trace)) return;
         state.answerTrace = action.trace;
         storedStateSync.noteAnswerTrace();
+        if (action.trace) renderer.ensureRecordMessage();
+        else renderer.dropRecordOnlyMessage(true);
         renderer.scheduleRender();
         return;
       case "thinking_status":
@@ -809,6 +905,7 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         // of leaving a blank bubble behind.
         progress.completed = false;
         renderer.discardDraft();
+        renderer.dropRecordOnlyMessage();
         host.messages.applyRoomTitle(action.roomTitle);
         progress.streamError = action.message;
         host.lastEventIdByRoom.delete(roomId);
@@ -843,6 +940,7 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         return;
       case "error":
         renderer.discardDraft();
+        renderer.dropRecordOnlyMessage();
         progress.streamError = action.message;
         return;
     }

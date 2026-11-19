@@ -35,8 +35,10 @@ from .web_search import (
     search_brave_llm_context,
 )
 from .web_search_trace import (
+    TraceStep,
     page_reading_steps,
     review_step,
+    running_search_step,
     search_failed_step,
     search_step,
 )
@@ -300,6 +302,12 @@ class ChatGenerationWebSearchMixin(ChatGenerationJobBase):
             )
             return
 
+        # 検索を始めた時点で「実行中」のステップを見せ、終わったら結果のステップへ置き換える。
+        # Show a running step as soon as the search starts, and replace it with the result steps once it ends.
+        running = self._begin_trace_step(
+            state.web_search_trace_steps,
+            running_search_step(query_text, additional=bool(state.web_search_results)),
+        )
         try:
             self._execute_web_search(
                 state,
@@ -309,6 +317,7 @@ class ChatGenerationWebSearchMixin(ChatGenerationJobBase):
                 search_language=search_language,
                 search_key=search_key,
                 step=search_step_index,
+                running=running,
             )
         except WebSearchQuotaExceededError as exc:
             self._report_web_search_quota_exceeded(
@@ -317,6 +326,7 @@ class ChatGenerationWebSearchMixin(ChatGenerationJobBase):
                 exc,
                 query_text=query_text,
                 step=search_step_index,
+                running=running,
             )
         except Exception:
             self._report_web_search_failure(
@@ -324,6 +334,7 @@ class ChatGenerationWebSearchMixin(ChatGenerationJobBase):
                 tool_call,
                 query_text=query_text,
                 step=search_step_index,
+                running=running,
             )
 
     # 同一条件の検索結果を再利用するフェーズ。プロバイダへは問い合わせない。
@@ -352,6 +363,7 @@ class ChatGenerationWebSearchMixin(ChatGenerationJobBase):
                 review_step(cached_result, reused=True),
             ]
         )
+        self._publish_answer_trace_progress(state.web_search_trace_steps)
         self._publish(
             "web_search_completed",
             {
@@ -390,6 +402,7 @@ class ChatGenerationWebSearchMixin(ChatGenerationJobBase):
         search_language: str,
         search_key: tuple[str, str, str],
         step: int,
+        running: TraceStep,
     ) -> None:
         result = search_brave_llm_context(
             query_text,
@@ -399,12 +412,12 @@ class ChatGenerationWebSearchMixin(ChatGenerationJobBase):
             search_language=search_language,
         )
         state.web_search_results_by_key[search_key] = result
-        state.web_search_trace_steps.extend(
-            [
-                search_step(result, additional=bool(state.web_search_results)),
-                *page_reading_steps(result),
-                review_step(result),
-            ]
+        self._finish_trace_step(
+            state.web_search_trace_steps,
+            running,
+            search_step(result, additional=bool(state.web_search_results)),
+            *page_reading_steps(result),
+            review_step(result),
         )
         if result.has_sources:
             state.web_search_results.append(result)
@@ -469,6 +482,7 @@ class ChatGenerationWebSearchMixin(ChatGenerationJobBase):
         *,
         query_text: str,
         step: int,
+        running: TraceStep,
     ) -> None:
         message = (
             f"Web検索の月間上限（全体 {exc.limit} 回）に達しました。"
@@ -481,11 +495,13 @@ class ChatGenerationWebSearchMixin(ChatGenerationJobBase):
             exc.retry_after_seconds,
             extra=self._telemetry.as_log_extra(),
         )
-        state.web_search_trace_steps.append(
+        self._finish_trace_step(
+            state.web_search_trace_steps,
+            running,
             search_failed_step(
                 query_text,
                 reason="月間上限に達したため検索結果を取得できませんでした。",
-            )
+            ),
         )
         state.suppress_next_generation_started = True
         self._publish(
@@ -524,13 +540,16 @@ class ChatGenerationWebSearchMixin(ChatGenerationJobBase):
         *,
         query_text: str,
         step: int,
+        running: TraceStep,
     ) -> None:
         logger.exception("Brave search via tool call failed.")
-        state.web_search_trace_steps.append(
+        self._finish_trace_step(
+            state.web_search_trace_steps,
+            running,
             search_failed_step(
                 query_text,
                 reason="検索リクエストに失敗したため、取得済みの情報で回答を続けました。",
-            )
+            ),
         )
         state.suppress_next_generation_started = True
         self._publish(

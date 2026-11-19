@@ -393,6 +393,92 @@ class WebSearchTraceTestCase(unittest.TestCase):
 
         self.assertEqual(step["kind"], "info")
 
+    # 日本語: 実行中のステップは、実行中の状態と検索語を持って渡ることを検証します。
+    # English: Verify a running step is handed over with the running status and its query.
+    def test_running_search_step_is_handed_over_as_running(self):
+        step = trace.build_answer_trace(steps=[trace.running_search_step("Python news")])["steps"][0]
+
+        self.assertEqual((step["kind"], step["status"], step["title"], step["query"]), ("search", "running", "Web検索", "Python news"))
+        self.assertEqual(step["badge"], "実行中")
+        self.assertEqual(step["sources"], [])
+
+    # 日本語: 実行中のステップを結果のステップへ置き換えても、同じ位置のステップは同じ ID を保つことを検証します。
+    # English: Verify the step keeps its id when a running step is replaced in place by its result.
+    def test_step_id_survives_the_change_from_running_to_done(self):
+        result = self._result("Python news", ["example.com"])
+        before = [trace.review_step(None), trace.running_search_step("Python news", additional=True)]
+        after = [trace.review_step(None), trace.search_step(result, additional=True), trace.review_step(result)]
+
+        running = trace.build_answer_trace(steps=before)["steps"][1]
+        done = trace.build_answer_trace(steps=after)["steps"][1]
+
+        self.assertEqual((running["id"], running["status"], running["title"]), ("s2", "running", "追加検索"))
+        self.assertEqual((done["id"], done["status"], done["title"]), ("s2", "done", "追加検索"))
+
+    # 日本語: 回答を確定する時点で実行中のまま残ったステップは、完了ではなく失敗として確定することを検証します。
+    # English: Verify a step still running when the answer is settled becomes failed, never done.
+    def test_steps_left_running_are_settled_as_failed(self):
+        result = self._result("Python news", ["example.com"])
+        settled = trace.settle_running_steps(
+            [trace.search_step(result), trace.running_search_step("Python release")]
+        )
+
+        record = trace.build_answer_trace(steps=settled)
+
+        self.assertEqual([step["status"] for step in record["steps"]], ["done", "failed"])
+        interrupted = record["steps"][1]
+        self.assertEqual((interrupted["kind"], interrupted["title"], interrupted["query"]), ("warning", "Web検索", "Python release"))
+        self.assertEqual(interrupted["badge"], "")
+        self.assertNotIn("実行しています", interrupted["detail"])
+
+    # 日本語: 要約には終わったステップだけを数え、実行中の検索を「検索 1 回」と見せないことを検証します。
+    # English: Verify the summary counts finished steps only, so a search still running does not read as one search done.
+    def test_summary_does_not_count_a_running_search(self):
+        result = self._result("Python news", ["example.com"])
+
+        running_only = trace.build_answer_trace(steps=[trace.running_search_step("Python news")])
+        one_done = trace.build_answer_trace(
+            steps=[trace.search_step(result), trace.running_search_step("Python release", additional=True)]
+        )
+
+        self.assertEqual(running_only["summary"], "")
+        self.assertEqual(one_done["summary"], "Web検索1回 · 参照サイト1件")
+
+    # 日本語: 配信済みの記録に実行中のまま残ったステップは、同じ ID のまま失敗として確定することを検証します。
+    # English: Verify a step left running in a published record is settled as failed under the same id.
+    def test_published_record_with_a_running_step_is_settled_as_failed(self):
+        result = self._result("Python news", ["example.com"])
+        published = trace.build_answer_trace(
+            steps=[trace.search_step(result), trace.running_search_step("Python release", additional=True)]
+        )
+
+        settled = trace.settle_running_answer_trace(published)
+
+        self.assertEqual(settled["steps"][0], published["steps"][0])
+        interrupted = settled["steps"][1]
+        self.assertEqual(
+            (interrupted["id"], interrupted["kind"], interrupted["status"], interrupted["title"], interrupted["query"]),
+            ("s2", "warning", "failed", "追加検索", "Python release"),
+        )
+        self.assertEqual((interrupted["badge"], interrupted["sources"]), ("", []))
+        # 実行中のステップが無い記録と、記録が無い場合は、そのまま返す。
+        # A record with no running step, and no record at all, are returned as they are.
+        self.assertIs(trace.settle_running_answer_trace(settled), settled)
+        self.assertIsNone(trace.settle_running_answer_trace(None))
+
+    # 日本語: 実行中のステップと結果のステップが同じ題名を使うことを検証します（同じ ID のまま状態だけが変わって見えるように）。
+    # English: Verify a running step and its result share one title, so only the status appears to change under the same id.
+    def test_running_steps_share_their_title_with_the_result_step(self):
+        self.assertEqual(
+            trace.running_reference_step(PERSONAL_KNOWLEDGE_SOURCE, "q").title,
+            trace.selected_reference_step(PERSONAL_KNOWLEDGE_SOURCE, {"status": "ok", "memo_count": 1}, query="q").title,
+        )
+        self.assertEqual(
+            trace.running_reference_step(SHARED_PROMPT_SOURCE, "q").title,
+            trace.selected_reference_step(SHARED_PROMPT_SOURCE, {"status": "ok", "prompt_count": 1}, query="q").title,
+        )
+        self.assertEqual(trace.running_known_page_read_step().title, trace.known_page_read_step().title)
+
     # 日本語: ステップも出典も無い場合は実行記録を作らないことを検証します。
     # English: Verify no record is built when there is nothing to show.
     def test_returns_none_without_steps_or_sources(self):
