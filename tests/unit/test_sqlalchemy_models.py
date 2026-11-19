@@ -12,7 +12,7 @@ import unittest
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import dialect as postgresql_dialect
 from sqlalchemy.schema import CreateIndex
-from sqlalchemy.types import Text
+from sqlalchemy.types import Float, Text
 
 from services.models import (
     Base,
@@ -120,6 +120,14 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         self.assertIsInstance(MemoEntry.embedding_vector.type, Vector)
         self.assertEqual(MemoEntry.embedding_vector.type.compile(dialect=postgresql_dialect()), "vector(768)")
         self.assertEqual(Prompt.embedding_vector.type.compile(dialect=postgresql_dialect()), "vector(768)")
+        # 距離の式は数値として扱う。vector 型を引き継ぐと、比較するしきい値まで vector として束縛される。
+        # A distance expression is numeric; inheriting the vector type would bind a compared threshold as a vector too.
+        distance = MemoEntry.embedding_vector.cosine_distance([0.1, 0.2])
+        self.assertIsInstance(distance.type, Float)
+        self.assertEqual(
+            str(distance.compile(dialect=postgresql_dialect())),
+            "memo_entries.embedding_vector <=> %(embedding_vector_1)s",
+        )
 
         index_sql = {
             str(CreateIndex(index).compile(dialect=postgresql_dialect()))

@@ -16,6 +16,7 @@ from services.repositories.context_fact_repository import (
     MAX_ACTIVE_CONTEXT_FACTS,
     ContextFactRepository,
 )
+from tests.helpers.sql_helpers import bind_statement_parameters
 
 
 # 日本語: 事実テーブルの 1 行分の辞書を作ります。overrides で項目を差し替えます。
@@ -126,9 +127,12 @@ class ContextFactRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(facts[0]["id"], 10)
         statement = session.execute.await_args.args[0]
-        compiled = statement.compile(dialect=dialect())
-        self.assertIn("embedding_vector <=>", str(compiled))
-        self.assertIn(0.4, compiled.params.values())
+        self.assertIn("embedding_vector <=>", str(statement.compile(dialect=dialect())))
+        # しきい値は数値のまま、埋め込みは vector の文字列表現で束縛される。
+        # The threshold stays a number while the embedding is bound in pgvector's text form.
+        bound = bind_statement_parameters(statement)
+        self.assertIn(0.4, bound.values())
+        self.assertEqual(bound["context_query_embedding"], "[0.1,0.2,0.3]")
 
     async def test_update_fact_uses_optimistic_revision_and_returning(self):
         session = MagicMock()

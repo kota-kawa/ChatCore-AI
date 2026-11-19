@@ -8,7 +8,23 @@ from __future__ import annotations
 import ast
 from typing import Any
 
+from sqlalchemy import Float
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import UserDefinedType
+
+
+class _VectorComparator(UserDefinedType.Comparator):
+    """``vector`` 列で使える演算。距離の式の戻り値の型をここで決める。
+
+    Operators available on a ``vector`` column; the result type of a distance expression is decided here.
+    """
+
+    def cosine_distance(self, other: Any) -> ColumnElement[float]:
+        # 距離は数値。戻り値の型を指定しないと式が vector 型を引き継ぎ、距離と比べるしきい値まで
+        # vector として束縛されて実行時に失敗する。
+        # A distance is a number. Without an explicit result type the expression inherits the vector type,
+        # and a threshold compared against it is bound as a vector too, which fails at execution.
+        return self.op("<=>", return_type=Float())(other)
 
 
 class Vector(UserDefinedType):
@@ -26,6 +42,7 @@ class Vector(UserDefinedType):
     """
 
     cache_ok = True
+    comparator_factory = _VectorComparator
 
     def __init__(self, dimensions: int) -> None:
         self.dimensions = dimensions
