@@ -1,7 +1,7 @@
-// マイコンテキスト（個人の文脈を保管する金庫）の API クライアント。事実と AI の提案候補の取得・作成・更新・承認・却下、
-// 自動抽出の設定、金庫の書き出しとインポート（確認してから取り込む）を扱う。
-// API client for My Context (the personal context vault): loading, creating, updating, approving and rejecting facts and AI-suggested candidates,
-// the auto-extraction setting, and exporting and importing the vault (import is previewed before it is confirmed).
+// 記憶（パーソナル・コンテキスト）の API クライアント。事実と AI の提案候補の取得・作成・更新・承認・却下、
+// 自動抽出の設定、記憶の書き出しとインポート（確認してから取り込む）を扱う。
+// API client for Memory (the personal context): loading, creating, updating, approving and rejecting facts and AI-suggested candidates,
+// the auto-extraction setting, and exporting and importing the memory (import is previewed before it is confirmed).
 
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { setLoggedInState } from "../../scripts/core/app_state";
@@ -104,8 +104,8 @@ async function throwContextResponseError(response: Response, defaultMessage: str
   throw createContextApiError(message, response.status);
 }
 
-// マイコンテキスト一覧を種類・状態で絞り込んで取得する。
-// Load the context vault list, filtered by fact type / status.
+// 記憶の一覧を種類・状態で絞り込んで取得する。
+// Load the Memory list, filtered by fact type / status.
 export async function loadContextFacts(params: {
   factType?: ContextFactType | null;
   status?: ContextFactStatus;
@@ -123,7 +123,7 @@ export async function loadContextFacts(params: {
   if (res.status === 401) handleExpiredContextSession();
   if (!res.ok) {
     throw createContextApiError(
-      data.error || `コンテキストの取得に失敗しました (${res.status})`,
+      data.error || `記憶の取得に失敗しました (${res.status})`,
       res.status,
     );
   }
@@ -134,7 +134,7 @@ export async function loadContextFacts(params: {
   };
 }
 
-// マイコンテキストを新規作成する。
+// 記憶を新規作成する。
 // Create a new context fact.
 export async function createContextFact(input: ContextFactCreateInput): Promise<ContextFact> {
   const { payload } = await memoFetchJsonOrThrow<ContextFactMutationPayload>(
@@ -145,12 +145,12 @@ export async function createContextFact(input: ContextFactCreateInput): Promise<
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     },
-    { defaultMessage: "コンテキストの保存に失敗しました。", hasApplicationError: (d) => !d.fact },
+    { defaultMessage: "記憶の保存に失敗しました。", hasApplicationError: (d) => !d.fact },
   );
   return payload.fact as ContextFact;
 }
 
-// マイコンテキストを更新する（無効化・復元も status で行う）。
+// 記憶を更新する（無効化・復元も status で行う）。
 // Update a context fact (deprecate/restore handled via status).
 export async function updateContextFact(
   factId: number,
@@ -164,7 +164,7 @@ export async function updateContextFact(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     },
-    { defaultMessage: "コンテキストの更新に失敗しました。", hasApplicationError: (d) => !d.fact },
+    { defaultMessage: "記憶の更新に失敗しました。", hasApplicationError: (d) => !d.fact },
   );
   return payload.fact as ContextFact;
 }
@@ -267,8 +267,8 @@ export async function updateContextExtractionSettings(
   return { enabled: payload.enabled === true };
 }
 
-// 金庫の全事実をポータブルなJSONまたはMarkdownとして取得する。
-// Fetch every vault fact as a portable JSON or Markdown attachment.
+// 記憶の全事実をポータブルなJSONまたはMarkdownとして取得する。
+// Fetch every Memory fact as a portable JSON or Markdown attachment.
 export async function exportContextVault(
   format: ContextVaultExportFormat,
 ): Promise<ContextVaultExportResult> {
@@ -277,7 +277,7 @@ export async function exportContextVault(
     { credentials: "same-origin" },
   );
   if (!response.ok) {
-    await throwContextResponseError(response, "コンテキストを書き出せませんでした");
+    await throwContextResponseError(response, "記憶を書き出せませんでした");
   }
   return {
     blob: await response.blob(),
@@ -325,7 +325,7 @@ export async function confirmContextVaultImport(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     },
-    { defaultMessage: "コンテキストをインポートできませんでした。" },
+    { defaultMessage: "記憶をインポートできませんでした。" },
   );
   return payload;
 }

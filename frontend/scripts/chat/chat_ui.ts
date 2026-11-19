@@ -87,9 +87,9 @@ function protectSelectedReferenceMarkers(text: string) {
 
 function renderSelectedReferenceMarkers(html: string) {
   const personalKnowledgePill = [
-    '<span class="selected-reference-citation selected-reference-citation--personal" title="メモ・マイコンテキスト">',
+    '<span class="selected-reference-citation selected-reference-citation--personal" title="メモ・記憶">',
     '<span class="web-search-citation__icon"><i class="bi bi-journal-text"></i></span>',
-    '<span class="web-search-citation__label">メモ・マイコンテキスト</span>',
+    '<span class="web-search-citation__label">メモ・記憶</span>',
     "</span>",
   ].join("");
   const sharedPromptPill = [

@@ -49,8 +49,11 @@ _STEP_ICONS: dict[str, str] = {
 _DEFAULT_STEP_KIND = "info"
 
 # 旧形式（title/detailのみ）のステップから種別を推定するための接頭辞。
+# 「メモとマイコンテキスト」は画面名を「記憶」に改める前に保存された題名なので、読み取り用に残す。
 # Prefixes used to infer a kind from legacy steps that only carry title/detail.
+# "メモとマイコンテキスト" is the title saved before the screen name became "記憶"; it stays so old data is still read.
 _TITLE_KIND_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("メモと記憶", "knowledge"),
     ("メモとマイコンテキスト", "knowledge"),
     ("共有プロンプト", "prompt"),
     ("検索が必要", "decide"),
@@ -279,11 +282,11 @@ def selected_reference_step(
     *,
     query: str = "",
 ) -> TraceStep:
-    """メモ／マイコンテキスト、または共有プロンプトの検索に対するトレースのステップを作る。
+    """メモ／記憶、または共有プロンプトの検索に対するトレースのステップを作る。
 
     status が failed / unavailable なら警告、overview なら保存済み内容を棚卸しとして渡したステップになる。
 
-    Build a trace step for memo/My Context or shared-prompt lookup.
+    Build a trace step for memo/Memory or shared-prompt lookup.
     """
     status = str(payload.get("status") or "")
     resolved_query = str(payload.get("query") or query)
@@ -295,9 +298,9 @@ def selected_reference_step(
         fact_count = int(payload.get("context_fact_count") or 0)
         total = memo_count + fact_count
         return TraceStep(
-            title="保存済みのメモとマイコンテキストを確認",
+            title="保存済みのメモと記憶を確認",
             detail=(
-                "検索条件に一致するものは無かったため、最近のメモとマイコンテキストの内容を"
+                "検索条件に一致するものは無かったため、最近のメモと記憶の内容を"
                 f"{total}件読み込み、回答の材料にしました。"
             ),
             kind="knowledge",
@@ -307,7 +310,7 @@ def selected_reference_step(
                 label
                 for count, label in (
                     (memo_count, f"最近のメモ {memo_count}件"),
-                    (fact_count, f"マイコンテキスト {fact_count}件"),
+                    (fact_count, f"記憶 {fact_count}件"),
                 )
                 if count
             ),
@@ -317,20 +320,20 @@ def selected_reference_step(
         memo_count = int(payload.get("memo_count") or 0)
         fact_count = int(payload.get("context_fact_count") or 0)
         total = memo_count + fact_count
-        title = "メモとマイコンテキストを検索"
+        title = "メモと記憶を検索"
         kind = "knowledge"
         chips = tuple(
             label
             for count, label in (
                 (memo_count, f"メモ {memo_count}件"),
-                (fact_count, f"マイコンテキスト {fact_count}件"),
+                (fact_count, f"記憶 {fact_count}件"),
             )
             if count
         )
         success_detail = (
-            f"保存済みのメモとマイコンテキストから、回答に関連する情報を{total}件読み込みました。"
+            f"保存済みのメモと記憶から、回答に関連する情報を{total}件読み込みました。"
             if total
-            else "保存済みのメモとマイコンテキストを検索しましたが、該当する情報はありませんでした。"
+            else "保存済みのメモと記憶を検索しましたが、該当する情報はありませんでした。"
         )
     else:
         total = int(payload.get("prompt_count") or 0)

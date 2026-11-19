@@ -16,7 +16,7 @@
 
 ## Overview
 
-ChatCore-AI grew out of the friction of retyping the same prompts. Tasks provide reusable starting points, Skills supply reusable instructions, and memos and personal context preserve knowledge beyond a single conversation. An OAuth-protected remote MCP server exposes that data to compatible external AI clients.
+ChatCore-AI grew out of the friction of retyping the same prompts. Tasks provide reusable starting points, Skills supply reusable instructions, and memos and Memory preserve knowledge beyond a single conversation. An OAuth-protected remote MCP server exposes that data to compatible external AI clients.
 
 ## Product experience
 
@@ -25,7 +25,7 @@ ChatCore-AI grew out of the friction of retyping the same prompts. Tasks provide
 | Tasks and Skills | Save instructions and import useful public prompts |
 | Chat | Streaming replies, history, temporary conversations, sharing, document attachments, and private image input |
 | Search and generated UI | Cited answers with native comparison cards, charts, calculators and diagrams, plus 2D/3D sandbox Artifacts |
-| Personal knowledge | Editable memos, collections, sharing/export, and typed personal context facts |
+| Personal knowledge | Editable memos, collections, sharing/export, and typed Memory facts |
 | External AI integration | Read and write authorized data through MCP, and reuse it across clients |
 
 Selectable chat models are GPT-OSS 120B, GPT-6 Luna, Qwen 3.8 27B, and Claude Haiku 5.5. Image input is limited to GPT-6 Luna. Chat images are stored privately and can only be retrieved by their owner.
@@ -108,7 +108,7 @@ flowchart TD
     Gate --> Write["Execute the authorized write"]
 ```
 
-Search and reading have separate budgets. When tools are exhausted, the model answers from the evidence collected so far and is instructed to state uncertainty. Pending write proposals close the turn with an answer and an approval card. Eligible writes can use a previously granted automatic approval; external content or unconfirmed personal context suppresses it. Native UI uses validated components and bounded local calculations; custom simulations and 3D keep using the isolated iframe. Choices prepare an editable chat message before the user sends it.
+Search and reading have separate budgets. When tools are exhausted, the model answers from the evidence collected so far and is instructed to state uncertainty. Pending write proposals close the turn with an answer and an approval card. Eligible writes can use a previously granted automatic approval; external content or unconfirmed Memory suppresses it. Native UI uses validated components and bounded local calculations; custom simulations and 3D keep using the isolated iframe. Choices prepare an editable chat message before the user sends it.
 
 Implementation: [Input and context preparation](services/chat_use_case.py) · [Skill selection](services/chat_skill_selection.py) · [AI decision loop](services/chat_generation_agent_loop.py) · [Tool execution](services/chat_generation_tools.py)
 
@@ -169,7 +169,7 @@ Implementation: [Chat endpoints](blueprints/chat/messages.py) · [Generation lif
 | --- | --- | --- |
 | Prompts and Skills | Search/fetch public content; publish new text/image prompts and Skills | Public posts |
 | Memos | List/search/read/create/update/append | The authenticated owner's memos; modifying shared content requires additional permission |
-| Personal context | Get a typed digest, keyword/semantic search, save/update/deprecate facts | The authenticated owner's facts |
+| Memory (personal context) | Get a typed digest, keyword/semantic search, save/update/deprecate facts | The authenticated owner's facts |
 
 Context facts record preferences, profile details, projects, decisions, and references, along with provenance, revision, and owner-confirmation state. A second authorized client can retrieve the same account's facts. This is tool-based data access, rather than automatic synchronization of entire external chat histories. MCP-created facts begin unconfirmed and can suppress automatic chat writes when retrieved.
 
@@ -284,15 +284,15 @@ Copyright (c) 2026 Kota Kawagoe. Licensed under [Apache License 2.0](LICENSE).
 
 ## このアプリでできること
 
-毎回同じ指示を書き直す手間を減らすため、よく使う依頼を **タスク**、再利用する指示を **Skill** として保存できる AI チャットアプリを制作しました。会話だけでなく、メモ・個人のコンテキスト・公開プロンプトも扱えます。MCP を通じて外部の AI クライアントからも同じデータにアクセスできます。
+毎回同じ指示を書き直す手間を減らすため、よく使う依頼を **タスク**、再利用する指示を **Skill** として保存できる AI チャットアプリを制作しました。会話だけでなく、メモ・記憶・公開プロンプトも扱えます。MCP を通じて外部の AI クライアントからも同じデータにアクセスできます。
 
 | 機能 | 利用体験 |
 | --- | --- |
 | タスク・Skill | 自分用の指示を登録し、少ない入力で会話を開始。公開プロンプトからも取り込める |
 | AI チャット | 複数モデルを選択し、SSE で応答を逐次表示。履歴・一時チャット・共有・文書添付・画像入力に対応 |
 | Web 検索・生成 UI | 出典付きの回答に、比較カード・表・操作できる試算・図解を組み合わせ、2D／3D Artifactも表示 |
-| メモ・マイコンテキスト | メモを編集・整理・共有・エクスポートし、好みやプロジェクト情報などの個人の事実を保存・検索 |
-| MCP 連携 | 外部 AI から公開プロンプトを扱い、本人のメモ・コンテキストを読み書き。クライアントを変えても知識を再利用 |
+| メモ・記憶 | メモを編集・整理・共有・エクスポートし、好みやプロジェクト情報などの個人の事実を保存・検索 |
+| MCP 連携 | 外部 AI から公開プロンプトを扱い、本人のメモ・記憶を読み書き。クライアントを変えても知識を再利用 |
 
 会話モデルは **GPT-OSS 120B / GPT-6 Luna / Qwen 3.8 27B / Claude Haiku 5.5**。画像を読めるモデルは GPT-6 Luna に限定し、チャットに添付した画像は持ち主だけが取得できる保存先で管理します。
 
@@ -376,7 +376,7 @@ flowchart TD
     Gate --> Write["許可された書き込みを実行"]
 ```
 
-検索と読み取りには別々の予算を設けています。ツールの予算が尽きた場合は、それまでの根拠で回答し、不確実性を明示するよう指示します。書き込みが承認待ちになった場合は、回答と承認カードでターンを締めます。対応する操作には事前に設定した「常に承認」を使えますが、外部本文や本人未確認のコンテキストを読んだターンでは自動実行を抑止します。生成 UI は、カード・図表・入力付き計算をネイティブ部品で描画し、自由なシミュレーションや3Dは従来の隔離 iframe で実行します。選択内容は入力欄で確認してから送信できます。
+検索と読み取りには別々の予算を設けています。ツールの予算が尽きた場合は、それまでの根拠で回答し、不確実性を明示するよう指示します。書き込みが承認待ちになった場合は、回答と承認カードでターンを締めます。対応する操作には事前に設定した「常に承認」を使えますが、外部本文や本人未確認の記憶を読んだターンでは自動実行を抑止します。生成 UI は、カード・図表・入力付き計算をネイティブ部品で描画し、自由なシミュレーションや3Dは従来の隔離 iframe で実行します。選択内容は入力欄で確認してから送信できます。
 
 実装: [入力と文脈の準備](services/chat_use_case.py) · [Skill 選択](services/chat_skill_selection.py) · [AI の判断ループ](services/chat_generation_agent_loop.py) · [ツール実行](services/chat_generation_tools.py)
 
@@ -439,13 +439,13 @@ Redis はロック・再接続用の履歴・ワーカー間の配信と停止�
 | --- | --- | --- |
 | Prompt・Skill | 公開コンテンツの検索・取得、Prompt／画像 Prompt／Skill の新規投稿 | 投稿は公開 |
 | メモ | 一覧・検索・取得・作成・更新・追記 | 認証した本人のメモ。共有中のメモの変更には追加の許可が必要 |
-| マイコンテキスト | 種類別の概要取得、キーワード／意味検索、事実の保存・更新・無効化 | 認証した本人の事実 |
+| 記憶（パーソナル・コンテキスト） | 種類別の概要取得、キーワード／意味検索、事実の保存・更新・無効化 | 認証した本人の事実 |
 
-マイコンテキストは、**好み・プロフィール・プロジェクト・意思決定・参考情報**の種類を持つ小さな事実として保存します。保存元のクライアント・版番号・本人の確認状態も管理します。MCP で保存した事実は本人が確認済みとは扱わず、チャットで参照した際の自動書き込みを抑止する判断にも使います。
+記憶は、**好み・プロフィール・プロジェクト・意思決定・参考情報**の種類を持つ小さな事実として保存します。保存元のクライアント・版番号・本人の確認状態も管理します。MCP で保存した事実は本人が確認済みとは扱わず、チャットで参照した際の自動書き込みを抑止する判断にも使います。
 
 外部クライアントへは必要なデータをツールの結果として返します。クライアントの会話履歴全体を ChatCore のチャット履歴へ自動同期する方式ではありません。
 
-実装: [MCP サーバー](services/mcp_server.py) · [メモツール](services/mcp_tools/memos.py) · [コンテキストツール](services/mcp_tools/context_vault.py) · [事実の保存・検索](services/context_vault_service.py)
+実装: [MCP サーバー](services/mcp_server.py) · [メモツール](services/mcp_tools/memos.py) · [記憶ツール](services/mcp_tools/context_vault.py) · [事実の保存・検索](services/context_vault_service.py)
 
 ## OAuth とアクセス制御
 
@@ -483,20 +483,20 @@ sequenceDiagram
 
 | 場面 | 実装した仕組み | 結果 |
 | --- | --- | --- |
-| MCP のコンテキスト保存を再送 | 同じユーザー・クライアントの `idempotency_key` と保存内容をハッシュ化し、DB の一意制約で保護 | 同じキー・内容は既存の事実を返し、同じキーで内容が違えば競合として拒否 |
-| メモ・コンテキストを同時編集 | MCP 更新時に `expected_revision` を確認し、更新条件にも版番号を含める | 古い読み取り結果による上書きを防ぐ |
+| MCP の記憶の保存を再送 | 同じユーザー・クライアントの `idempotency_key` と保存内容をハッシュ化し、DB の一意制約で保護 | 同じキー・内容は既存の事実を返し、同じキーで内容が違えば競合として拒否 |
+| メモ・記憶を同時編集 | MCP 更新時に `expected_revision` を確認し、更新条件にも版番号を含める | 古い読み取り結果による上書きを防ぐ |
 | チャットの承認カードを二重送信 | 承認行をトランザクション内でロックし、確定状態を再確認 | 同じカードの書き込みを二重実行しない |
 | 同じ部屋のチャット生成を同時開始 | Redis の生成ロックを取得し、実行中に期限を更新 | 複数ワーカーからの生成の重なりを抑える |
 
-コンテキスト保存の再送防止は、クライアントが同じ `idempotency_key` を送る場合の仕組みです。公開投稿やメモ作成を含む、すべての MCP 書き込みを自動的に重複排除するものではありません。
+記憶の保存の再送防止は、クライアントが同じ `idempotency_key` を送る場合の仕組みです。公開投稿やメモ作成を含む、すべての MCP 書き込みを自動的に重複排除するものではありません。
 
-実装: [コンテキストの一意性](services/repositories/context_fact_repository.py) · [メモの版管理](services/repositories/memo_repository.py) · [承認の確定](services/chat_tool_approval_service.py) · [生成ロック](services/chat_generation_coordinator.py)
+実装: [記憶の一意性](services/repositories/context_fact_repository.py) · [メモの版管理](services/repositories/memo_repository.py) · [承認の確定](services/chat_tool_approval_service.py) · [生成ロック](services/chat_generation_coordinator.py)
 
 ## AI の出力をアプリで扱う工夫
 
 **生成 UI は検証してから描画**します。宣言的UIは許可部品と上限付き計算だけを扱い、HTML・CSS・JavaScriptは従来の隔離 iframe で実行します。検索画像は署名付き中継 URL を使います。
 
-**チャットからの書き込みは承認カードを経由**します。対応する操作に「常に承認」を設定していても、外部本文や本人未確認のコンテキストを読んだターンでは自動実行を抑止します。公開 Prompt の新規投稿は毎回の承認が必要です。
+**チャットからの書き込みは承認カードを経由**します。対応する操作に「常に承認」を設定していても、外部本文や本人未確認の記憶を読んだターンでは自動実行を抑止します。公開 Prompt の新規投稿は毎回の承認が必要です。
 
 **API の利用量と料金を記録**し、ユーザー／ゲスト単位の上限と全体の月予算を処理開始前に確認します。実行中のターンが料金上限を超えて終わる可能性は残るため、全体予算には余裕を設けています。
 

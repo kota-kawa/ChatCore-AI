@@ -65,7 +65,7 @@ const INPUTS_JA: ScopeItem[] = [
   },
   {
     label: "参照の切り替え",
-    note: "追加メニューから「メモ・マイコンテキストを参照」「共有プロンプトを参照」をオンにできます（メモの参照はログイン時）。"
+    note: "追加メニューから「メモ・記憶を参照」「共有プロンプトを参照」をオンにできます（メモの参照はログイン時）。"
   }
 ];
 
@@ -77,7 +77,7 @@ const INPUTS_EN: ScopeItem[] = [
   },
   {
     label: "Lookup toggles",
-    note: "The add menu turns on lookups against your memos and personal context, or against shared prompts (memos require signing in)."
+    note: "The add menu turns on lookups against your memos and Memory, or against shared prompts (memos require signing in)."
   }
 ];
 

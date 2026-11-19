@@ -268,8 +268,8 @@ class WebSearchTraceTestCase(unittest.TestCase):
         self.assertIn("web-search-sources__step-marker--warning", block)
         self.assertIn("上限に達しました。", block)
 
-    # 日本語: 選択した参照元 (メモ・マイコンテキスト・共有プロンプト) の検索ステップが、件数と検索の種類を表示することを検証します。
-    # English: Verify selected-reference lookup steps (memos, personal context, shared prompts) show counts and the type of search.
+    # 日本語: 選択した参照元 (メモ・記憶・共有プロンプト) の検索ステップが、件数と検索の種類を表示することを検証します。
+    # English: Verify selected-reference lookup steps (memos, Memory, shared prompts) show counts and the type of search.
     def test_selected_reference_steps_show_counts_and_search_types(self):
         block = trace.build_web_search_trace_markdown(
             steps=[
@@ -288,9 +288,9 @@ class WebSearchTraceTestCase(unittest.TestCase):
 
         self.assertIn("web-search-sources__step--knowledge", block)
         self.assertIn('<i class="bi bi-journal-text"></i>', block)
-        self.assertIn("メモとマイコンテキストを検索", block)
+        self.assertIn("メモと記憶を検索", block)
         self.assertIn("メモ 2件", block)
-        self.assertIn("マイコンテキスト 1件", block)
+        self.assertIn("記憶 1件", block)
         self.assertIn("web-search-sources__step--prompt", block)
         self.assertIn('<i class="bi bi-card-text"></i>', block)
         self.assertIn("共有プロンプトを検索", block)
@@ -320,6 +320,18 @@ class WebSearchTraceTestCase(unittest.TestCase):
 
         self.assertIn('<span class="web-search-sources__step-title">回答を作成</span>', block)
         self.assertIn("web-search-sources__step--answer", block)
+
+    # 日本語: 画面名を「記憶」に改める前に保存された題名（メモとマイコンテキスト）も、知識ステップとして読み取ることを検証します。
+    # English: Verify titles saved before the screen name became "記憶" are still read as knowledge steps.
+    def test_legacy_dict_step_with_old_memory_title_keeps_knowledge_kind(self):
+        block = trace.build_web_search_trace_markdown(
+            steps=[
+                {"title": "メモとマイコンテキストを検索", "detail": "保存済みの内容を読みました。"},
+                {"title": "メモと記憶を検索", "detail": "保存済みの内容を読みました。"},
+            ]
+        )
+
+        self.assertEqual(block.count("web-search-sources__step--knowledge"), 2)
 
     # 日本語: ステップに紐付かない検索結果も展開ブロックとして描画することを検証します。
     # English: Verify sources with no owning step still render as an expandable block.
@@ -395,9 +407,9 @@ class SelectedReferenceOverviewStepTestCase(unittest.TestCase):
             query="今月は何をしたらいいかな？",
         )
 
-        self.assertEqual(step.title, "保存済みのメモとマイコンテキストを確認")
+        self.assertEqual(step.title, "保存済みのメモと記憶を確認")
         self.assertEqual(step.badge, "6件")
-        self.assertEqual(step.chips, ("最近のメモ 4件", "マイコンテキスト 2件"))
+        self.assertEqual(step.chips, ("最近のメモ 4件", "記憶 2件"))
         self.assertIn("回答の材料", step.detail)
 
 

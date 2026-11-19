@@ -1901,8 +1901,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("web_search_image", persisted_types)
         self.assertEqual(persisted_types[-1], "interactive_buttons")
 
-    # 日本語: 選択した参照（メモ・マイコンテキスト・共有プロンプト）の検索が、「回答までのステップ」として応答に追加されることを検証します。
-    # English: Verify lookups of selected references (memos, personal context, shared prompts) are appended to the reply as answer steps.
+    # 日本語: 選択した参照（メモ・記憶・共有プロンプト）の検索が、「回答までのステップ」として応答に追加されることを検証します。
+    # English: Verify lookups of selected references (memos, Memory, shared prompts) are appended to the reply as answer steps.
     def test_background_generation_job_appends_selected_reference_steps(self):
         persisted_messages = []
         selected_trace = [
@@ -1934,7 +1934,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
-        self.assertIn("メモとマイコンテキストを検索", body)
+        self.assertIn("メモと記憶を検索", body)
         self.assertIn("共有プロンプトを検索", persisted_messages[0])
         self.assertIn(
             '<span class="web-search-sources__count">3ステップ</span>',
@@ -4057,7 +4057,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         payload = json.loads(response.body.decode("utf-8"))
         self.assertTrue(payload["response"].endswith("new answer"))
-        self.assertIn("メモとマイコンテキストを検索", payload["response"])
+        self.assertIn("メモと記憶を検索", payload["response"])
         self.assertIn("共有プロンプトを検索", payload["response"])
         contents = [message["content"] for message in captured_messages["messages"]]
         self.assertTrue(any("PDF BODY" in content for content in contents))
@@ -4549,7 +4549,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         payload = json.loads(response.body.decode("utf-8"))
         self.assertTrue(payload["response"].endswith("edited answer"))
-        self.assertIn("メモとマイコンテキストを検索", payload["response"])
+        self.assertIn("メモと記憶を検索", payload["response"])
         contents = [message["content"] for message in captured_messages["messages"]]
         self.assertTrue(any("PDF BODY" in content for content in contents))
         self.assertTrue(any("文章方針" in content for content in contents))

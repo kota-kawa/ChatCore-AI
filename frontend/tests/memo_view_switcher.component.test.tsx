@@ -13,11 +13,11 @@ function SwitcherHarness() {
 }
 
 describe("MemoViewSwitcher", () => {
-  it("switches between memos and My Context", () => {
+  it("switches between memos and Memory", () => {
     render(<SwitcherHarness />);
 
     const memosButton = screen.getByRole("button", { name: "メモ" });
-    const contextButton = screen.getByRole("button", { name: "マイコンテキスト" });
+    const contextButton = screen.getByRole("button", { name: "記憶" });
 
     expect(memosButton).toHaveAttribute("aria-current", "page");
     expect(contextButton).not.toHaveAttribute("aria-current");
