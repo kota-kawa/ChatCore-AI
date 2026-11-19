@@ -1411,3 +1411,56 @@ test("a confirmed body that differs from the draft does not leave a duplicated d
   assert.equal(assistantMessages(recorder.messages()).length, 1);
   assert.equal(assistantMessages(recorder.messages())[0].text, confirmed);
 });
+
+test("the UI fallback text of a structured UI never shows as prose while the answer streams and finishes", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({ clock });
+  seedThinkingMessage(recorder);
+  const ui = {
+    version: 1,
+    id: "comparison",
+    fallback_text: "A: 10, B: 20",
+    root_id: "root",
+    nodes: [{ id: "root", type: "text", text: "A" }],
+    state: [],
+    expressions: [],
+    images: [],
+    sources: [],
+  };
+  const legacyResponse = "比較します。\n\n\nA: 10, B: 20\n以上が比較です。東福寺と永観堂。";
+  const parts = [
+    { type: "text", text: "比較します。\n\n" },
+    { type: "structured_ui", ui },
+    { type: "text", text: "以上が比較です。東福寺と永観堂。" },
+  ];
+  const proseOnScreen = () =>
+    recorder
+      .messages()
+      .filter((message) => message.sender === "assistant")
+      .flatMap((message) => (message.parts ?? []).filter((part) => part.type === "text").map((part) => (part as { text: string }).text));
+
+  const stream = createScriptedStream([
+    sseBlock(1, "chunk", { text: "比較します。\n\n以上が比較です。" }),
+    sseBlock(2, "response_parts_updated", { response: "比較します。\n\n\nA: 10, B: 20\n以上が比較です。", parts: [parts[0], parts[1], { type: "text", text: "以上が比較です。" }] }),
+    sseBlock(3, "chunk", { text: "東福寺と永観堂。" }),
+    sseBlock(4, "done", { response: legacyResponse, parts }),
+  ]);
+  // 画面を書き換えるたびに本文を記録し、どの描画でも代替テキストが出ていないことを確かめる。
+  // Record the prose on every screen update to check the fallback text is on screen in none of them.
+  const frames: string[][] = [];
+  const updateActiveMessages = recorder.host.messages.updateActiveMessages;
+  recorder.host.messages.updateActiveMessages = (updater) => {
+    updateActiveMessages(updater);
+    frames.push(proseOnScreen());
+  };
+  await settleStream(consumeGenerationStream(stream.response, recorder.host), clock);
+
+  assert.ok(frames.some((texts) => texts.some((text) => text.includes("以上が比較です"))));
+  assert.deepEqual(frames.filter((texts) => texts.some((text) => text.includes("A: 10"))), []);
+  const answers = assistantMessages(recorder.messages());
+  assert.equal(answers[0].streaming, false);
+  // 完了後の表示と保存は done のパーツのまま。UI は残り、保存する text は旧クライアント向けの全文。
+  // The final display and what is saved stay the done parts: the UI remains and the saved text is the legacy full text.
+  assert.deepEqual(answers[0].parts?.map((part) => part.type), ["text", "structured_ui", "text"]);
+  assert.deepEqual(recorder.persistedAnswers(), [{ text: "比較します。\n\nA: 10, B: 20\n以上が比較です。東福寺と永観堂。", sender: "bot", parts: answers[0].parts }]);
+});

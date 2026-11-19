@@ -33,7 +33,9 @@ export type GenerationStreamAction =
   | { kind: "answer_draft_reset"; confirming: boolean }
   | { kind: "parts_updated"; displayText: string; parts: ChatMessagePart[] | null }
   | { kind: "thinking_status"; text: string; phase: ChatGenerationPhase }
-  | { kind: "done"; roomTitle: unknown; responseText: string; parts?: ChatMessagePart[]; assistantMessageId?: number }
+  // responseText は旧クライアント向けの全文（保存する text）。displayText は UI の代替テキストを除いた、文字送りの表示用。
+  // responseText is the legacy full text (the saved text); displayText is the reveal text without the UI fallback text.
+  | { kind: "done"; roomTitle: unknown; responseText: string; displayText: string; parts?: ChatMessagePart[]; assistantMessageId?: number }
   // 完了したが本文もパーツも無い = 回答なし。空の吹き出しではなくエラーにする。
   // Completed with neither body nor answer parts: no answer at all, so this
   // becomes an error instead of a blank bubble.
@@ -235,6 +237,18 @@ function interpretWorkspaceToolEvent(
   return null;
 }
 
+// 生成中の表示に使う本文を返す。response は旧クライアント向けの全文で、宣言的 UI の位置に代替テキスト
+// （fallback_text）が埋め込まれている。このクライアントは UI をパーツから描くので、UI を含む回答では
+// パーツのテキストを本文とする。response を使うと、代替テキストが UI の横に本文として表示される。
+// Return the text used for the streaming display. response is the full text for legacy clients and
+// embeds each declarative UI's fallback_text at the UI's position. This client renders the UI from
+// its part, so an answer with a UI takes its prose from the text parts; using response would show the
+// fallback text as prose beside the UI.
+function readStreamDisplayText(responseText: string, parts: ChatMessagePart[] | null | undefined): string {
+  if (!parts?.some((part) => part.type === "structured_ui")) return responseText;
+  return parts.map((part) => (part.type === "text" ? part.text : "")).join("");
+}
+
 // done イベントを最終応答へ変換する。本文もパーツ（検索画像だけのものは除く）も空なら、空の吹き出しではなく empty_answer にする。
 // Converts the done event into the final answer. If both the body and the answer parts (excluding web-search-image-only parts) are empty, it becomes empty_answer instead of a blank bubble.
 function interpretDoneEvent(
@@ -265,6 +279,7 @@ function interpretDoneEvent(
     kind: "done",
     roomTitle: data.room_title,
     responseText,
+    displayText: readStreamDisplayText(responseText, parts),
     parts,
     ...(donePayload.assistantMessageId ? { assistantMessageId: donePayload.assistantMessageId } : {}),
   };
@@ -316,12 +331,12 @@ export function interpretGenerationStreamEvent(
 
   if (parsed.event === "response_parts_updated") {
     const updatePayload = normalizeChatResponsePayload(data);
-    const displayText = getStreamingGenerativeUiDisplayText(updatePayload.response ?? context.streamedText);
-    return {
-      kind: "parts_updated",
-      displayText,
-      parts: updatePayload.parts?.length ? sanitizeTextPartsForStreaming(updatePayload.parts) ?? null : null,
-    };
+    const parts = updatePayload.parts?.length ? sanitizeTextPartsForStreaming(updatePayload.parts) ?? null : null;
+    const displayText = readStreamDisplayText(
+      getStreamingGenerativeUiDisplayText(updatePayload.response ?? context.streamedText),
+      parts,
+    );
+    return { kind: "parts_updated", displayText, parts };
   }
 
   const progressStatus =

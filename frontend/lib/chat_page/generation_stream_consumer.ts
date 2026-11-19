@@ -760,7 +760,9 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         state.messageHeldByDraft = false;
         host.messages.applyRoomTitle(action.roomTitle);
         renderer.ensureStreamingMessage();
-        state.streamedText = action.responseText;
+        // 文字送りは UI の代替テキストを除いた本文で行う。保存する text は旧クライアント向けの全文のまま渡す。
+        // Pace the reveal with the text that excludes the UI fallback text; the saved text stays the legacy full text.
+        state.streamedText = action.displayText;
         renderer.queueFinalization(action.responseText, true, action.parts, action.assistantMessageId);
         host.lastEventIdByRoom.delete(roomId);
         return;
