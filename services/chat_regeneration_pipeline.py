@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any, Protocol
 
+from services.answer_trace import with_answer_trace_part
 from services.async_utils import run_blocking
 from services.chat_async_bridge import _run_async_callback
 from services.chat_context import build_context_messages
@@ -88,7 +89,7 @@ from services.web_search import (
 )
 from services.web_search_trace import (
     answer_step,
-    build_web_search_trace_markdown,
+    build_answer_trace,
     selected_reference_steps,
 )
 
@@ -700,13 +701,6 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
         )
         return ChatRegenerationRejected(payload={"error": str(exc)}, status_code=500)
 
-    selected_steps = selected_reference_steps(selected_reference_trace)
-    if selected_steps:
-        trace_block = build_web_search_trace_markdown(
-            steps=[*selected_steps, answer_step([])],
-        )
-        bot_reply = f"{trace_block}\n\n{bot_reply}" if bot_reply else trace_block
-
     latest_user_message = _latest_user_content(conversation_messages)
     normalized_response = await run_blocking(
         partial(
@@ -735,6 +729,17 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     status_part = artifact_status_part(artifact_status)
     if status_part:
         message_parts = [*(message_parts or [{"type": "text", "text": bot_reply}]), status_part]
+    # 参照検索のステップは、本文に混ぜずに実行記録のパーツとして先頭へ足す。本文も他のパーツも無い応答には
+    # 足さない（記録だけの応答を回答として残さない）。
+    # The reference-lookup steps go in front as the execution-record part instead of into the body. A
+    # reply with neither body nor parts gets none, so a record alone is never kept as an answer.
+    selected_steps = selected_reference_steps(selected_reference_trace)
+    if selected_steps and (bot_reply.strip() or message_parts):
+        message_parts = with_answer_trace_part(
+            message_parts,
+            bot_reply,
+            build_answer_trace(steps=[*selected_steps, answer_step([])]),
+        )
 
     saved_id: int | None = None
     if user_id is not None and room_mode == "normal":

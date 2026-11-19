@@ -8,6 +8,7 @@
 // the final fade) and the reconnect backoff are user-visible, so the logic
 // moved out of the hook keeps its original order.
 
+import { isSameAnswerTrace, withAnswerTracePart } from "./answer_trace";
 import {
   generativeUiFenceKind,
   getStreamingGenerativeUiDisplayText,
@@ -35,7 +36,7 @@ import {
   clampToCodePointBoundary,
   createStreamPace,
 } from "./stream_smoothing";
-import { normalizeCitationChipStreamBoundary, splitStreamDisplayText } from "./stream_display_text";
+import { normalizeCitationChipStreamBoundary } from "./stream_display_text";
 import { parseStreamEventBlock } from "./streaming";
 import {
   WORD_REVEAL_DURATION_MS,
@@ -44,6 +45,7 @@ import {
   clampToWordBoundary,
 } from "./streaming_word_reveal";
 import type {
+  AnswerTraceV1,
   ChatGenerationPhase,
   ChatMessagePart,
   StoredGenerationState,
@@ -117,7 +119,9 @@ export type GenerationStreamMessagesPort = {
 
 export type GenerationStreamStoragePort = {
   readGenerationState: () => StoredGenerationState | null;
-  updateGenerationState: (updates: Partial<Pick<StoredGenerationState, "lastEventId" | "streamedText" | "generationId">>) => void;
+  updateGenerationState: (
+    updates: Partial<Pick<StoredGenerationState, "lastEventId" | "streamedText" | "generationId" | "answerTrace">>,
+  ) => void;
   clearGenerationState: () => void;
   persistAssistantAnswer: (entry: StoredHistoryEntry) => void;
 };
@@ -169,8 +173,13 @@ type StreamSessionState = {
   // draft takes the bubble with it.
   messageHeldByDraft: boolean;
   streamingParts: ChatMessagePart[] | undefined;
+  // 受信済みの回答までのステップ（全体スナップショット）。本文とは別に持ち、表示のたびにパーツ列の先頭へ載せる。
+  // 生成中のパーツ更新（response_parts_updated）はこれを知らないので、パーツ側に混ぜると更新で消えてしまう。
+  // The steps to the answer received so far (a whole snapshot). Kept apart from the prose and laid at the head
+  // of the part list on every render: the generation-time parts updates (response_parts_updated) do not know it,
+  // so mixing it into those parts would let an update erase it.
+  answerTrace: AnswerTraceV1 | null;
   pendingFinalization: PendingFinalization | null;
-  hasSeparatedInstantPrefix: boolean;
 };
 
 type StreamProgressState = {
@@ -206,20 +215,29 @@ function createStoredGenerationStateSync(
   storage: GenerationStreamStoragePort,
   timers: GenerationStreamTimers,
   readStreamedText: () => string,
+  readAnswerTrace: () => AnswerTraceV1 | null,
 ) {
   let timerId: number | null = null;
   let pendingLastEventId = 0;
   let hasPendingStreamedText = false;
+  let hasPendingAnswerTrace = false;
 
   const flush = () => {
     timerId = null;
-    if (pendingLastEventId <= 0 && !hasPendingStreamedText) return;
+    if (pendingLastEventId <= 0 && !hasPendingStreamedText && !hasPendingAnswerTrace) return;
+    // 実行記録は最後のイベント ID と同じ書き込みで保存する。再接続は ID より後のイベントしか再送しないので、
+    // ID だけが進んで実行記録が欠けた状態を作らない。
+    // The execution record is saved in the same write as the last event id. A reconnect only replays events
+    // after that id, so the id must never run ahead of a record that is missing.
+    const answerTrace = hasPendingAnswerTrace ? readAnswerTrace() : null;
     const updates = {
       ...(pendingLastEventId > 0 ? { lastEventId: pendingLastEventId } : {}),
       ...(hasPendingStreamedText ? { streamedText: readStreamedText() } : {}),
+      ...(answerTrace ? { answerTrace } : {}),
     };
     pendingLastEventId = 0;
     hasPendingStreamedText = false;
+    hasPendingAnswerTrace = false;
     storage.updateGenerationState(updates);
   };
 
@@ -235,6 +253,10 @@ function createStoredGenerationStateSync(
     },
     noteStreamedText() {
       hasPendingStreamedText = true;
+      schedule();
+    },
+    noteAnswerTrace() {
+      hasPendingAnswerTrace = true;
       schedule();
     },
     // 途中終了時も保留分を確定させる。クリア済みの場合は
@@ -290,13 +312,23 @@ function createStreamRenderer(
   // What the screen shows is the confirmed text followed by the draft.
   const readShownText = () => readStreamShownText(state);
 
+  // 本文のパーツへ、受信済みの実行記録を先頭に載せる。実行記録だけがあり本文のパーツが無いときも、
+  // 本文を落とさないよう text パーツを添える。
+  // Lay the received execution record at the head of the body parts. When there is a record but no body
+  // part yet, a text part is added so the prose is not dropped.
+  const composeParts = (displayText: string, isFinalText = false): ChatMessagePart[] | undefined => {
+    const bodyParts = updateStreamingTextPart(state.streamingParts, displayText, isFinalText);
+    if (!state.answerTrace) return bodyParts;
+    return withAnswerTracePart(bodyParts ?? (displayText ? [{ type: "text", text: displayText }] : []), state.answerTrace);
+  };
+
   const ensureStreamingMessage = () => {
     if (state.streamingMessageId) return state.streamingMessageId;
     state.streamingMessageId = messages.createMessageId("assistant-stream");
     const newId = state.streamingMessageId;
     const shownText = readShownText();
     const displayText = getStreamingGenerativeUiDisplayText(shownText);
-    const displayParts = updateStreamingTextPart(state.streamingParts, displayText);
+    const displayParts = composeParts(displayText);
     const generativeUiPending = isGenerativeUiPending(shownText, state.streamingParts);
     const fenceKind = generativeUiFenceKind(shownText);
 
@@ -328,8 +360,10 @@ function createStreamRenderer(
     // Cancel any pending partial render so it cannot overwrite the final text.
     cancelRender();
     const finalDisplayText = finalText || getStreamingGenerativeUiDisplayText(state.streamedText);
+    // 終端イベントのパーツは実行記録を含めて確定した全体なので、そのまま使う。
+    // The parts of a terminal event are the settled whole, execution record included, so they are used as they are.
     const resolvedParts =
-      Array.isArray(parts) && parts.length > 0 ? parts : updateStreamingTextPart(state.streamingParts, finalDisplayText, true);
+      Array.isArray(parts) && parts.length > 0 ? parts : composeParts(finalDisplayText, true);
     const hasParts = Array.isArray(resolvedParts) && resolvedParts.length > 0;
     const persistAnswer = () => {
       if (persist && finalDisplayText && host.isActive()) {
@@ -468,24 +502,11 @@ function createStreamRenderer(
     const streamId = state.streamingMessageId;
     if (!streamId) return;
     if (settleEmptiedDraft()) return;
-    const shownText = readShownText();
-    const separatedDisplayText = splitStreamDisplayText(getStreamingGenerativeUiDisplayText(shownText));
-    const frameNow = timers.now();
-    if (!state.hasSeparatedInstantPrefix && separatedDisplayText.instantPrefix) {
-      // 不完全だった検索トレースが閉じた瞬間、そこまでHTMLへ費やしていた進捗を
-      // 本文へ持ち越さない。本文は先頭から通常のテンポで表示する。
-      // When an incomplete trace becomes complete, do not carry progress
-      // spent on its raw HTML into the answer body. Pace the body from zero.
-      streamPace.length = 0;
-      streamPace.rate = 0;
-      streamPace.lastTime = frameNow;
-      state.hasSeparatedInstantPrefix = true;
-    }
-    const { displayLength, smoothedLength } = resolveDisplayLength(separatedDisplayText.pacedText, frameNow);
-    const displayText = [separatedDisplayText.instantPrefix, separatedDisplayText.pacedText.slice(0, displayLength)].join("");
-    renderStreamingText(streamId, displayText);
+    const pacedText = getStreamingGenerativeUiDisplayText(readShownText());
+    const { displayLength, smoothedLength } = resolveDisplayLength(pacedText, timers.now());
+    renderStreamingText(streamId, pacedText.slice(0, displayLength));
 
-    if (smoothedLength < separatedDisplayText.pacedText.length) {
+    if (smoothedLength < pacedText.length) {
       scheduleRender();
       return;
     }
@@ -504,7 +525,7 @@ function createStreamRenderer(
 
   const renderStreamingText = (streamId: string, displayText: string) => {
     const shownText = readShownText();
-    const displayParts = updateStreamingTextPart(state.streamingParts, displayText);
+    const displayParts = composeParts(displayText);
     const generativeUiPending = isGenerativeUiPending(shownText, state.streamingParts);
     const fenceKind = generativeUiFenceKind(shownText);
 
@@ -585,9 +606,7 @@ function createStreamRenderer(
     // パーツ更新はテキストの書き換えを伴うため、ペーシングせず全文を出す。
     // Parts updates rewrite the text, so show it in full without pacing.
     applyPartsUpdate(displayText: string, parts: ChatMessagePart[] | null) {
-      const separatedDisplayText = splitStreamDisplayText(displayText);
-      streamPace.length = separatedDisplayText.pacedText.length;
-      state.hasSeparatedInstantPrefix ||= Boolean(separatedDisplayText.instantPrefix);
+      streamPace.length = displayText.length;
       if (parts) {
         state.streamingParts = updateStreamingTextPart(parts, displayText);
       }
@@ -637,9 +656,9 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
   // 回答が変わったとき、前回の下書きとイベント番号を新しい本文に持ち込まない。
   // Never carry another answer's draft or event cursor into this stream.
   if (generationId && storedGeneration && storedGeneration.generationId !== generationId) {
-    storedGeneration = { ...storedGeneration, generationId, lastEventId: 0, streamedText: "" };
+    storedGeneration = { ...storedGeneration, generationId, lastEventId: 0, streamedText: "", answerTrace: undefined };
     host.lastEventIdByRoom.delete(roomId);
-    host.storage.updateGenerationState({ generationId, lastEventId: 0, streamedText: "" });
+    host.storage.updateGenerationState({ generationId, lastEventId: 0, streamedText: "", answerTrace: undefined });
   }
   if (generationId) {
     host.onGenerationId?.(generationId);
@@ -650,7 +669,6 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
   // 等速ペーシングの状態。復元テキストはリプレイせず即時表示する。
   // Constant-pace state. Restored text shows instantly instead of being replayed.
   const restoredText = storedGeneration?.streamedText ?? "";
-  const initialDisplayText = splitStreamDisplayText(getStreamingGenerativeUiDisplayText(restoredText));
   const state: StreamSessionState = {
     streamingMessageId: null,
     streamedText: restoredText,
@@ -658,12 +676,19 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
     draftDiscardedAt: null,
     messageHeldByDraft: false,
     streamingParts: undefined,
+    // 再読み込みの後は、保存しておいた実行記録から再開する（再接続は保存後のイベントしか再送しない）。
+    // After a reload, resume from the saved record (a reconnect only replays events after the save).
+    answerTrace: storedGeneration?.answerTrace ?? null,
     pendingFinalization: null,
-    hasSeparatedInstantPrefix: Boolean(initialDisplayText.instantPrefix),
   };
 
-  const renderer = createStreamRenderer(host, state, timers, initialDisplayText.pacedText.length);
-  const storedStateSync = createStoredGenerationStateSync(host.storage, timers, () => state.streamedText);
+  const renderer = createStreamRenderer(host, state, timers, getStreamingGenerativeUiDisplayText(restoredText).length);
+  const storedStateSync = createStoredGenerationStateSync(
+    host.storage,
+    timers,
+    () => state.streamedText,
+    () => state.answerTrace,
+  );
 
   // TextDecoder は再接続をまたいで共有する（分割されたマルチバイト文字を保つ）。
   // The TextDecoder is shared across reconnects so split multibyte characters survive.
@@ -675,7 +700,9 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
       renderer.finalizeStreamingMessage(
         getStreamingGenerativeUiDisplayText(state.streamedText),
         true,
-        state.streamingParts,
+        // パーツが無いときは undefined のまま渡し、本文と実行記録を最終化側で組み立てさせる。
+        // With no parts, pass undefined so finalization assembles the prose and the execution record itself.
+        state.streamingParts ? withAnswerTracePart(state.streamingParts, state.answerTrace) : undefined,
       );
       host.messages.appendErrorMessage(message);
       return;
@@ -746,6 +773,16 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         // carries the latest text.
         renderer.cancelRender();
         renderer.applyPartsUpdate(action.displayText, action.parts);
+        return;
+      case "answer_trace_updated":
+        // 下書きには触れない。同じ内容の再送は描き直さず、本文の描画に任せて次のフレームで載せ替える。
+        // 吹き出しがまだ無ければ保持だけして、吹き出しができた時に先頭へ載せる。
+        // The draft is left alone. A resent snapshot with the same content does not redraw; otherwise the next
+        // frame swaps it in. With no bubble yet it is only kept, and laid at the head once the bubble exists.
+        if (isSameAnswerTrace(state.answerTrace, action.trace)) return;
+        state.answerTrace = action.trace;
+        storedStateSync.noteAnswerTrace();
+        renderer.scheduleRender();
         return;
       case "thinking_status":
         // 捨てられた下書きの吹き出しが残っていると、進捗の更新先になる思考中の表示が無い。

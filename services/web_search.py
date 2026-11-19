@@ -44,7 +44,6 @@ from services.llm_daily_limit import (
     consume_brave_web_search_monthly_quota,
     get_seconds_until_monthly_reset,
 )
-from services.message_parts_display import split_answer_trace_block
 from services.url_fetcher import (
     FetchedUrlDocument,
     canonicalize_url,
@@ -671,15 +670,10 @@ def strip_web_search_citation_html(text: str) -> str:
     if CITATION_CHIP_CLASS not in text.lower():
         return text
 
-    # 先頭の「回答までのステップ」はシステムが組み立てたHTMLで、出典の favicon に同じクラス名を
-    # 使っている。ここまで消すと favicon が失われ、閉じタグだけが残ってブロックが壊れる。
-    # The leading answer-steps block is markup the system built, and its source favicons share
-    # the chip class names. Stripping it too drops the favicons and leaves a stray closing tag.
-    trace_block, _ = split_answer_trace_block(text)
-    cleaned = text[len(trace_block) :]
+    cleaned = text
     for pattern in _CITATION_CHIP_HTML_PATTERNS:
         cleaned = pattern.sub("", cleaned)
-    return f"{trace_block}{cleaned}"
+    return cleaned
 
 
 def _split_trailing_citation_chip_html(text: str) -> tuple[str, str]:
@@ -2415,66 +2409,6 @@ def source_hostname_label(url: str) -> str:
     except ValueError:
         return ""
     return hostname.removeprefix("www.")
-
-
-def build_source_depth_html(source: WebSearchSource) -> str:
-    # 検索結果からリンクをたどって取得したページに、深さと辿り元を示す行を付ける。
-    # 検索結果ページ自体（depth 0）には何も表示しない。
-    # Mark pages reached by following links with their depth and the page they came from.
-    # Search-result pages themselves (depth 0) get no marker.
-    if source.link_depth < 1:
-        return ""
-    parent_hostname = source_hostname_label(source.linked_from_url)
-    origin = f"{parent_hostname} から" if parent_hostname else ""
-    # 先頭の矢印はCSSの擬似要素で描く。メッセージHTMLのサニタイザは class しか
-    # 通さないため、aria-hidden を付けた装飾用spanは残らない。
-    # The leading arrow comes from a CSS pseudo-element: the message sanitizer keeps
-    # class but not aria-hidden, so a decorative span could not be hidden from readers.
-    return (
-        '<span class="web-search-sources__depth">'
-        f"{escape(origin)}{source.link_depth}階層先"
-        "</span>"
-    )
-
-
-def build_web_search_source_items(result: WebSearchResult | None) -> list[str]:
-    # 検索ソースのHTMLリンク表現をビルドする
-    # Build HTML list item strings representing the search sources.
-    if result is None:
-        return []
-    sources_lines: list[str] = []
-    for source in result.sources:
-        url = source.url.strip()
-        if not url:
-            continue
-        title = source.title.strip() or url
-        hostname = source.hostname.strip()
-        hostname_line = (
-            f'<span class="web-search-sources__hostname">{escape(hostname)}</span>'
-            if hostname
-            else ""
-        )
-        item_classes = "web-search-sources__item"
-        if source.link_depth >= 1:
-            item_classes += " web-search-sources__item--followed"
-        sources_lines.append(
-
-                f'<li class="{item_classes}">'
-                f'<a class="web-search-sources__link" href="{escape(url, quote=True)}" target="_blank">'
-                f"{build_source_favicon_html(source)}"
-                '<span class="web-search-sources__content">'
-                f'<span class="web-search-sources__title">{escape(title)}</span>'
-                f"{hostname_line}"
-                f"{build_source_depth_html(source)}"
-                "</span>"
-                '<span class="web-search-sources__external">↗</span>'
-                "</a></li>"
-
-        )
-
-    if not sources_lines:
-        return []
-    return sources_lines
 
 
 def get_web_search_tool_definition() -> dict[str, Any]:

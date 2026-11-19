@@ -21,6 +21,7 @@ from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import Future, TimeoutError
 from typing import Any
 
+from services.answer_trace import with_answer_trace_part
 from services.generative_ui import (
     GenerativeUiMode,
     is_text_only_request,
@@ -199,6 +200,10 @@ class ChatGenerationJobBase:
         # 生成途中で停止された場合でも保存できるよう、出力済みチャンクを保持する。
         # Keep emitted chunks so a mid-stream stop can still persist the partial reply.
         self._chunks: list[str] = []
+        # 確定した本文と一緒に配信した実行記録（「回答までのステップ」）。停止時にも本文と合わせて保存する。
+        # The execution record (the "steps to the answer") published with the confirmed body; a stop
+        # saves it together with that body.
+        self._answer_trace: dict[str, Any] | None = None
         # ツール呼び出しの有無が確定するまでの一時チャンク。キャンセル時だけ部分応答として使う。
         # Buffer the current model step until tool-call presence is known; use it as a partial
         # response only when the user cancels generation.
@@ -501,6 +506,7 @@ class ChatGenerationJobBase:
             )
             if message_parts:
                 message_parts = normalize_message_parts_for_display(message_parts) or None
+        message_parts = with_answer_trace_part(message_parts, bot_reply, self._answer_trace)
         message_parts = _with_tool_approval_parts(message_parts, bot_reply, approval_cards)
         self.response = bot_reply
 

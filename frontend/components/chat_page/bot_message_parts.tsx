@@ -4,6 +4,7 @@ import { memo } from "react";
 
 import type { ToolApprovalDecision } from "../../lib/chat_page/tool_approval_api";
 import type { ChatMessagePart } from "../../lib/chat_page/types";
+import { AnswerTracePart, answerTraceSharesTextPart, type AnswerTraceMessagePart } from "./answer_trace";
 import { BotMessageHtml } from "./bot_message_html";
 import { SandboxArtifactFrame } from "./sandbox_artifact_frame";
 import { InteractiveButtons } from "./interactive_buttons";
@@ -56,15 +57,44 @@ function BotMessagePartsComponent({
     -1
   );
 
+  const leadingTrace = answerTraceSharesTextPart(renderParts) ? (renderParts[0] as AnswerTraceMessagePart) : null;
+
+  // 本文の key は本文どうしの何番目かで決める。生成中に実行記録が先頭へ加わっても、描画中の本文を作り直さない。
+  // A text part's key is its ordinal among text parts, so an execution record joining at the head mid-generation does not remount the prose being drawn.
+  let textOrdinal = 0;
+
   return (
     <div className="bot-message-parts">
       {renderParts.map((part, index) => {
         // パーツの種類ごとに専用コンポーネントへ振り分ける。未知の種類は何も描画しない（最後の return null）
         // Dispatch each part type to its own component; unknown types render nothing (the final return null)
         if (part.type === "text") {
-          return part.text ? (
-            <div key={`text-${index}`} className="bot-message-part bot-message-part--text">
-              <BotMessageHtml text={part.text} streaming={streaming && index === lastTextPartIndex} />
+          const ordinal = textOrdinal;
+          textOrdinal += 1;
+          const trace = ordinal === 0 ? leadingTrace : null;
+          return part.text || trace ? (
+            <div key={`text-${ordinal}`} className="bot-message-part bot-message-part--text">
+              {trace ? <AnswerTracePart key="answer-trace" part={trace} /> : null}
+              {part.text ? (
+                <BotMessageHtml key="text" text={part.text} streaming={streaming && index === lastTextPartIndex} />
+              ) : null}
+            </div>
+          ) : null;
+        }
+        if (part.type === "answer_trace" || part.type === "legacy_answer_trace") {
+          if (!leadingTrace) {
+            return (
+              <div key="answer-trace" className="bot-message-part bot-message-part--answer-trace">
+                <AnswerTracePart part={part} />
+              </div>
+            );
+          }
+          // 本文が続くときは、その本文の枠の中で描く。本文がまだ無ければ、本文が入る枠を先に作る。
+          // When prose follows, the record is drawn inside that prose's wrapper; with no prose yet, the
+          // wrapper the prose will join is created first.
+          return renderParts.length === 1 ? (
+            <div key="text-0" className="bot-message-part bot-message-part--text">
+              <AnswerTracePart key="answer-trace" part={part} />
             </div>
           ) : null;
         }

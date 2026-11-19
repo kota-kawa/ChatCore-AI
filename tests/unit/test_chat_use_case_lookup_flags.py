@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, Mock, call, patch
 from starlette.responses import JSONResponse
 
 from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
+from services.generative_ui import normalize_response_with_artifacts
 from tests.helpers.request_helpers import build_request
 
 
@@ -355,6 +356,47 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
         self.assertIn("沖縄旅行", selected_context)
         self.assertIn("旅行計画テンプレ", selected_context)
         deps.start_generation_job.assert_not_called()
+
+    # 日本語: 本文が正規化で空になった応答は、参照元の検索のステップがあっても回答として保存しません。
+    # English: A reply whose body normalizes to nothing is not persisted as an answer, even with reference-lookup steps to show.
+    def test_non_streaming_reply_with_only_the_execution_record_is_rejected(self):
+        personal_search = Mock(
+            return_value={"status": "ok", "memo_count": 1, "context_fact_count": 0, "memos": [], "context_facts": []}
+        )
+        deps = self._build_deps(personal_search)
+        deps.is_streaming_model.return_value = False
+        request = build_request(
+            method="POST",
+            path="/api/chat",
+            json_body={
+                "message": "去年の沖縄旅行の予算は？",
+                "chat_room_id": "room-1",
+                "model": "test-model",
+                "use_personal_knowledge": True,
+            },
+            session={"user_id": 42},
+        )
+
+        with (
+            patch("services.chat_use_case.generate_chat_room_title", return_value=None),
+            # モデルは何か書いたが、検証を通る本文もパーツも残らなかった状況。
+            # The model wrote something, yet neither a body nor a part survived validation.
+            patch(
+                "services.chat_use_case.normalize_response_with_artifact_retry",
+                return_value=normalize_response_with_artifacts(""),
+            ),
+        ):
+            response = asyncio.run(
+                ChatPostUseCase(deps, default_model="test-model").execute(
+                    request,
+                    auth_limit_service=object(),
+                    llm_daily_limit_service=object(),
+                    chat_generation_service=object(),
+                )
+            )
+
+        self.assertEqual(response.status_code, 502)
+        deps.save_message_to_db.assert_not_called()
 
 
 if __name__ == "__main__":

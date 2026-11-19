@@ -376,45 +376,53 @@ test("normalizers keep safe web-search image parts", () => {
   ]);
 });
 
-test("normalizers keep legacy images below the answer trace", () => {
-  const trace =
-    '<details class="web-search-sources web-search-sources--trace">\n' +
-    '<summary class="web-search-sources__summary">' +
-    '<span class="web-search-sources__label">回答までのステップ</span>' +
-    "</summary>\n" +
-    '<div class="web-search-sources__list">' +
-    '<details class="web-search-sources__step-details">' +
-    '<summary class="web-search-sources__step-summary">step</summary>' +
-    "<div>sources</div>" +
-    "</details>" +
-    "</div>\n" +
-    "</details>";
+test("normalizers keep the structured trace at the head of a response and out of the prose", () => {
+  const trace = {
+    version: 1,
+    summary: "参照サイト1件",
+    steps: [{
+      id: "s1", kind: "search", status: "done", title: "Web検索", detail: "", query: "", badge: "1件", chips: [],
+      sources: [{
+        url: "https://example.com/a", title: "A", hostname: "example.com", favicon_url: "https://example.com/favicon.ico",
+        fallback_label: "E", link_depth: 0, linked_from: "",
+      }],
+    }],
+  };
   const image = {
     type: "web_search_image",
-    image: {
-      url: "https://cdn.example.com/hero.jpg",
-      alt: "Relevant photo",
-      source_url: "https://example.com/article",
-    },
+    image: { url: "https://cdn.example.com/hero.jpg", alt: "Relevant photo", source_url: "https://example.com/article" },
   };
 
   const response = normalizeChatResponsePayload({
-    response: `${trace}\n\nanswer`,
-    parts: [image, { type: "text", text: `${trace}\n\nanswer` }],
+    response: "answer",
+    parts: [{ type: "text", text: "answer" }, image, { type: "answer_trace", trace }],
   });
 
   assert.deepEqual(response.parts, [
-    { type: "text", text: trace },
+    { type: "answer_trace", trace },
+    { type: "text", text: "answer" },
     {
       type: "web_search_image",
-      image: {
-        url: "https://cdn.example.com/hero.jpg",
-        alt: "Relevant photo",
-        sourceUrl: "https://example.com/article",
-      },
+      image: { url: "https://cdn.example.com/hero.jpg", alt: "Relevant photo", sourceUrl: "https://example.com/article" },
     },
+  ]);
+  assert.equal(response.response, "answer");
+});
+
+test("history messages carry a legacy trace as its own part ahead of the prose", () => {
+  const html = '<details class="web-search-sources web-search-sources--trace"><summary>回答までのステップ</summary></details>';
+  const [message] = normalizeChatHistoryMessages([{
+    id: 1,
+    sender: "assistant",
+    message: "answer",
+    message_parts: [{ type: "text", text: "answer" }, { type: "legacy_answer_trace", html }],
+  }]);
+
+  assert.deepEqual(message.message_parts, [
+    { type: "legacy_answer_trace", html },
     { type: "text", text: "answer" },
   ]);
+  assert.equal(message.message, "answer");
 });
 
 test("normalizers keep generated UI and web-search image parts mutually exclusive", () => {

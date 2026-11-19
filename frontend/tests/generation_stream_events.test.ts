@@ -10,6 +10,7 @@ import {
 } from "../lib/chat_page/generation_stream_events";
 import { parseStreamEventBlock } from "../lib/chat_page/streaming";
 import type { StreamParsedEvent } from "../lib/chat_page/types";
+import { makeSource, makeStep, makeTrace } from "./answer_trace_test_data";
 
 // 表示文言の言語差ではなく、選ばれた分岐を検証する。
 // Assert the branch that was chosen, not the wording of either locale.
@@ -403,6 +404,48 @@ test("a done event carrying only an approval card is a real answer", () => {
   assert.equal(action.kind, "done");
   if (action.kind !== "done") return;
   assert.equal(action.parts?.[0]?.type, "tool_approval");
+});
+
+test("an answer_trace_updated event carries a normalized whole snapshot", () => {
+  const trace = makeTrace([makeStep({ sources: [makeSource()] })], "参照サイト1件");
+
+  assert.deepEqual(interpret("answer_trace_updated", { trace }), { kind: "answer_trace_updated", trace });
+  // 契約に合わせて切り詰め・補完される（http(s) 以外の出典は捨てる）
+  // It is normalized to the contract (a non-http(s) source is dropped)
+  const action = interpret("answer_trace_updated", {
+    trace: makeTrace([makeStep({ kind: "mystery" as never, sources: [makeSource({ url: "javascript:alert(1)" }), makeSource()] })]),
+  });
+  assert.equal(action.kind, "answer_trace_updated");
+  if (action.kind !== "answer_trace_updated") return;
+  assert.equal(action.trace.steps[0].kind, "info");
+  assert.equal(action.trace.steps[0].sources.length, 1);
+});
+
+test("an answer_trace_updated event with no usable trace changes nothing", () => {
+  assert.deepEqual(interpret("answer_trace_updated", {}), { kind: "ignored" });
+  assert.deepEqual(interpret("answer_trace_updated", { trace: "x" }), { kind: "ignored" });
+  assert.deepEqual(interpret("answer_trace_updated", { trace: { version: 1, summary: "", steps: [] } }), { kind: "ignored" });
+  assert.deepEqual(interpret("answer_trace_updated", { trace: { ...makeTrace(), version: 2 } }), { kind: "ignored" });
+});
+
+test("a done event whose only part is the execution record is not an answer", () => {
+  const trace = makeTrace();
+  const action = interpret("done", { response: "", parts: [{ type: "answer_trace", trace }] });
+  assert.equal(action.kind, "empty_answer");
+
+  const legacy = interpret("done", { response: "", parts: [{ type: "legacy_answer_trace", html: "<details></details>" }] });
+  assert.equal(legacy.kind, "empty_answer");
+});
+
+test("a done event with prose keeps the execution record at the head of its parts", () => {
+  const trace = makeTrace();
+  const action = interpret("done", {
+    response: "答え",
+    parts: [{ type: "text", text: "答え" }, { type: "answer_trace", trace }],
+  });
+  assert.equal(action.kind, "done");
+  if (action.kind !== "done") return;
+  assert.deepEqual(action.parts, [{ type: "answer_trace", trace }, { type: "text", text: "答え" }]);
 });
 
 // 壊れたイベントブロックは parse 段階で捨てられ、解釈まで届かない。

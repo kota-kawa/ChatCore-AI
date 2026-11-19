@@ -3,6 +3,7 @@
 import { memo } from "react";
 
 import type { ChatMessagePart } from "../../lib/chat_page/types";
+import { AnswerTracePart, answerTraceSharesTextPart, type AnswerTraceMessagePart } from "../chat_page/answer_trace";
 import { BotMessageHtml } from "../chat_page/bot_message_html";
 import { InteractiveButtons } from "../chat_page/interactive_buttons";
 import { StructuredUiRenderer } from "../chat_page/structured_ui_renderer";
@@ -28,16 +29,29 @@ function SharedChatMessagePartsComponent({ fallbackText, parts }: SharedChatMess
   // partsが空の場合はフォールバックテキストをテキストパーツとして使用する
   // Use fallback text as a text part when parts is empty
   const renderParts = parts && parts.length > 0 ? parts : [{ type: "text" as const, text: fallbackText }];
+  const leadingTrace = answerTraceSharesTextPart(renderParts) ? (renderParts[0] as AnswerTraceMessagePart) : null;
 
   return (
     <div className="bot-message-parts">
       {renderParts.map((part, index) => {
         if (part.type === "text") {
-          return part.text ? (
+          // 実行記録は、直後の本文と同じ枠の中に描く（通常のチャットと同じ余白にする）。
+          // The execution record is drawn inside the wrapper of the prose that follows it, for the same spacing as the regular chat.
+          const trace = index === 1 ? leadingTrace : null;
+          return part.text || trace ? (
             <div key={`text-${index}`} className="bot-message-part bot-message-part--text">
-              <BotMessageHtml text={part.text} />
+              {trace ? <AnswerTracePart part={trace} /> : null}
+              {part.text ? <BotMessageHtml text={part.text} /> : null}
             </div>
           ) : null;
+        }
+        if (part.type === "answer_trace" || part.type === "legacy_answer_trace") {
+          if (leadingTrace && renderParts.length > 1) return null;
+          return (
+            <div key="answer-trace" className="bot-message-part bot-message-part--answer-trace">
+              <AnswerTracePart part={part} />
+            </div>
+          );
         }
         if (part.type === "sandbox_artifact") {
           return (

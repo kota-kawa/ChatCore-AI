@@ -19,12 +19,14 @@ import {
   readStoredUserScope,
   writeStoredActiveChatRoom,
   writeStoredHomePageViewState,
+  updateStoredGenerationState,
   writeStoredGenerationState,
   writeStoredHistory,
 } from "../lib/chat_page/storage";
 import { __test__ as historyCacheTestConstants } from "../lib/chat_page/history_cache";
 import type { StoredHistoryEntry } from "../lib/chat_page/types";
 import { STORAGE_KEYS } from "../scripts/core/constants";
+import { makeSource, makeStep, makeTrace } from "./answer_trace_test_data";
 import { readStructuredUiMetrics, recordStructuredUiMetric } from "../lib/chat_page/structured_ui_metrics";
 
 class FakeLocalStorage implements Storage {
@@ -230,6 +232,37 @@ test("stored generation state can be restored as the active generation", () => {
   assert.equal(restored?.streamedText, "途中まで");
   assert.equal(typeof restored?.updatedAt, "number");
   assert.equal(readActiveStoredGenerationState()?.roomId, "room-stream");
+});
+
+test("stored generation state keeps the execution record and re-reads it into the contract shape", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+  const trace = makeTrace([makeStep({ sources: [makeSource()] })], "参照サイト1件");
+
+  writeStoredGenerationState({
+    roomId: "room-trace",
+    roomMode: "normal",
+    generationId: "answer-id",
+    lastEventId: 3,
+    streamedText: "",
+    answerTrace: trace,
+    updatedAt: Date.now(),
+  });
+  assert.deepEqual(readStoredGenerationState("room-trace")?.answerTrace, trace);
+
+  // 保存後に別の更新（本文）を重ねても実行記録は残り、壊れた値は実行記録だけ捨てる
+  // A later update (the text) keeps the record, and a broken value drops only the record
+  updateStoredGenerationState("room-trace", { streamedText: "途中" });
+  assert.deepEqual(readStoredGenerationState("room-trace")?.answerTrace, trace);
+  const key = Array.from({ length: storage.length }, (_, index) => storage.key(index)).find((candidate) =>
+    candidate?.includes("room-trace"),
+  );
+  assert.ok(key);
+  const broken = { ...JSON.parse(storage.getItem(key!)!), answerTrace: { version: 1, steps: "x" } };
+  storage.setItem(key!, JSON.stringify(broken));
+  const restored = readStoredGenerationState("room-trace");
+  assert.equal(restored?.answerTrace, undefined);
+  assert.equal(restored?.streamedText, "途中");
 });
 
 test("clearing stored generation state removes active generation pointer", () => {

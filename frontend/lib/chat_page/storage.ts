@@ -5,6 +5,7 @@
 // Used by hooks/chat_page/use_home_page_controller.ts, use_home_page_generation_actions.ts and lib/auth/account_switcher.ts.
 
 import { STORAGE_KEYS, AUTH_SUCCESS_HINT } from "../../scripts/core/constants";
+import { normalizeAnswerTrace } from "./answer_trace";
 import { normalizeChatMessageParts } from "./api_contract";
 import { getStreamingGenerativeUiDisplayText } from "./generative_ui_stream";
 import { parseJsonText } from "../../scripts/core/runtime_validation";
@@ -287,6 +288,7 @@ function normalizeStoredGenerationState(raw: unknown): StoredGenerationState | n
     generationId?: unknown;
     lastEventId?: unknown;
     streamedText?: unknown;
+    answerTrace?: unknown;
     updatedAt?: unknown;
   };
 
@@ -302,6 +304,10 @@ function normalizeStoredGenerationState(raw: unknown): StoredGenerationState | n
 
   if (Date.now() - updatedAt > GENERATION_STATE_TTL_MS) return null;
 
+  // 保存した値も契約の形へ読み直す。壊れていれば実行記録だけを捨て、本文の復元は妨げない。
+  // The saved value is re-read into the contract shape; a broken one drops only the record and never blocks restoring the text.
+  const answerTrace = normalizeAnswerTrace(record.answerTrace);
+
   return {
     roomId: record.roomId,
     roomMode,
@@ -310,6 +316,7 @@ function normalizeStoredGenerationState(raw: unknown): StoredGenerationState | n
       : {}),
     lastEventId,
     streamedText,
+    ...(answerTrace ? { answerTrace } : {}),
     updatedAt,
   };
 }
@@ -359,11 +366,11 @@ export function writeStoredGenerationState(state: StoredGenerationState): boolea
   }
 }
 
-// 保存済みの生成状態の一部（受信済みイベント ID・本文・生成 ID）だけを更新する。保存済みが無ければ何もしない。
-// Updates only part of the saved generation state (last event id, text, generation id); does nothing if none is saved.
+// 保存済みの生成状態の一部（受信済みイベント ID・本文・生成 ID・実行記録）だけを更新する。保存済みが無ければ何もしない。
+// Updates only part of the saved generation state (last event id, text, generation id, execution record); does nothing if none is saved.
 export function updateStoredGenerationState(
   roomId: string,
-  updates: Partial<Pick<StoredGenerationState, "lastEventId" | "streamedText" | "generationId">>,
+  updates: Partial<Pick<StoredGenerationState, "lastEventId" | "streamedText" | "generationId" | "answerTrace">>,
 ): boolean {
   const existing = readStoredGenerationState(roomId);
   if (!existing) return false;

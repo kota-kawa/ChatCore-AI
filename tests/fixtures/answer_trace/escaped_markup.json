@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "summary": "Web検索1回 · 参照サイト1件",
+  "steps": [
+    {
+      "id": "s1",
+      "kind": "search",
+      "status": "done",
+      "title": "Web検索",
+      "detail": "回答の根拠を集めるため、検索を実行し、1件の候補ページを取得しました。",
+      "query": "京都の紅葉",
+      "badge": "1件",
+      "chips": [
+        "example.com"
+      ],
+      "sources": [
+        {
+          "url": "https://example.com/kyoto",
+          "title": "京都の紅葉ガイド </details> 2026",
+          "hostname": "example.com",
+          "favicon_url": "https://example.com/favicon.ico",
+          "fallback_label": "E",
+          "link_depth": 0,
+          "linked_from": ""
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "kind": "answer",
+      "status": "done",
+      "title": "回答を作成",
+      "detail": "1回の検索で集めた1件の情報と会話の文脈を突き合わせ、出典を示しながら回答を作成しました。",
+      "query": "",
+      "badge": "",
+      "chips": [],
+      "sources": []
+    }
+  ]
+}

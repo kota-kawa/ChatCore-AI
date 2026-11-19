@@ -145,10 +145,69 @@ export type WebSearchImageV1 = {
   sourceTitle?: string;
 };
 
+// 回答までのステップ（回答の実行記録）の出典 1 件。形と上限は services/answer_trace.py が正本。
+// One source in the steps to the answer (the answer's execution record); the shape and limits are owned by services/answer_trace.py.
+export type AnswerTraceSource = {
+  url: string;
+  title: string;
+  hostname: string;
+  favicon_url: string;
+  fallback_label: string;
+  /** 0 = 検索結果のページ、1 以上 = リンクをたどって読んだページ / 0 = a search-result page, 1+ = reached by following links */
+  link_depth: number;
+  /** たどり元のホスト名（"www." 無し） / Hostname of the page the link was followed from (without "www.") */
+  linked_from: string;
+};
+
+export type AnswerTraceStepKind =
+  | "decide"
+  | "search"
+  | "reuse"
+  | "read"
+  | "follow"
+  | "review"
+  | "answer"
+  | "warning"
+  | "knowledge"
+  | "prompt"
+  | "info";
+
+// running は実行中、failed は結果を回答に使えなかったことを表す。
+// running is still in progress; failed means the result could not be used in the answer.
+export type AnswerTraceStepStatus = "running" | "done" | "failed";
+
+export type AnswerTraceStep = {
+  id: string;
+  kind: AnswerTraceStepKind;
+  status: AnswerTraceStepStatus;
+  title: string;
+  detail: string;
+  query: string;
+  badge: string;
+  chips: string[];
+  /** 空ならステップは展開できない / An empty list means the step cannot be expanded */
+  sources: AnswerTraceSource[];
+};
+
+// 回答の実行記録。SSE では全体のスナップショットとして届き、後のものが前のものを置き換える。
+// The answer's execution record. Over SSE it arrives as a whole snapshot, and a later one replaces an earlier one.
+export type AnswerTraceV1 = {
+  version: 1;
+  /** 折りたたんだ時の 1 行要約。"" のことがある / One-line summary shown while collapsed; may be "" */
+  summary: string;
+  steps: AnswerTraceStep[];
+};
+
 // メッセージを構成するパーツ。text 以外は画面側で専用の部品として描画する。
 // A part that makes up a message; everything other than text is rendered by a dedicated UI component.
 export type ChatMessagePart =
   | { type: "text"; text: string }
+  // 実行記録は常にパーツ列の先頭に 1 つだけ置く
+  // The execution record is a single part that always leads the part list
+  | { type: "answer_trace"; trace: AnswerTraceV1 }
+  // 構造化前に保存された回答の、本文先頭にあった表示用 HTML（サーバーが読み出し時に本文から切り離す）
+  // The display HTML that led the body of an answer saved before structuring (the server splits it off the body on read)
+  | { type: "legacy_answer_trace"; html: string }
   | { type: "structured_ui"; ui: StructuredUiV1 }
   | { type: "sandbox_artifact"; artifact: GenerativeUiArtifactV1 }
   | { type: "artifact_status"; status: GenerativeUiArtifactStatusV1 }
@@ -309,6 +368,9 @@ export type StoredGenerationState = {
   generationId?: string;
   lastEventId: number;
   streamedText: string;
+  // 受信済みの実行記録。再接続は Last-Event-ID より後のイベントしか再送しないため、再読み込み後の表示に要る。
+  // The execution record received so far; a reconnect only replays events after Last-Event-ID, so a reload needs this to show it.
+  answerTrace?: AnswerTraceV1;
   updatedAt: number;
 };
 

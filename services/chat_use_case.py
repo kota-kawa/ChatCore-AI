@@ -21,6 +21,7 @@ from typing import Any
 from fastapi import Request
 from starlette.responses import Response
 
+from services.answer_trace import is_answer_trace_part, with_answer_trace_part
 from services.api_errors import ApiServiceError
 from services.async_utils import run_blocking
 from services.attached_files import (
@@ -111,7 +112,7 @@ from services.web_search import (
 from services.web_search_trace import (
     TraceStep,
     answer_step,
-    build_web_search_trace_markdown,
+    build_answer_trace,
     selected_reference_steps,
 )
 
@@ -1343,33 +1344,32 @@ class ChatPostUseCase:
         return None
 
     async def _finalize_reply(self, turn: _ChatPostTurn) -> None:
-        """トレース前置・UIパーツ正規化・出典解決を保存前に確定します / Settle trace, UI parts and citations before persisting."""
-        self._prepend_selected_reference_trace(turn)
+        """UIパーツ正規化・出典解決・実行記録の付与を保存前に確定します。
+
+        Settle UI parts, citations and the execution record before persisting.
+        """
+        # 本文の無いターンに実行記録だけを付けると空判定をすり抜け、「回答までのステップ」だけの
+        # 応答が保存される。モデルが本文を返したときだけ付ける。
+        # Attaching the record to a turn with no body would slip past the empty-answer guard and
+        # persist a steps-only reply, so only a turn whose model returned a body receives it.
+        answer_trace = self._build_selected_reference_trace(turn) if turn.bot_reply.strip() else None
         await self._normalize_generated_reply(turn)
         self._resolve_reply_citations(turn)
 
-        # 保存直前にトレース分割と本文内の画像位置を確定する。
-        # Finalize trace splitting and inline image placement before persisting.
+        # 保存直前に本文内の画像位置を確定し、実行記録を先頭のパーツとして足す。
+        # Finalize inline image placement before persisting, then add the execution record as the leading part.
         if turn.message_parts:
             turn.message_parts = normalize_message_parts_for_display(turn.message_parts) or None
+        turn.message_parts = with_answer_trace_part(turn.message_parts, turn.bot_reply, answer_trace)
 
-    def _prepend_selected_reference_trace(self, turn: _ChatPostTurn) -> None:
-        """参照検索のステップを本文の先頭へ付けます / Prepend the reference-lookup steps to the reply body."""
+    def _build_selected_reference_trace(self, turn: _ChatPostTurn) -> dict[str, Any] | None:
+        """参照検索のステップを実行記録にまとめます / Gather the reference-lookup steps into the execution record."""
         web_search_trace_steps: list[TraceStep] = selected_reference_steps(
             turn.selected_reference_trace
         )
         if web_search_trace_steps:
             web_search_trace_steps.append(answer_step([]))
-        trace_block = build_web_search_trace_markdown(
-            None,
-            steps=web_search_trace_steps,
-        )
-        # 本文の無いターンにトレースだけを前置すると空判定をすり抜け、「回答までの
-        # ステップ」だけの応答が保存される。本文があるときだけ前置する。
-        # Prepending the trace to an empty body would slip past the empty-answer guard and
-        # persist a steps-only reply, so only a non-empty body receives the trace.
-        if trace_block and turn.bot_reply.strip():
-            turn.bot_reply = f"{trace_block}\n\n{turn.bot_reply}"
+        return build_answer_trace(None, steps=web_search_trace_steps)
 
     async def _normalize_generated_reply(self, turn: _ChatPostTurn) -> None:
         """
@@ -1445,12 +1445,14 @@ class ChatPostUseCase:
         # 残り、次のターン以降もユーザー発話だけが積み上がってしまう。
         # An empty body with no UI parts is the same as no answer at all. Persisting
         # it would leave a blank bubble and let unanswered user messages pile up.
-        # 生成UIの失敗通知だけが残った応答は回答ではない。通知は本文の代わりにならない。
-        # A reply carrying only the generated-UI failure notice is not an answer.
+        # 生成UIの失敗通知だけ、または実行記録（「回答までのステップ」）だけが残った応答は回答ではない。
+        # どちらも本文の代わりにならない。
+        # A reply carrying only the generated-UI failure notice, or only the execution record (the
+        # "steps to the answer"), is not an answer: neither stands in for the body.
         renderable_parts = [
             part
             for part in (turn.message_parts or [])
-            if part.get("type") not in {"text", ARTIFACT_STATUS_PART_TYPE}
+            if part.get("type") not in {"text", ARTIFACT_STATUS_PART_TYPE} and not is_answer_trace_part(part)
         ]
         if turn.bot_reply.strip() or renderable_parts:
             return None

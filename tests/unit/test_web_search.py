@@ -18,7 +18,6 @@ from unittest.mock import MagicMock, patch
 from services import url_fetcher, web_search
 from services.chat_prompt import BASE_SYSTEM_PROMPT
 from services.url_fetcher import FetchedImage, FetchedLink
-from services.web_search_trace import answer_step, build_web_search_trace_markdown, search_step
 
 
 # 取得済みページ (FetchedUrlDocument) を最小限の引数で作るテスト用ヘルパー。リダイレクトは無いものとして final_url を同じ URL にする。
@@ -308,72 +307,6 @@ class WebSearchServiceTestCase(unittest.TestCase):
         for value in ("", "garbage", "recent", "none", None, 7, "2026-13-99to2026"):
             with self.subTest(value=value):
                 self.assertEqual(web_search.normalize_web_search_freshness(value), "")
-
-    # 日本語: 検索結果ページには深さ表示を出さず、たどったページにだけ出すことを検証します。
-    # English: Verify only followed pages carry a depth marker, never result pages.
-    def test_source_items_mark_only_followed_pages_with_depth(self):
-        result = web_search.WebSearchResult(
-            query="x",
-            searched_at="2026-04-30T00:00:00+00:00",
-            sources=(
-                web_search.WebSearchSource(
-                    url="https://root.example/a",
-                    title="Root",
-                    hostname="root.example",
-                    age="",
-                    snippets=(),
-                ),
-                web_search.WebSearchSource(
-                    url="https://child.example/b",
-                    title="Child",
-                    hostname="child.example",
-                    age="",
-                    snippets=(),
-                    link_depth=2,
-                    linked_from_url="https://www.root.example/a",
-                ),
-            ),
-        )
-
-        items = web_search.build_web_search_source_items(result)
-
-        self.assertNotIn("web-search-sources__depth", items[0])
-        self.assertNotIn("web-search-sources__item--followed", items[0])
-        self.assertIn(
-            '<li class="web-search-sources__item web-search-sources__item--followed">',
-            items[1],
-        )
-        self.assertIn(
-            '<span class="web-search-sources__depth">root.example から2階層先</span>',
-            items[1],
-        )
-
-    # 日本語: 辿り元が不明でも深さだけを表示し、HTMLをエスケープすることを検証します。
-    # English: Verify an unknown origin still shows the depth, with the origin escaped.
-    def test_source_items_depth_marker_handles_unknown_and_unsafe_origin(self):
-        def item_for(linked_from_url):
-            result = web_search.WebSearchResult(
-                query="x",
-                searched_at="2026-04-30T00:00:00+00:00",
-                sources=(
-                    web_search.WebSearchSource(
-                        url="https://child.example/b",
-                        title="Child",
-                        hostname="child.example",
-                        age="",
-                        snippets=(),
-                        link_depth=1,
-                        linked_from_url=linked_from_url,
-                    ),
-                ),
-            )
-            return web_search.build_web_search_source_items(result)[0]
-
-        self.assertIn(
-            '<span class="web-search-sources__depth">1階層先</span>',
-            item_for(""),
-        )
-        self.assertIn("&lt;script&gt;.example から1階層先", item_for("https://<script>.example/a"))
 
     # 日本語: 複数の検索結果を結合するとき、同じ URL のソースを 1 件にまとめることを検証します。
     # English: Verify that combining search results deduplicates sources by URL.
@@ -1551,37 +1484,6 @@ class WebSearchEvidenceTestCase(unittest.TestCase):
         self.assertEqual(
             web_search.strip_web_search_citation_html(unclosed_tag),
             "前置きラベル。続きの本文です。",
-        )
-
-    # 日本語: 先頭の「回答までのステップ」にある出典の favicon は残し、本文のチップだけを取り除くことを検証します。
-    # English: Verify the favicons in the leading answer-steps block survive while chips in the body are removed.
-    def test_strip_citation_html_keeps_the_leading_answer_trace_intact(self):
-        result = web_search.WebSearchResult(
-            query="高山 観光",
-            searched_at="2026-08-19T00:00:00+00:00",
-            sources=(
-                web_search.WebSearchSource(
-                    url="https://example.com/a",
-                    title="観光8選",
-                    hostname="example.com",
-                    age="",
-                    snippets=(),
-                ),
-            ),
-        )
-        trace_block = build_web_search_trace_markdown(
-            result,
-            steps=[search_step(result), answer_step([result])],
-        )
-        self.assertIn("web-search-citation__favicon", trace_block)
-        echoed_chip = (
-            '<a class="web-search-citation" href="https://example.com/a" target="_blank" title="観光8選">'
-            '<span class="web-search-citation__label">観光8選</span></a>'
-        )
-
-        self.assertEqual(
-            web_search.strip_web_search_citation_html(f"{trace_block}\n\n古い町並です{echoed_chip}。"),
-            f"{trace_block}\n\n古い町並です。",
         )
 
     # 日本語: 引用チップ以外の通常のリンクや本文は変更しないことを検証します。

@@ -6,9 +6,10 @@
 // event sequence can be tested against the expected changes alone. Pacing and
 // timing effects live in generation_stream_consumer.ts.
 
+import { normalizeAnswerTrace, isAnswerTracePart } from "./answer_trace";
 import { normalizeChatResponsePayload } from "./api_contract";
 import { getStreamingGenerativeUiDisplayText, sanitizeTextPartsForStreaming } from "./generative_ui_stream";
-import type { ChatGenerationPhase, ChatMessagePart, StreamParsedEvent } from "./types";
+import type { AnswerTraceV1, ChatGenerationPhase, ChatMessagePart, StreamParsedEvent } from "./types";
 import { getWebSearchFailureStatus } from "./web_search_failure_status";
 
 export type StreamLocalize = (ja: string, en: string) => string;
@@ -32,6 +33,9 @@ export type GenerationStreamAction =
   // confirming: a discard that the confirmed body follows at once; any other discard just drops the draft.
   | { kind: "answer_draft_reset"; confirming: boolean }
   | { kind: "parts_updated"; displayText: string; parts: ChatMessagePart[] | null }
+  // 回答までのステップの全体スナップショット。差分ではなく、後のものが前のものを置き換える。
+  // A whole snapshot of the steps to the answer; not a delta, and a later one replaces an earlier one.
+  | { kind: "answer_trace_updated"; trace: AnswerTraceV1 }
   | { kind: "thinking_status"; text: string; phase: ChatGenerationPhase }
   // responseText は旧クライアント向けの全文（保存する text）。displayText は UI の代替テキストを除いた、文字送りの表示用。
   // responseText is the legacy full text (the saved text); displayText is the reveal text without the UI fallback text.
@@ -249,8 +253,8 @@ function readStreamDisplayText(responseText: string, parts: ChatMessagePart[] | 
   return parts.map((part) => (part.type === "text" ? part.text : "")).join("");
 }
 
-// done イベントを最終応答へ変換する。本文もパーツ（検索画像だけのものは除く）も空なら、空の吹き出しではなく empty_answer にする。
-// Converts the done event into the final answer. If both the body and the answer parts (excluding web-search-image-only parts) are empty, it becomes empty_answer instead of a blank bubble.
+// done イベントを最終応答へ変換する。本文もパーツ（検索画像と実行記録だけのものは除く）も空なら、空の吹き出しではなく empty_answer にする。
+// Converts the done event into the final answer. If both the body and the answer parts (excluding parts that are only web-search images or the execution record) are empty, it becomes empty_answer instead of a blank bubble.
 function interpretDoneEvent(
   data: Record<string, unknown>,
   context: GenerationStreamEventContext,
@@ -258,10 +262,13 @@ function interpretDoneEvent(
   const donePayload = normalizeChatResponsePayload(data);
   const responseText = getStreamingGenerativeUiDisplayText(donePayload.response ?? context.streamedText);
   const parts = sanitizeTextPartsForStreaming(donePayload.parts);
-  // 検索画像だけのパーツは回答ではない。サーバー側の空判定と同じ規則で扱う。
-  // Web-search image parts alone are not an answer; mirror the server-side rule.
+  // 検索画像と実行記録（回答までのステップ）だけのパーツは回答ではない。サーバー側の空判定と同じ規則で扱う。
+  // Web-search images and the execution record (steps to the answer) alone are not an answer; mirror the server-side rule.
   const hasAnswerParts = parts?.some(
-    (part) => part.type !== "web_search_image" && (part.type !== "text" || Boolean(part.text.trim())),
+    (part) =>
+      part.type !== "web_search_image" &&
+      !isAnswerTracePart(part) &&
+      (part.type !== "text" || Boolean(part.text.trim())),
   ) ?? false;
 
   if (!responseText.trim() && !hasAnswerParts) {
@@ -337,6 +344,13 @@ export function interpretGenerationStreamEvent(
       parts,
     );
     return { kind: "parts_updated", displayText, parts };
+  }
+
+  if (parsed.event === "answer_trace_updated") {
+    // 形の合わないスナップショットは捨て、表示中の実行記録を消さない。
+    // A malformed snapshot is dropped so the record on screen is never erased.
+    const trace = normalizeAnswerTrace(data.trace);
+    return trace ? { kind: "answer_trace_updated", trace } : IGNORED;
   }
 
   const progressStatus =

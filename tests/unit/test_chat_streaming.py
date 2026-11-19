@@ -59,6 +59,7 @@ from services.chat_turn_state import (
 )
 from services.chat_workspace_tools import build_workspace_toolbox
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
+from services.generative_ui import normalize_response_with_artifacts
 from services.llm import (
     LlmAuthenticationError,
     LlmConfigurationError,
@@ -270,6 +271,19 @@ def make_request(json_body, session=None):
 
 # 日本語: 生成ターンの作業状態（TurnState）を置き換える封筒（タグ付き JSON）の文字列を作ります。overrides で項目を上書きできます。
 # English: Builds the tagged JSON envelope that replaces the turn's working state (TurnState); overrides replace individual fields.
+# SSE のイベント列（または連結済みの本文）から、指定したイベントのデータを届いた順に取り出す。
+# Pull the data of the named event, in arrival order, out of SSE events (or their joined body).
+def _sse_payloads(events, event_name):
+    body = events if isinstance(events, str) else b"".join(events).decode("utf-8")
+    payloads = []
+    for block in body.split("\n\n"):
+        lines = block.splitlines()
+        if f"event: {event_name}" not in lines:
+            continue
+        payloads.extend(json.loads(line.removeprefix("data: ")) for line in lines if line.startswith("data: "))
+    return payloads
+
+
 def _turn_state_update(**overrides):
     payload = {
         "objective": "テスト質問に回答する",
@@ -1333,6 +1347,65 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn('"partial": true', body)
         self.assertEqual(persisted_messages, ["途中まで"])
 
+    # 日本語: 実行記録を配信した後に停止しても、途中までの本文と一緒に記録が保存され aborted イベントに含まれることを検証します。
+    # English: Verify that stopping after the execution record was delivered persists it with the partial body
+    # and includes it in the aborted event.
+    def test_background_generation_job_keeps_the_execution_record_on_cancel(self):
+        persisted_records = []
+        finalizing = threading.Event()
+        release_finalization = threading.Event()
+
+        def persist_response(response, *, message_parts=None, web_search_context=None):
+            persisted_records.append({"response": response, "message_parts": message_parts})
+
+        # 日本語: 本文と実行記録を配信し終えた後、仕上げ（生成UIの正規化）の途中で止まる状況を作る。
+        # English: Stage a stop that lands in the middle of finalization (generated-UI normalization),
+        # after the body and the execution record have been delivered.
+        def blocked_normalization(text, **kwargs):
+            finalizing.set()
+            release_finalization.wait(timeout=2)
+            return normalize_response_with_artifacts(text)
+
+        with (
+            patch(
+                "services.chat_generation_llm_stream.get_llm_response_stream",
+                side_effect=_direct_answer_stream("途中まで"),
+            ),
+            patch(
+                "services.chat_generation_finalization.normalize_response_with_artifact_retry",
+                side_effect=blocked_normalization,
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-cancel-trace:default",
+                conversation_messages=[{"role": "user", "content": "休憩を提案して"}],
+                model="openai/gpt-oss-120b",
+                persist_response=persist_response,
+                selected_reference_trace=[
+                    SelectedReferenceLookupTrace(
+                        source=PERSONAL_KNOWLEDGE_SOURCE,
+                        query="好みのカフェ",
+                        payload={"status": "ok", "memo_count": 1, "context_fact_count": 0},
+                    )
+                ],
+            )
+
+            self.assertTrue(finalizing.wait(timeout=2))
+            job.cancel()
+            release_finalization.set()
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        (trace_event,) = _sse_payloads(body, "answer_trace_updated")
+        trace_part = {"type": "answer_trace", **trace_event}
+        (aborted,) = _sse_payloads(body, "aborted")
+        self.assertEqual(aborted["response"], "途中まで")
+        self.assertEqual(aborted["parts"], [trace_part, {"type": "text", "text": "途中まで"}])
+        self.assertEqual(
+            persisted_records,
+            [{"response": "途中まで", "message_parts": [trace_part, {"type": "text", "text": "途中まで"}]}],
+        )
+
     # 日本語: 本文が生成される前に停止した場合は、空の応答を保存しないことを検証します。
     # English: Verify that stopping before any body text is produced does not persist an empty reply.
     def test_background_generation_job_skips_persist_on_cancel_without_text(self):
@@ -1563,9 +1636,11 @@ class ChatStreamingTestCase(unittest.TestCase):
         for evidence_id in (source.evidence_id for source in sources):
             self.assertTrue(all(evidence_id in message for message in serialized_messages))
 
-    # 日本語: Web検索拡張を行った際、バックグラウンド生成ジョブが検索ソース情報を応答文末に追加することを検証します。
-    # English: Verify that the background generation job appends web search sources to the end of the reply.
-    def test_background_generation_job_appends_web_search_sources_to_reply(self):
+    # 日本語: Web検索を行ったターンで、バックグラウンド生成ジョブが「回答までのステップ」を本文とは別の実行記録として
+    # 配信・保存することを検証します。
+    # English: Verify that a turn with a web search delivers and persists its "steps to the answer" as an
+    # execution record separate from the body.
+    def test_background_generation_job_delivers_web_search_steps_as_an_execution_record(self):
         persisted_messages = []
         search_result = WebSearchResult(
             query="Python news",
@@ -1604,19 +1679,28 @@ class ChatStreamingTestCase(unittest.TestCase):
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
         self.assertIn("回答本文", body)
-        self.assertIn('\\"web-search-sources__summary\\"', body)
-        self.assertIn('\\"web-search-sources__label\\">回答までのステップ', body)
-        self.assertIn('\\"web-search-sources__count\\">3ステップ', body)
-        self.assertIn("https://example.com/python", persisted_messages[0])
-        self.assertTrue(persisted_messages[0].startswith('<details class="web-search-sources web-search-sources--trace">'))
-        self.assertIn('<summary class="web-search-sources__summary">', persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__label">回答までのステップ</span>', persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__count">3ステップ</span>', persisted_messages[0])
-        self.assertIn(
-            '<span class="web-search-sources__summary-detail">Web検索1回 · 参照サイト1件</span>',
-            persisted_messages[0],
+        # 実行記録は本文に混ぜず、確定した本文の最初のチャンクより前に専用のイベントで配信する。
+        # The execution record is never mixed into the body: it travels in an event of its own,
+        # ahead of the first confirmed chunk of the body.
+        (trace_event,) = _sse_payloads(body, "answer_trace_updated")
+        trace = trace_event["trace"]
+        self.assertEqual(trace["summary"], "Web検索1回 · 参照サイト1件")
+        self.assertEqual([step["kind"] for step in trace["steps"]], ["search", "review", "answer"])
+        self.assertEqual(
+            [source["url"] for source in trace["steps"][0]["sources"]],
+            ["https://example.com/python"],
         )
-        self.assertIn("回答本文", persisted_messages[0])
+        self.assertLess(body.index("event: answer_trace_updated"), body.index("event: chunk"))
+        self.assertEqual("".join(payload["text"] for payload in _sse_payloads(body, "chunk")), "回答本文")
+        # 確定した回答では、実行記録はパーツの先頭に入り、保存する本文には含まれない。
+        # In the settled answer the record leads the parts and is absent from the persisted body.
+        (done,) = _sse_payloads(body, "done")
+        self.assertEqual(done["response"], "回答本文")
+        self.assertEqual(
+            done["parts"],
+            [{"type": "answer_trace", "trace": trace}, {"type": "text", "text": "回答本文"}],
+        )
+        self.assertEqual(persisted_messages, ["回答本文"])
 
     # 日本語: 検索根拠を得たターンだけが引用・回答方針のsystem指示を受け取り、検索しない
     # 通常のターンには渡らないことを検証します。
@@ -1788,28 +1872,24 @@ class ChatStreamingTestCase(unittest.TestCase):
         )
         self.assertEqual(
             [part["type"] for part in response_parts_payload["parts"]],
-            ["text", "text", "web_search_image", "text"],
+            ["text", "web_search_image", "text"],
         )
         self.assertIn("京都の紅葉", response_parts_payload["response"])
+        self.assertNotIn("回答までのステップ", response_parts_payload["response"])
         self.assertEqual(
-            response_parts_payload["parts"][2]["image"]["url"],
+            response_parts_payload["parts"][1]["image"]["url"],
             "https://cdn.example.com/maple.jpg",
         )
-        self.assertEqual(response_parts_payload["parts"][3]["text"], "")
+        self.assertEqual(response_parts_payload["parts"][2]["text"], "")
         # 画像は選定LLMが指定したアンカーの直後へ挿入される。
         # The image is inserted immediately after the anchor specified by the selector LLM.
         persisted_parts = persisted_records[0]["message_parts"]
         self.assertEqual(
             [part["type"] for part in persisted_parts],
-            ["text", "text", "web_search_image", "text"],
+            ["answer_trace", "text", "web_search_image", "text"],
         )
-        self.assertTrue(
-            persisted_parts[0]["text"].startswith(
-                '<details class="web-search-sources web-search-sources--trace">'
-            )
-        )
+        self.assertEqual(persisted_parts[0], _sse_payloads(events, "done")[0]["parts"][0])
         self.assertIn("京都の紅葉", persisted_parts[1]["text"])
-        self.assertNotIn("回答までのステップ", persisted_parts[3]["text"])
         self.assertIn("名所です。", persisted_parts[3]["text"])
         mock_image.assert_called_once()
         self.assertNotIn("model", mock_image.call_args.kwargs)
@@ -1888,22 +1968,23 @@ class ChatStreamingTestCase(unittest.TestCase):
         revealed, settled = parts_updates
         self.assertEqual(
             [part["type"] for part in settled["parts"]],
-            ["text", "text", "web_search_image", "text", "interactive_buttons"],
+            ["text", "web_search_image", "text", "interactive_buttons"],
         )
-        self.assertEqual(settled["parts"][:3], revealed["parts"][:3])
-        self.assertEqual(settled["parts"][4]["buttons"], buttons)
+        self.assertEqual(settled["parts"][:2], revealed["parts"][:2])
+        self.assertEqual(settled["parts"][3]["buttons"], buttons)
         self.assertNotIn("chatcore-buttons", settled["response"])
         self.assertNotIn("chatcore-buttons", "".join(part.get("text", "") for part in settled["parts"]))
         # 完了時の保存は従来どおり、画像とボタンの両方を持つ。
         # The persisted answer keeps both, as before.
         self.assertEqual(len(persisted_records), 1)
         persisted_types = [part["type"] for part in persisted_records[0]["message_parts"]]
+        self.assertEqual(persisted_types[0], "answer_trace")
         self.assertIn("web_search_image", persisted_types)
         self.assertEqual(persisted_types[-1], "interactive_buttons")
 
     # 日本語: 選択した参照（メモ・記憶・共有プロンプト）の検索が、「回答までのステップ」として応答に追加されることを検証します。
     # English: Verify lookups of selected references (memos, Memory, shared prompts) are appended to the reply as answer steps.
-    def test_background_generation_job_appends_selected_reference_steps(self):
+    def test_background_generation_job_records_selected_reference_steps(self):
         persisted_messages = []
         selected_trace = [
             SelectedReferenceLookupTrace(
@@ -1934,12 +2015,13 @@ class ChatStreamingTestCase(unittest.TestCase):
 
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
-        self.assertIn("メモと記憶を検索", body)
-        self.assertIn("共有プロンプトを検索", persisted_messages[0])
-        self.assertIn(
-            '<span class="web-search-sources__count">3ステップ</span>',
-            persisted_messages[0],
+        (trace_event,) = _sse_payloads(body, "answer_trace_updated")
+        self.assertEqual(
+            [step["title"] for step in trace_event["trace"]["steps"]],
+            ["メモと記憶を検索", "共有プロンプトを検索", "回答を作成"],
         )
+        self.assertEqual(_sse_payloads(body, "done")[0]["parts"][0], {"type": "answer_trace", **trace_event})
+        self.assertEqual(persisted_messages, ["回答本文"])
 
 
     # 日本語: モデルが真似て書いた出典チップHTMLを表示・保存の双方から取り除き、正規のmarkerだけをチップ化することを検証します。
@@ -2414,38 +2496,36 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(mock_search.call_args_list[0].kwargs["search_language"], "")
         self.assertEqual(mock_search.call_args_list[1].kwargs["search_language"], "en")
         self.assertIn("検索結果を踏まえた回答", body)
-        self.assertIn("https://example.com/python", persisted_messages[0])
-        self.assertIn("https://example.com/release", persisted_messages[0])
-        # 1回目も追加検索も、それぞれ自分の検索語と参照Webサイトを展開できる
-        self.assertIn('<span class="web-search-sources__step-title">Web検索</span>', persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__step-query">Python latest news</span>', persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__step-title">追加検索</span>', persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__step-query">Python release details</span>', persisted_messages[0])
-        # 1回目・追加検索の2ステップに加えて、リンクをたどって読んだページも展開できる
-        self.assertEqual(
-            persisted_messages[0].count('<span class="web-search-sources__step-toggle-label">参照したWebサイト</span>'),
-            3,
-        )
-        self.assertIn('<span class="web-search-sources__count">6ステップ</span>', persisted_messages[0])
+        (trace_event,) = _sse_payloads(body, "answer_trace_updated")
+        trace = trace_event["trace"]
+        steps = trace["steps"]
+        self.assertEqual(len(steps), 6)
+        # 1回目も追加検索も、それぞれ自分の検索語と参照Webサイトを持つ
+        # The first search and the follow-up each carry their own query and referenced websites.
+        searches = {step["title"]: step for step in steps if step["kind"] == "search"}
+        self.assertEqual(searches["Web検索"]["query"], "Python latest news")
+        self.assertEqual(searches["追加検索"]["query"], "Python release details")
+        self.assertIn("https://example.com/python", [source["url"] for source in searches["Web検索"]["sources"]])
+        self.assertIn("https://example.com/release", [source["url"] for source in searches["追加検索"]["sources"]])
+        # 1回目・追加検索の2ステップに加えて、リンクをたどって読んだページも出典を持つ
+        # Besides the two search steps, the pages read by following links carry sources too.
+        self.assertEqual(len([step for step in steps if step["sources"]]), 3)
         # リンクをたどったことが専用ステップとして「回答までのステップ」に出る
-        self.assertIn(
-            '<span class="web-search-sources__step-title">リンクをたどって深掘り</span>',
-            persisted_messages[0],
+        # Following links shows up as a step of its own.
+        (deep_index,) = [index for index, step in enumerate(steps) if step["title"] == "リンクをたどって深掘り"]
+        deep = steps[deep_index]
+        self.assertEqual(deep["badge"], "1件・最大1階層")
+        self.assertEqual(
+            [(source["linked_from"], source["link_depth"]) for source in deep["sources"]],
+            [("example.com", 1)],
         )
-        self.assertIn(
-            '<span class="web-search-sources__step-badge">1件・最大1階層</span>',
-            persisted_messages[0],
-        )
-        self.assertIn(
-            '<span class="web-search-sources__depth">example.com から1階層先</span>',
-            persisted_messages[0],
-        )
-        self.assertIn("リンク深掘りあり", persisted_messages[0])
+        self.assertIn("リンク深掘りあり", trace["summary"])
         # 深掘りステップは、それを行った追加検索の直後・その結果の確認より前に置く
-        trace = persisted_messages[0]
-        deep_index = trace.index("リンクをたどって深掘り")
-        self.assertLess(trace.index("追加検索"), deep_index)
-        self.assertLess(deep_index, trace.index("検索結果を確認", deep_index))
+        # The deep-read step sits right after the follow-up search that did it, ahead of that search's review.
+        titles = [step["title"] for step in steps]
+        self.assertLess(titles.index("追加検索"), deep_index)
+        self.assertLess(deep_index, titles.index("検索結果を確認", deep_index))
+        self.assertEqual(persisted_messages, ["検索結果を踏まえた回答"])
 
     # 日本語: モデルが追加検索を要求した場合、ツール呼び出しを含む中間本文を表示せず、
     # ツール呼び出しがなくなった最終ステップの回答だけを検索後にクライアントへ届けることを検証します。
@@ -2901,9 +2981,10 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(mock_search.call_args.kwargs["search_language"], "")
         self.assertEqual(mock_search.call_args.kwargs["page_fetch_budget"].max_attempts, 10)
         self.assertIn('"cached": true', body)
-        self.assertIn('<span class="web-search-sources__step-title">検索結果を再利用</span>', persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__step-query">OpenAI news</span>', persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__count">5ステップ</span>', persisted_messages[0])
+        (trace_event,) = _sse_payloads(body, "answer_trace_updated")
+        steps = trace_event["trace"]["steps"]
+        self.assertEqual(len(steps), 5)
+        self.assertIn(("reuse", "検索結果を再利用", "OpenAI news"), [(step["kind"], step["title"], step["query"]) for step in steps])
 
     # 日本語: 生成ジョブのツール実行ループが、規定の最大ステップ数(CHAT_AGENT_MAX_STEPS)で正しく停止することを検証します。
     # English: Verify that the tool execution loop of the generation job stops at the maximum step count.
@@ -3984,9 +4065,11 @@ class ChatStreamingTestCase(unittest.TestCase):
         )
         self.assertEqual(history_payload["messages"][-1]["message"], "完了")
 
-    # 日本語: 再生成(regenerate)時、過去にアップロードされた添付ファイル内容が再度LLMに入力されることを検証します。
-    # English: Verify that regeneration reinjects previously saved attachment contents into the LLM context.
-    def test_regenerate_reinjects_saved_attachment_contents_for_llm(self):
+    # 日本語: 参照元（メモ・記憶と共有プロンプト）を選んだ非ストリーミングの再生成を実行し、応答と、
+    # モデルへ渡した会話を返します。
+    # English: Run a non-streaming regeneration with both reference sources selected; returns the payload
+    # and the conversation sent to the model.
+    def _regenerate_with_selected_references(self, reply):
         captured_messages = {}
         request = build_request(
             method="POST",
@@ -4002,7 +4085,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         def get_llm_response(messages, model):
             captured_messages["messages"] = messages
-            return "new answer"
+            return reply
 
         with (
             patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
@@ -4055,16 +4138,34 @@ class ChatStreamingTestCase(unittest.TestCase):
         ):
             response = asyncio.run(chat_regenerate(request))
 
-        payload = json.loads(response.body.decode("utf-8"))
-        self.assertTrue(payload["response"].endswith("new answer"))
-        self.assertIn("メモと記憶を検索", payload["response"])
-        self.assertIn("共有プロンプトを検索", payload["response"])
+        return json.loads(response.body.decode("utf-8")), captured_messages, personal_search, shared_search
+
+    # 日本語: 再生成(regenerate)時、過去にアップロードされた添付ファイル内容が再度LLMに入力されることを検証します。
+    # English: Verify that regeneration reinjects previously saved attachment contents into the LLM context.
+    def test_regenerate_reinjects_saved_attachment_contents_for_llm(self):
+        payload, captured_messages, personal_search, shared_search = self._regenerate_with_selected_references("new answer")
+
+        self.assertEqual(payload["response"], "new answer")
+        self.assertEqual(
+            [step["title"] for step in payload["parts"][0]["trace"]["steps"]],
+            ["メモと記憶を検索", "共有プロンプトを検索", "回答を作成"],
+        )
+        self.assertEqual(payload["parts"][1:], [{"type": "text", "text": "new answer"}])
         contents = [message["content"] for message in captured_messages["messages"]]
         self.assertTrue(any("PDF BODY" in content for content in contents))
         self.assertFalse(any("old answer" in content for content in contents))
         self.assertTrue(any("要約方針" in content and "要約テンプレ" in content for content in contents))
         personal_search.assert_awaited_once_with(42, "要約して")
         shared_search.assert_awaited_once_with("要約して")
+
+    # 日本語: 再生成の応答に本文もパーツも無ければ、参照検索のステップだけを回答として残さないことを検証します。
+    # English: Verify a regenerated reply with neither body nor parts does not keep the reference-lookup
+    # steps as its answer.
+    def test_regenerate_without_a_body_keeps_no_execution_record(self):
+        payload, _messages, _personal_search, _shared_search = self._regenerate_with_selected_references("")
+
+        self.assertEqual(payload["response"], "")
+        self.assertNotIn("parts", payload)
 
     # 日本語: 再生成エンドポイントのテストが共有する、DB／LLM境界の差し替え一式を返します。
     # English: The shared DB/LLM boundary patches the regenerate endpoint tests reuse.
@@ -4548,8 +4649,9 @@ class ChatStreamingTestCase(unittest.TestCase):
             response = asyncio.run(chat_edit_and_regenerate(request))
 
         payload = json.loads(response.body.decode("utf-8"))
-        self.assertTrue(payload["response"].endswith("edited answer"))
-        self.assertIn("メモと記憶を検索", payload["response"])
+        self.assertEqual(payload["response"], "edited answer")
+        self.assertEqual(payload["parts"][0]["type"], "answer_trace")
+        self.assertEqual(payload["parts"][0]["trace"]["steps"][0]["title"], "メモと記憶を検索")
         contents = [message["content"] for message in captured_messages["messages"]]
         self.assertTrue(any("PDF BODY" in content for content in contents))
         self.assertTrue(any("文章方針" in content for content in contents))

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "summary": "メモ検索あり",
+  "steps": [
+    {
+      "id": "s1",
+      "kind": "knowledge",
+      "status": "done",
+      "title": "保存済みのメモと記憶を確認",
+      "detail": "検索条件に一致するものは無かったため、最近のメモと記憶の内容を3件読み込み、回答の材料にしました。",
+      "query": "今月の目標",
+      "badge": "3件",
+      "chips": [
+        "最近のメモ 3件"
+      ],
+      "sources": []
+    },
+    {
+      "id": "s2",
+      "kind": "answer",
+      "status": "done",
+      "title": "回答を作成",
+      "detail": "会話の文脈をもとに回答を作成しました。",
+      "query": "",
+      "badge": "",
+      "chips": [],
+      "sources": []
+    }
+  ]
+}

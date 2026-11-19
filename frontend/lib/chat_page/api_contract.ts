@@ -30,6 +30,7 @@ import {
 import { ToolApprovalApiSchema, type ToolApprovalApi } from "../../types/generated/api_schemas";
 import { getStructuredUiDeclaredChartPointCount, getStructuredUiRuntime, parseStructuredUiV1 } from "./structured_ui_contract";
 import { mergeUniqueChatRooms } from "./home_page_controller_utils";
+import { normalizeAnswerTrace } from "./answer_trace";
 import { normalizeMessagePartsForDisplay } from "./message_parts_display";
 import { getStreamingGenerativeUiDisplayText, sanitizeTextPartsForStreaming } from "./generative_ui_stream";
 import { asRecord } from "../utils";
@@ -316,6 +317,18 @@ export function normalizeChatMessageParts(
     if (part.type === "text") {
       const text = optionalString(part.text);
       if (text !== undefined) parts.push({ type: "text", text });
+      return;
+    }
+    if (part.type === "answer_trace") {
+      const trace = normalizeAnswerTrace(part.trace);
+      if (trace) parts.push({ type: "answer_trace", trace });
+      return;
+    }
+    if (part.type === "legacy_answer_trace") {
+      // 表示用 HTML は本文と同じサニタイズを通して描くので、ここでは文字列であることだけを確かめる。
+      // The display HTML is drawn through the same sanitizer as prose, so only its being a string is checked here.
+      const html = optionalString(part.html);
+      if (html?.trim()) parts.push({ type: "legacy_answer_trace", html });
       return;
     }
     if (part.type === "sandbox_artifact") {
