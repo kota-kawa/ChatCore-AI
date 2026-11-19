@@ -1,9 +1,12 @@
-"""LLM が会話から自動抽出した個人コンテキスト候補のレビューキュー用ユースケース。
+"""LLM が会話から自動抽出した記憶（個人コンテキストの事実）のユースケース。
 
-候補の保存・一覧・承認・却下と、抽出機能の ON/OFF 設定を扱う。
+抽出結果の保存（空きがあれば未確認の事実として直接保存し、上限で入らない分は承認待ち候補へ）、
+候補の一覧・承認・却下、抽出機能の ON/OFF 設定を扱う。
 
-Review-queue use cases for automatically extracted context facts.
-Covers storing, listing, approving and rejecting candidates, plus the extraction opt-in setting.
+Use cases for memory (personal-context facts) that the LLM extracts from conversations.
+Covers storing extraction results (saved directly as unconfirmed facts while there is room, the rest queued
+as pending candidates), listing/approving/rejecting candidates,
+and the extraction setting.
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ from services.db import is_retryable_db_error, session_scope
 from services.error_messages import ERROR_CONTEXT_FACT_CANDIDATE_CURSOR_INVALID
 from services.repositories.context_fact_candidate_repository import (
     ContextFactCandidateRepository,
+    ExtractedStoreResult,
 )
 from services.request_models import (
     DEFAULT_CONTEXT_FACT_IMPORTANCE,
@@ -159,18 +163,22 @@ def _fingerprint(candidate: _ExtractedCandidateInput) -> str:
     return sha256(canonical.encode("utf-8")).hexdigest()
 
 
-async def store_extracted_candidates(
+async def store_extracted_facts(
     user_id: int,
     *,
     candidates: list[dict[str, Any]],
     source_ref: str,
     session: AsyncSession | None = None,
-) -> int:
-    """LLM が抽出した事実を検証し、抽出を許可しているユーザーの候補キューへ重複なく登録する。
-    検証に通らない候補は黙って捨て、登録できた件数を返す。
+) -> ExtractedStoreResult:
+    """LLM が抽出した内容を検証し、抽出を許可しているユーザーの記憶として重複なく保存する。
+    有効な事実に空きがある分は本人未確認の事実として直接保存し（保存後に埋め込みを予約する）、
+    空きが無い分だけ承認待ち候補へ入れる。検証に通らない候補は黙って捨てる。
+    session を渡した場合、埋め込みの予約はコミット後に呼び出し側が行う。
 
-    Validate and enqueue unique LLM-extracted facts for an opted-in owner.
-    Invalid candidates are silently skipped; returns how many were stored.
+    Validate LLM-extracted content and store it as unique memory for an opted-in owner.
+    What fits under the active-fact cap is saved directly as unconfirmed facts (embeddings are scheduled after
+    the commit); only the overflow is queued as pending candidates. Invalid candidates are silently skipped.
+    With a caller-supplied session, the caller schedules embeddings after its own commit.
     """
     normalized_source_ref = source_ref.strip()[:500] or None
     prepared: list[dict[str, Any]] = []
@@ -194,15 +202,25 @@ async def store_extracted_candidates(
             }
         )
     if not prepared:
-        return 0
+        return ExtractedStoreResult([], 0)
 
-    async def operation(db: AsyncSession) -> int:
+    async def operation(db: AsyncSession) -> ExtractedStoreResult:
         repo = _repository(db)
         if not await repo.get_extraction_settings(user_id):
-            return 0
-        return await repo.store_candidates(user_id, prepared)
+            return ExtractedStoreResult([], 0)
+        return await repo.store_extracted(user_id, prepared)
 
-    return await _transaction(session, operation)
+    result = await _transaction(session, operation)
+    if session is None:
+        for fact in result.saved_facts:
+            schedule_embedding(
+                int(fact["id"]),
+                str(fact["fact_type"]),
+                str(fact["title"]),
+                str(fact["content"]),
+                int(fact["revision"]),
+            )
+    return result
 
 
 # カーソルは「作成日時~ID」形式。最後の区切りで分割するので、日時側に区切り文字が含まれても壊れない。

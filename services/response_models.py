@@ -416,7 +416,7 @@ class ContextFactCandidateApprovalResponse(ResponsePayloadModel):
 # 日本語: 会話からの事実の自動抽出が有効かどうか。
 # English: Whether automatic fact extraction from conversations is enabled.
 class ContextExtractionSettingsResponse(ResponsePayloadModel):
-    enabled: bool = False
+    enabled: bool = True
 
 
 # 日本語: fact_type ごとにまとめた active な事実のグループ。

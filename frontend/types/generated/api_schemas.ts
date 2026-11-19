@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 4f1fcff4dc9332110cc58cb9f8096dcfe0cf981a0ebb026029b90fc2710d8dd3
+// Schema fingerprint: 845b673964a1ea7ac58151e588b5c522245b59988225bc2692850ce65da3b1e6
 
 import { z } from "zod";
 
@@ -260,7 +260,7 @@ export type ContextFactCandidateListResponse = z.infer<typeof ContextFactCandida
 export const ContextFactCandidateApprovalResponseSchema = z.object({ "candidate": z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("chat"), "source_ref": z.union([z.string(), z.null()]).default(null), "importance": z.number().int().gte(0).lte(100).default(50), "confidence": z.number().gte(0).lte(1).default(0), "status": z.enum(["pending","approved","rejected"]), "revision": z.number().int().gte(1), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any()), "fact": z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "status": z.enum(["active","deprecated"]), "revision": z.number().int(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("manual"), "importance": z.number().int().gte(0).lte(100).default(50), "confidence": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "last_confirmed_at": z.union([z.string(), z.null()]).default(null), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any()) }).catchall(z.any());
 export type ContextFactCandidateApprovalResponse = z.infer<typeof ContextFactCandidateApprovalResponseSchema>;
 
-export const ContextExtractionSettingsResponseSchema = z.object({ "enabled": z.boolean().default(false) }).catchall(z.any());
+export const ContextExtractionSettingsResponseSchema = z.object({ "enabled": z.boolean().default(true) }).catchall(z.any());
 export type ContextExtractionSettingsResponse = z.infer<typeof ContextExtractionSettingsResponseSchema>;
 
 export const ContextDigestGroupSchema = z.object({ "fact_type": z.string(), "facts": z.array(z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "status": z.enum(["active","deprecated"]), "revision": z.number().int(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("manual"), "importance": z.number().int().gte(0).lte(100).default(50), "confidence": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "last_confirmed_at": z.union([z.string(), z.null()]).default(null), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())).optional() }).catchall(z.any());
