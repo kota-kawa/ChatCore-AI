@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from services.answer_trace import ANSWER_TRACE_PART_TYPE, LEGACY_ANSWER_TRACE_PART_TYPE, answer_trace_part
 from services.generative_ui_escaping import repair_over_escaped_sources
 from services.generative_ui_images import (
     GenerativeUiImageV1,
@@ -70,6 +71,7 @@ from services.llm import LlmOutputLimitError
 from services.message_parts_display import (
     MAX_WEB_SEARCH_IMAGES_PER_REPLY,
     normalize_message_parts_for_display,
+    read_legacy_answer_trace_part,
     strip_web_search_sources_html,
 )
 from services.structured_ui import buttons_as_text as _buttons_as_text
@@ -1445,6 +1447,16 @@ def _decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
             except GenerativeUiValidationError:
                 continue
             parts.append({"type": "web_search_image", "image": image})
+            continue
+        if part_type == ANSWER_TRACE_PART_TYPE:
+            trace_part = answer_trace_part(part.get("trace"))
+            if trace_part:
+                parts.append(trace_part)
+            continue
+        if part_type == LEGACY_ANSWER_TRACE_PART_TYPE:
+            legacy_trace_part = read_legacy_answer_trace_part(part)
+            if legacy_trace_part:
+                parts.append(legacy_trace_part)
             continue
         if part_type == ARTIFACT_STATUS_PART_TYPE:
             status_part = normalize_artifact_status_part(part)

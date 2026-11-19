@@ -10,6 +10,7 @@ import logging
 import time
 from typing import Any
 
+from services.answer_trace import is_answer_trace_part, with_answer_trace_part
 from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
 from services.generative_ui import (
     NormalizedGenerativeResponse,
@@ -75,10 +76,10 @@ def _has_user_facing_answer(
     """Return whether a finished turn carries an answer the user can read.
 
     モデルが本文を書いたか（正規化前の生テキスト）、生成UIがあるか、承認カードがあるかで判定する。
-    正規化で本文が消えた場合は、テキストと検索画像以外のパーツがあるときだけ回答扱いにする。
+    正規化で本文が消えた場合は、テキスト・検索画像・実行記録以外のパーツがあるときだけ回答扱いにする。
     Answered means the model wrote body text (raw, before normalization), produced a generated
-    UI, or left an approval card. If normalization emptied the body, only parts other than text
-    and web-search images keep the turn answered.
+    UI, or left an approval card. If normalization emptied the body, only parts other than text,
+    web-search images and the execution record keep the turn answered.
     """
     parts = [part for part in (message_parts or []) if isinstance(part, dict)]
     # 承認カードは利用者が決める対象そのものなので、本文が無くても回答として残す。
@@ -93,6 +94,7 @@ def _has_user_facing_answer(
         return True
     return any(
         part.get("type") not in (WEB_SEARCH_IMAGE_PART_TYPE, ARTIFACT_STATUS_PART_TYPE, "text")
+        and not is_answer_trace_part(part)
         for part in parts
     )
 
@@ -485,10 +487,12 @@ class ChatGenerationFinalizationMixin(ChatGenerationJobBase):
                 fallback_text=bot_reply,
             )
 
-        # トレースを独立パーツへ分け、本文内の画像位置を維持したまま保存・配信する。
-        # Finalize the trace split while preserving inline image positions.
+        # 本文内の画像位置を維持したまま表示順を確定し、実行記録を先頭のパーツとして足す。
+        # Settle the display order while preserving inline image positions, then add the execution
+        # record as the leading part.
         if message_parts:
             message_parts = normalize_message_parts_for_display(message_parts) or None
+        message_parts = with_answer_trace_part(message_parts, bot_reply, self._answer_trace)
         # 承認カードは本文と画像の後ろ、回答の最後に置く。
         # Approval cards close the reply, after the body and the images.
         message_parts = _with_tool_approval_parts(message_parts, bot_reply, state.tool_approval_parts)

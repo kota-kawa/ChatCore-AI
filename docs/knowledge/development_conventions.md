@@ -109,7 +109,7 @@ effort: high
 | プロンプト文言 | `services/chat_prompt.py`、`services/prompt_assist.py`、`blueprints/chat/tasks.py` | `tests/unit/test_task_launch_prompting.py`、`tests/unit/test_chat_prompt_management.py`、`tests/unit/test_prompt_assist_logic.py` |
 | ツール定義 | `services/llm_tool_schema.py` | `tests/unit/test_llm_tool_schema.py` |
 | 生成ループ・予算・継続生成 | `services/chat_generation.py`、`services/chat_generation_agent_loop.py`、`services/chat_generation_llm_stream.py`、`services/chat_generation_answer_stream.py`、`services/chat_agent_budget.py`、`services/chat_answer_continuation.py`、`services/llm_context_budget.py` | `tests/unit/test_chat_generation_failure_recovery.py`、`tests/unit/test_llm_context_budget.py`、`tests/unit/test_chat_context_and_state.py` |
-| Web 検索 | `services/web_search.py`、`services/web_search_trace.py` | `tests/unit/test_web_search.py`、`tests/unit/test_web_search_trace.py` |
+| Web 検索 | `services/web_search.py`、`services/web_search_trace.py`、`services/answer_trace.py` | `tests/unit/test_web_search.py`、`tests/unit/test_web_search_trace.py`、`tests/unit/test_answer_trace.py` |
 | 生成 UI | `services/generative_ui.py`、`services/generative_ui_repair.py` | `tests/unit/test_generative_ui.py`、`tests/unit/test_generated_ui_reliability.py`、`tests/unit/test_generative_ui_contract_matches_validator.py` |
 | モデル設定・プロバイダ | `services/llm.py`、`services/llm_model_limits.py` | `tests/unit/test_llm_service.py` |
 

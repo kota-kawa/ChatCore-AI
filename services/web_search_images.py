@@ -32,7 +32,6 @@ from services.message_parts_display import (
     WEB_SEARCH_IMAGE_PART_TYPE,
     apply_visual_part_contract,
     normalize_message_parts_for_display,
-    split_answer_trace_block,
 )
 from services.tool_approval_parts import TOOL_APPROVAL_PART_TYPE
 
@@ -565,13 +564,6 @@ def build_web_search_image_parts(selections: Any) -> list[dict[str, Any]]:
     return image_parts
 
 
-# 日本語: 回答本文が始まる位置。先頭の「回答までのステップ」ブロックがあれば、その直後。
-# English: Offset where the answer body starts: right after the leading answer-trace block when present.
-def _answer_body_start(text: str) -> int:
-    trace, _ = split_answer_trace_block(text)
-    return len(trace) if trace else 0
-
-
 # 日本語: 画像パーツに入っている内部用の配置情報を読み、(位置, アンカー) を返す。不正な値は空にする。
 # English: Read the internal placement info of an image part and return (position, anchor); invalid values become empty.
 def _image_placement(image_part: dict[str, Any]) -> tuple[str, str]:
@@ -595,9 +587,7 @@ def _find_llm_image_anchor_end(
     placement, anchor = _image_placement(image_part)
     if placement != "after_subject" or not anchor:
         return None
-    body_start = _answer_body_start(text)
-    search_start = max(body_start, after_offset)
-    index = text.find(anchor, search_start)
+    index = text.find(anchor, after_offset)
     if index < 0:
         return None
     return index + len(anchor)
@@ -605,12 +595,8 @@ def _find_llm_image_anchor_end(
 
 # 日本語: 改行や句点・感嘆符・疑問符の直後を、自然な区切りの位置として列挙する。
 # English: List the offsets right after a newline or sentence-ending mark as natural boundaries.
-def _natural_text_boundaries(text: str, *, start: int = 0) -> list[int]:
-    return [
-        index + 1
-        for index, character in enumerate(text[start:], start=start)
-        if character in "\n。！？!?"
-    ]
+def _natural_text_boundaries(text: str) -> list[int]:
+    return [index + 1 for index, character in enumerate(text) if character in "\n。！？!?"]
 
 
 def find_next_streaming_image_insertion(
@@ -639,8 +625,7 @@ def find_next_streaming_image_insertion(
         return None
 
     actionable: list[tuple[int, int]] = []
-    body_start = _answer_body_start(text)
-    boundaries = _natural_text_boundaries(text, start=body_start)
+    boundaries = _natural_text_boundaries(text)
     for index in remaining:
         placement, _ = _image_placement(image_parts[index])
         anchor_end = _find_llm_image_anchor_end(
@@ -652,7 +637,7 @@ def find_next_streaming_image_insertion(
             actionable.append((anchor_end, index))
             continue
         if placement == "start":
-            actionable.append((max(_answer_body_start(text), after_offset), index))
+            actionable.append((after_offset, index))
             continue
         if placement == "after_paragraph":
             paragraph_boundaries = [
@@ -676,13 +661,13 @@ def find_next_streaming_image_insertion(
     if not unplanned:
         return None
     if not revealed:
-        return body_start, unplanned[0]
+        return 0, unplanned[0]
 
-    if len(text) - max(after_offset, body_start) < MIN_STREAMING_IMAGE_GAP_CHARS:
+    if len(text) - after_offset < MIN_STREAMING_IMAGE_GAP_CHARS:
         return None
     boundaries = [
         boundary
-        for boundary in _natural_text_boundaries(text, start=body_start)
+        for boundary in _natural_text_boundaries(text)
         if boundary > after_offset + MIN_STREAMING_IMAGE_GAP_CHARS
     ]
     return (boundaries[0] if boundaries else len(text)), unplanned[0]
@@ -697,16 +682,15 @@ def _final_image_layout(
     text: str,
     image_parts: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[int]]:
-    body_start = _answer_body_start(text)
     located: list[tuple[int, int, dict[str, Any]]] = []
     unlocated: list[tuple[int, dict[str, Any]]] = []
-    boundaries = _natural_text_boundaries(text, start=body_start)
+    boundaries = _natural_text_boundaries(text)
     paragraph_index = 0
     for index, image_part in enumerate(image_parts):
         placement, _ = _image_placement(image_part)
-        anchor_end = _find_llm_image_anchor_end(text, image_part, after_offset=body_start)
+        anchor_end = _find_llm_image_anchor_end(text, image_part)
         if anchor_end is None and placement == "start":
-            anchor_end = body_start
+            anchor_end = 0
         if (
             anchor_end is None
             and placement == "after_paragraph"
@@ -726,7 +710,7 @@ def _final_image_layout(
     ordered.extend((index, image_part, None) for index, image_part in unlocated)
 
     offsets: list[int] = []
-    previous_offset = body_start
+    previous_offset = 0
     for _, _, anchor_end in ordered:
         offset = anchor_end if anchor_end is not None and anchor_end > previous_offset else None
         if offset is None:
@@ -734,7 +718,7 @@ def _final_image_layout(
             if available_boundaries:
                 offset = available_boundaries[0]
             elif not offsets:
-                offset = body_start
+                offset = 0
             else:
                 offset = min(len(text), previous_offset + MIN_STREAMING_IMAGE_GAP_CHARS)
         offset = max(previous_offset, min(offset, len(text)))

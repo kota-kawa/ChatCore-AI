@@ -11,6 +11,7 @@
 - `docs/decisions/0015-preselect-enabled-skills.md` は設計判断の記録です。関連する実装の境界や採用条件を確認するときに参照してください。
 - `docs/decisions/0019-generation-scoped-chat-replay.md` は設計判断の記録です。関連する契約の境界や互換条件を確認するときに参照してください。
 - `docs/decisions/0022-native-and-sandbox-generated-ui.md` は設計判断の記録です。関連する契約の境界や互換条件を確認するときに参照してください。
+- `docs/decisions/0024-structured-answer-trace.md` は設計判断の記録です。関連する契約の境界や互換条件を確認するときに参照してください。
 - `docs/decisions/README.md` は重要な技術判断（ADR）の索引です。判断を変更・追加するときは、既存 ADR を確認して理由と影響を更新・記録してください。
 - `docs/manual/` は利用者向けマニュアルであり、実装の責務や内部挙動を確認する資料ではありません。
 - `frontend/STYLING_STRATEGY.md` は Next.js 側の CSS 配置・カスケード・レガシー互換方針です。UI の変更時は `ARCHITECTURE.md` のフロントエンド章と併せて参照してください。

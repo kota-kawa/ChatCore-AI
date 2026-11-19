@@ -1,6 +1,6 @@
-"""Web 検索の「回答までのステップ」トレース (services.web_search_trace) が生成する HTML のテスト。
+"""「回答までのステップ」(services.web_search_trace) の各ステップと、回答パーツ用の構造化データのテスト。
 
-Tests for the HTML produced by the web-search "steps to the answer" trace (services.web_search_trace).
+Tests for the "steps to the answer" (services.web_search_trace): each step and the structured data built for the answer part.
 """
 
 import unittest
@@ -13,8 +13,8 @@ from services.selected_reference_context import (
 from services.web_search import WebSearchResult, WebSearchSource
 
 
-# 日本語: 「回答までのステップ」トレースUIのHTML生成を検証するテストクラスです。
-# English: Test case class covering HTML generation for the answer-trace ("steps") UI.
+# 日本語: 「回答までのステップ」のステップ生成と、構造化データへのまとめ方を検証するテストクラスです。
+# English: Test case class covering step creation and how the steps are gathered into structured data.
 class WebSearchTraceTestCase(unittest.TestCase):
     def _result(self, query, hostnames, *, freshness="", page_text=""):
         # 日本語: テスト用の検索結果を組み立てるヘルパーです。
@@ -71,36 +71,50 @@ class WebSearchTraceTestCase(unittest.TestCase):
             ),
         )
 
-    # 日本語: トレースブロックが見出しとステップのタイムラインを返すことを検証します。
-    # English: Verify the trace block returns a summary and a step timeline.
-    def test_build_trace_markdown_returns_summary_and_steps(self):
+    # 日本語: 実行記録が、要約と、ID・種類・状態を持つステップの並びを返すことを検証します。
+    # English: Verify the record returns a summary and an ordered list of steps carrying id, kind and status.
+    def test_build_answer_trace_returns_summary_and_steps(self):
         result = self._result("Python news", ["example.com"])
 
-        block = trace.build_web_search_trace_markdown(
-            steps=[trace.search_step(result), trace.review_step(result)]
+        record = trace.build_answer_trace(steps=[trace.search_step(result), trace.review_step(result)])
+
+        self.assertEqual(record["version"], 1)
+        self.assertEqual(record["summary"], "Web検索1回 · 参照サイト1件")
+        self.assertEqual(
+            [(step["id"], step["kind"], step["status"], step["title"]) for step in record["steps"]],
+            [("s1", "search", "done", "Web検索"), ("s2", "review", "done", "検索結果を確認")],
         )
 
-        self.assertIn('<details class="web-search-sources web-search-sources--trace">', block)
-        self.assertIn('<span class="web-search-sources__label">回答までのステップ</span>', block)
-        self.assertIn('<span class="web-search-sources__count">2ステップ</span>', block)
-        self.assertIn(
-            '<span class="web-search-sources__summary-detail">Web検索1回 · 参照サイト1件</span>',
-            block,
-        )
-        self.assertIn('<ol class="web-search-sources__steps">', block)
-        self.assertIn('<span class="web-search-sources__step-title">検索結果を確認</span>', block)
-        self.assertIn('<i class="bi bi-search"></i>', block)
-        self.assertNotIn('<details class="web-search-sources__step-details" open', block)
+    # 日本語: 出典 1 件が、リンク・favicon・頭文字・たどった階層を描ける形で渡ることを検証します。
+    # English: Verify one source is handed over with what the screen needs: link, favicon, initial and followed depth.
+    def test_source_carries_link_favicon_and_depth(self):
+        record = trace.build_answer_trace(steps=[trace.deep_read_step(self._followed_result())])
 
-    # 日本語: 空行を挟まないことで、Markdown内のHTMLブロックが途切れないことを検証します。
-    # English: Verify no blank line is emitted so the HTML block survives Markdown rendering.
-    def test_build_trace_markdown_never_emits_blank_lines(self):
-        block = trace.build_web_search_trace_markdown(
-            steps=[trace.answer_step([])],
+        self.assertEqual(
+            record["steps"][0]["sources"],
+            [
+                {
+                    "url": "https://child.example/article",
+                    "title": "child.example の記事",
+                    "hostname": "child.example",
+                    # 出典が固有の favicon を持たないときは、サイト直下のものへ解決する。
+                    # A source without a favicon of its own resolves to the one at the site root.
+                    "favicon_url": "https://child.example/favicon.ico",
+                    "fallback_label": "C",
+                    "link_depth": 1,
+                    "linked_from": "root.example",
+                },
+                {
+                    "url": "https://grand.example/article",
+                    "title": "grand.example の記事",
+                    "hostname": "grand.example",
+                    "favicon_url": "https://grand.example/favicon.ico",
+                    "fallback_label": "G",
+                    "link_depth": 2,
+                    "linked_from": "child.example",
+                },
+            ],
         )
-
-        self.assertTrue(block)
-        self.assertNotIn("\n\n", block)
 
     # 日本語: 追加検索も1回目と同じように出典を展開できることを検証します。
     # English: Verify a follow-up search expands its own sources just like the first one.
@@ -108,24 +122,21 @@ class WebSearchTraceTestCase(unittest.TestCase):
         first = self._result("Python news", ["first.example"])
         second = self._result("Python release", ["second.example", "third.example"])
 
-        block = trace.build_web_search_trace_markdown(
+        record = trace.build_answer_trace(
             steps=[
                 trace.search_step(first),
                 trace.search_step(second, additional=True),
             ]
         )
 
-        self.assertEqual(block.count('<details class="web-search-sources__step-details">'), 2)
-        self.assertEqual(block.count('<div class="web-search-sources__step-body">'), 2)
+        self.assertEqual([step["title"] for step in record["steps"]], ["Web検索", "追加検索"])
         self.assertEqual(
-            block.count('<span class="web-search-sources__step-toggle-label">参照したWebサイト</span>'),
-            2,
+            [[source["url"] for source in step["sources"]] for step in record["steps"]],
+            [
+                ["https://first.example/article"],
+                ["https://second.example/article", "https://third.example/article"],
+            ],
         )
-        self.assertIn('<span class="web-search-sources__step-title">Web検索</span>', block)
-        self.assertIn('<span class="web-search-sources__step-title">追加検索</span>', block)
-        self.assertIn("https://first.example/article", block)
-        self.assertIn("https://second.example/article", block)
-        self.assertIn('<span class="web-search-sources__step-toggle-count">2件</span>', block)
 
     # 日本語: ステップに検索語・件数・ドメインチップが表示されることを検証します。
     # English: Verify a step surfaces its query, result count, and domain chips.
@@ -136,15 +147,14 @@ class WebSearchTraceTestCase(unittest.TestCase):
             freshness="pw",
         )
 
-        block = trace.build_web_search_trace_markdown(steps=[trace.search_step(result)])
+        step = trace.build_answer_trace(steps=[trace.search_step(result)])["steps"][0]
 
-        self.assertIn('<span class="web-search-sources__step-query">Python 3.13</span>', block)
-        self.assertIn('<span class="web-search-sources__step-badge">4件</span>', block)
-        self.assertIn('<span class="web-search-sources__step-chip">a.example</span>', block)
+        self.assertEqual(step["query"], "Python 3.13")
+        self.assertEqual(step["badge"], "4件")
         # 上限を超えたドメインは「+N」に畳む
         # Domains beyond the display limit are collapsed into a "+N" chip.
-        self.assertIn('<span class="web-search-sources__step-chip">+1</span>', block)
-        self.assertIn("1週間以内の情報に絞り込んで", block)
+        self.assertEqual(step["chips"], ["a.example", "b.example", "c.example", "+1"])
+        self.assertIn("1週間以内の情報に絞り込んで", step["detail"])
 
     # 日本語: 本文まで読めたときだけ精読ステップを出すことを検証します。
     # English: Verify the page-read step appears only when page text was retrieved.
@@ -207,25 +217,38 @@ class WebSearchTraceTestCase(unittest.TestCase):
 
         self.assertEqual([step.kind for step in steps], ["read", "follow"])
 
-    # 日本語: 深掘りしたページに、辿り元と深さの表示が付くことを検証します。
-    # English: Verify followed pages render their origin and depth in the source list.
-    def test_followed_sources_render_depth_marker(self):
-        block = trace.build_web_search_trace_markdown(
-            steps=[trace.deep_read_step(self._followed_result())]
+    # 日本語: たどり元が分からなくても階層は渡し、たどり元は空にすることを検証します。
+    # English: Verify the depth is still handed over when the origin is unknown, with the origin left empty.
+    def test_followed_source_without_a_known_origin_keeps_its_depth(self):
+        result = WebSearchResult(
+            query="x",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://child.example/b",
+                    title="Child",
+                    hostname="child.example",
+                    age="",
+                    snippets=(),
+                    page_text="body",
+                    link_depth=1,
+                    linked_from_url="",
+                ),
+            ),
         )
 
-        self.assertIn(
-            '<span class="web-search-sources__depth">root.example から1階層先</span>',
-            block,
-        )
-        self.assertIn(
-            '<span class="web-search-sources__depth">child.example から2階層先</span>',
-            block,
-        )
-        self.assertEqual(block.count('<li class="web-search-sources__item--followed"'), 0)
+        source = trace.build_answer_trace(steps=[trace.deep_read_step(result)])["steps"][0]["sources"][0]
+
+        self.assertEqual((source["link_depth"], source["linked_from"]), (1, ""))
+
+    # 日本語: 検索結果のページ自体には、たどり元と階層を付けないことを検証します。
+    # English: Verify search-result pages themselves carry no origin and no depth.
+    def test_result_pages_carry_no_followed_depth(self):
+        record = trace.build_answer_trace(steps=[trace.page_read_step(self._followed_result())])
+
         self.assertEqual(
-            block.count('<li class="web-search-sources__item web-search-sources__item--followed">'),
-            2,
+            [(source["link_depth"], source["linked_from"]) for source in record["steps"][0]["sources"]],
+            [(0, "")],
         )
 
     # 日本語: 深掘りの有無が折りたたみ時のサマリにも出ること、
@@ -234,18 +257,14 @@ class WebSearchTraceTestCase(unittest.TestCase):
     def test_summary_mentions_deep_exploration_and_counts_sources_once(self):
         result = self._followed_result()
 
-        block = trace.build_web_search_trace_markdown(
+        record = trace.build_answer_trace(
             steps=[
                 trace.search_step(result),
                 *trace.page_reading_steps(result),
             ]
         )
 
-        self.assertIn(
-            '<span class="web-search-sources__summary-detail">'
-            "Web検索1回 · 参照サイト3件 · 本文精読あり · リンク深掘りあり</span>",
-            block,
-        )
+        self.assertEqual(record["summary"], "Web検索1回 · 参照サイト3件 · 本文精読あり · リンク深掘りあり")
 
     # 日本語: 再利用ステップが専用の見出しとアイコン種別になることを検証します。
     # English: Verify a reused search renders with its own title and kind.
@@ -258,20 +277,20 @@ class WebSearchTraceTestCase(unittest.TestCase):
         self.assertEqual(step.title, "検索結果を再利用")
         self.assertIsNotNone(step.sources)
 
-    # 日本語: 検索失敗のステップが警告表示になることを検証します。
-    # English: Verify a failed search renders as a warning step.
-    def test_failed_search_step_uses_warning_kind(self):
-        block = trace.build_web_search_trace_markdown(
+    # 日本語: 検索失敗のステップが、警告の種類かつ失敗の状態で渡ることを検証します。
+    # English: Verify a failed search is handed over with the warning kind and the failed status.
+    def test_failed_search_step_is_a_failed_warning(self):
+        step = trace.build_answer_trace(
             steps=[trace.search_failed_step("Python news", reason="上限に達しました。")]
-        )
+        )["steps"][0]
 
-        self.assertIn("web-search-sources__step-marker--warning", block)
-        self.assertIn("上限に達しました。", block)
+        self.assertEqual((step["kind"], step["status"]), ("warning", "failed"))
+        self.assertEqual(step["detail"], "上限に達しました。")
 
     # 日本語: 選択した参照元 (メモ・記憶・共有プロンプト) の検索ステップが、件数と検索の種類を表示することを検証します。
     # English: Verify selected-reference lookup steps (memos, Memory, shared prompts) show counts and the type of search.
     def test_selected_reference_steps_show_counts_and_search_types(self):
-        block = trace.build_web_search_trace_markdown(
+        record = trace.build_answer_trace(
             steps=[
                 trace.selected_reference_step(
                     PERSONAL_KNOWLEDGE_SOURCE,
@@ -286,18 +305,11 @@ class WebSearchTraceTestCase(unittest.TestCase):
             ]
         )
 
-        self.assertIn("web-search-sources__step--knowledge", block)
-        self.assertIn('<i class="bi bi-journal-text"></i>', block)
-        self.assertIn("メモと記憶を検索", block)
-        self.assertIn("メモ 2件", block)
-        self.assertIn("記憶 1件", block)
-        self.assertIn("web-search-sources__step--prompt", block)
-        self.assertIn('<i class="bi bi-card-text"></i>', block)
-        self.assertIn("共有プロンプトを検索", block)
-        self.assertIn(
-            "メモ検索あり · 共有プロンプト検索あり",
-            block,
-        )
+        knowledge, prompt = record["steps"]
+        self.assertEqual((knowledge["kind"], knowledge["title"]), ("knowledge", "メモと記憶を検索"))
+        self.assertEqual(knowledge["chips"], ["メモ 2件", "記憶 1件"])
+        self.assertEqual((prompt["kind"], prompt["title"]), ("prompt", "共有プロンプトを検索"))
+        self.assertEqual(record["summary"], "メモ検索あり · 共有プロンプト検索あり")
 
     # 日本語: 参照元の検索に失敗したときは警告ステップになることを検証します。
     # English: Verify a failed reference lookup becomes a warning step.
@@ -314,52 +326,52 @@ class WebSearchTraceTestCase(unittest.TestCase):
     # 日本語: dict形式の旧ステップも受け付け、種別を推定することを検証します。
     # English: Verify legacy dict steps are accepted and their kind inferred.
     def test_legacy_dict_steps_are_supported(self):
-        block = trace.build_web_search_trace_markdown(
-            steps=[{"title": "回答を作成", "detail": "まとめました。"}]
-        )
+        step = trace.build_answer_trace(steps=[{"title": "回答を作成", "detail": "まとめました。"}])["steps"][0]
 
-        self.assertIn('<span class="web-search-sources__step-title">回答を作成</span>', block)
-        self.assertIn("web-search-sources__step--answer", block)
+        self.assertEqual((step["title"], step["kind"]), ("回答を作成", "answer"))
 
     # 日本語: 画面名を「記憶」に改める前に保存された題名（メモとマイコンテキスト）も、知識ステップとして読み取ることを検証します。
     # English: Verify titles saved before the screen name became "記憶" are still read as knowledge steps.
     def test_legacy_dict_step_with_old_memory_title_keeps_knowledge_kind(self):
-        block = trace.build_web_search_trace_markdown(
+        record = trace.build_answer_trace(
             steps=[
                 {"title": "メモとマイコンテキストを検索", "detail": "保存済みの内容を読みました。"},
                 {"title": "メモと記憶を検索", "detail": "保存済みの内容を読みました。"},
             ]
         )
 
-        self.assertEqual(block.count("web-search-sources__step--knowledge"), 2)
+        self.assertEqual([step["kind"] for step in record["steps"]], ["knowledge", "knowledge"])
 
-    # 日本語: ステップに紐付かない検索結果も展開ブロックとして描画することを検証します。
-    # English: Verify sources with no owning step still render as an expandable block.
-    def test_result_without_step_sources_falls_back_to_its_own_block(self):
+    # 日本語: どのステップにも紐付かない検索結果は、出典を持つ独立したステップとして末尾に足すことを検証します。
+    # English: Verify sources with no owning step are appended as a step of their own that carries them.
+    def test_result_without_step_sources_falls_back_to_its_own_step(self):
         result = self._result("Python news", ["example.com"])
 
-        block = trace.build_web_search_trace_markdown(
+        record = trace.build_answer_trace(
             result,
             steps=[{"title": "回答を作成", "detail": "まとめました。"}],
         )
 
-        self.assertIn('<details class="web-search-sources__step-details">', block)
-        self.assertIn("https://example.com/article", block)
-        self.assertIn('<span class="web-search-sources__count">2ステップ</span>', block)
+        fallback = record["steps"][-1]
+        self.assertEqual(len(record["steps"]), 2)
+        self.assertEqual((fallback["kind"], fallback["title"], fallback["badge"]), ("search", "参照したWebサイト", "1件"))
+        self.assertEqual(fallback["detail"], "「Python news」の検索結果を回答の根拠に使いました。")
+        self.assertEqual([source["url"] for source in fallback["sources"]], ["https://example.com/article"])
+        self.assertEqual(record["summary"], "参照サイト1件")
 
-    # 日本語: ステップに出典が付いている場合はフォールバックを重複させないことを検証します。
-    # English: Verify the fallback block is skipped when a step already owns the sources.
-    def test_fallback_block_is_skipped_when_a_step_owns_sources(self):
+    # 日本語: ステップに出典が付いている場合は、独立したステップを重ねて足さないことを検証します。
+    # English: Verify no extra step is appended when a step already owns the sources.
+    def test_fallback_step_is_skipped_when_a_step_owns_sources(self):
         result = self._result("Python news", ["example.com"])
 
-        block = trace.build_web_search_trace_markdown(result, steps=[trace.search_step(result)])
+        record = trace.build_answer_trace(result, steps=[trace.search_step(result)])
 
-        self.assertEqual(block.count('<details class="web-search-sources__step-details">'), 1)
+        self.assertEqual([step["title"] for step in record["steps"]], ["Web検索"])
 
-    # 日本語: ステップのタイトル・説明・検索語をエスケープすることを検証します。
-    # English: Verify step titles, details, and queries are escaped.
-    def test_step_content_is_escaped(self):
-        block = trace.build_web_search_trace_markdown(
+    # 日本語: ステップの文字列はマークアップにせず、そのままの文字列で渡すことを検証します（エスケープは描画する側が行う）。
+    # English: Verify step strings are handed over as plain text, never as markup (escaping belongs to the renderer).
+    def test_step_content_stays_plain_text(self):
+        step = trace.build_answer_trace(
             steps=[
                 {
                     "title": "<b>Unsafe</b>",
@@ -367,51 +379,22 @@ class WebSearchTraceTestCase(unittest.TestCase):
                     "query": "<img src=x>",
                 }
             ]
-        )
+        )["steps"][0]
 
-        self.assertIn("&lt;b&gt;Unsafe&lt;/b&gt;", block)
-        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", block)
-        self.assertIn("&lt;img src=x&gt;", block)
-        self.assertNotIn("<b>Unsafe</b>", block)
+        self.assertEqual(
+            (step["title"], step["detail"], step["query"]),
+            ("<b>Unsafe</b>", "<script>alert(1)</script>", "<img src=x>"),
+        )
 
     # 日本語: 未知の種別は既定のアイコン種別へ寄せることを検証します。
     # English: Verify unknown kinds fall back to the default kind.
     def test_unknown_kind_falls_back_to_default(self):
-        block = trace.build_web_search_trace_markdown(
-            steps=[{"title": "何かの処理", "kind": "totally-unknown"}]
-        )
+        step = trace.build_answer_trace(steps=[{"title": "何かの処理", "kind": "totally-unknown"}])["steps"][0]
 
-        self.assertIn("web-search-sources__step--info", block)
-        self.assertNotIn("totally-unknown", block)
+        self.assertEqual(step["kind"], "info")
 
-    # 日本語: ステップも出典も無い場合は空文字を返すことを検証します。
-    # English: Verify an empty string is returned when there is nothing to show.
-    def test_returns_empty_without_steps_or_sources(self):
-        self.assertEqual(trace.build_web_search_trace_markdown(None, steps=[]), "")
-        self.assertEqual(trace.build_web_search_trace_markdown(None, steps=[{"title": "  "}]), "")
-
-
-# 日本語: 参照元の「棚卸し」(overview) ステップの表示を検証するテストクラスです。
-# English: Test case for how the reference "inventory" (overview) step is displayed.
-class SelectedReferenceOverviewStepTestCase(unittest.TestCase):
-    # 日本語: 棚卸しのステップは「該当なし」ではなく、渡した件数を示します。
-    # English: The inventory step reports what was handed over, not "no match".
-    def test_overview_step_reports_the_inventory_counts(self):
-        step = trace.selected_reference_step(
-            PERSONAL_KNOWLEDGE_SOURCE,
-            {
-                "status": "overview",
-                "recent_memo_count": 4,
-                "context_fact_count": 2,
-            },
-            query="今月は何をしたらいいかな？",
-        )
-
-        self.assertEqual(step.title, "保存済みのメモと記憶を確認")
-        self.assertEqual(step.badge, "6件")
-        self.assertEqual(step.chips, ("最近のメモ 4件", "記憶 2件"))
-        self.assertIn("回答の材料", step.detail)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    # 日本語: ステップも出典も無い場合は実行記録を作らないことを検証します。
+    # English: Verify no record is built when there is nothing to show.
+    def test_returns_none_without_steps_or_sources(self):
+        self.assertIsNone(trace.build_answer_trace(None, steps=[]))
+        self.assertIsNone(trace.build_answer_trace(None, steps=[{"title": "  "}]))

@@ -29,6 +29,7 @@ from services.error_messages import (
     ERROR_SHARED_LINK_NOT_FOUND,
 )
 from services.generative_ui import decode_message_parts, encode_message_parts
+from services.message_parts_display import separate_legacy_answer_trace
 from services.models import (
     ChatHistory,
     ChatRoom,
@@ -64,6 +65,26 @@ def _decode_web_search_context(raw: Any) -> list[dict[str, Any]] | None:
     if not isinstance(raw, list):
         return None
     return [item for item in raw if isinstance(item, dict)] or None
+
+
+def _read_message_content(node: dict[str, Any]) -> tuple[str, list[dict[str, Any]] | None]:
+    """保存済みメッセージの本文とパーツを読み出す。
+
+    実行記録（「回答までのステップ」）を本文の先頭へ HTML で保存していた頃の回答は、ここで本文と記録の
+    パーツへ分ける。表示・共有・モデルへ戻す履歴のどれも、この境界より後では本文だけを本文として扱える。
+    保存済みの行は書き換えない。
+
+    Read the body and parts of a stored message.
+
+    Answers saved while the execution record (the "steps to the answer") was still stored as HTML at
+    the head of the body are split into body and record part here. Display, sharing and the history
+    replayed to the model can all treat the body as prose alone past this boundary. Stored rows are
+    never rewritten.
+    """
+    parts = decode_message_parts(node.get("message_parts"))
+    if node["sender"] == "user":
+        return node["message"], parts
+    return separate_legacy_answer_trace(node["message"], parts)
 
 
 def _jsonb_value(encoded: str | None) -> Any:
@@ -692,12 +713,12 @@ class ChatRepository:
         path = self._walk_active_path(nodes, active_root_id, self._children_by_parent(nodes))
         messages: list[dict[str, Any]] = []
         for node in path:
+            message, parts = _read_message_content(node)
             entry: dict[str, Any] = {
-                "message": node["message"],
+                "message": message,
                 "sender": node["sender"],
                 "timestamp": serialize_datetime_iso(node["timestamp"]),
             }
-            parts = decode_message_parts(node.get("message_parts"))
             if parts:
                 entry["message_parts"] = parts
             messages.append(entry)
@@ -883,11 +904,11 @@ class ChatRepository:
 
         messages: list[dict[str, Any]] = []
         for node in path:
+            content, parts = _read_message_content(node)
             message: dict[str, Any] = {
                 "role": "user" if node["sender"] == "user" else "assistant",
-                "content": node["message"],
+                "content": content,
             }
-            parts = decode_message_parts(node.get("message_parts"))
             if parts:
                 message["message_parts"] = parts
             attached = decode_attached_files_from_storage(node.get("attached_file_contents"))
@@ -975,9 +996,10 @@ class ChatRepository:
             version_index = sibling_ids.index(node["id"]) + 1
         except ValueError:
             version_index = 1
+        message, parts = _read_message_content(node)
         entry: dict[str, Any] = {
             "id": node["id"],
-            "message": node["message"],
+            "message": message,
             "sender": node["sender"],
             "timestamp": serialize_datetime_iso(node["timestamp"]),
             "version_index": version_index,
@@ -987,7 +1009,6 @@ class ChatRepository:
         names = self._decode_file_names(node.get("attached_file_names"))
         if names:
             entry["attached_file_names"] = names
-        parts = decode_message_parts(node.get("message_parts"))
         if parts:
             entry["message_parts"] = parts
         images = encode_chat_images_for_storage(decode_chat_images_from_storage(node.get("attached_images")))

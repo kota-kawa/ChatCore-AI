@@ -48,7 +48,7 @@ from .web_search_images import (
 )
 from .web_search_trace import (
     answer_step,
-    build_web_search_trace_markdown,
+    build_answer_trace,
 )
 
 logger = logging.getLogger(__name__)
@@ -236,6 +236,15 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
             )
             pending_text = pending_text[relative_offset:]
 
+    # このターンの「回答までのステップ」を、回答を書いたステップを足して実行記録にまとめる。出すものが無ければ None。
+    # Gather this turn's "steps to the answer" into the execution record, adding the step that wrote
+    # the answer; None when there is nothing to show.
+    def _build_answer_trace(self, state: ChatTurnRunState) -> dict[str, Any] | None:
+        combined_web_search_result = combine_web_search_results(state.web_search_results)
+        if state.web_search_trace_steps or combined_web_search_result is not None:
+            state.web_search_trace_steps.append(answer_step(state.web_search_results))
+        return build_answer_trace(combined_web_search_result, steps=state.web_search_trace_steps)
+
     # ツール要求が無いと確定したモデルステップだけを、引用解決とUIパーツ更新込みで配信する。
     # Publish a model step only after confirming it requested no tools.
     def _publish_completed_answer_step(
@@ -250,18 +259,11 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
             if fallback is not None:
                 step_chunks = [fallback]
         chunks = state.chunks
-        for raw_chunk in step_chunks:
-            chunk = raw_chunk
-            if not chunks:
-                combined_web_search_result = combine_web_search_results(state.web_search_results)
-                if state.web_search_trace_steps or combined_web_search_result is not None:
-                    state.web_search_trace_steps.append(answer_step(state.web_search_results))
-                trace_block = build_web_search_trace_markdown(
-                    combined_web_search_result,
-                    steps=state.web_search_trace_steps,
-                )
-                if trace_block:
-                    chunk = f"{trace_block}\n\n{chunk}"
+        for chunk in step_chunks:
+            # 実行記録は、確定した本文の最初のチャンクと同時に確定する。本文には混ぜず、別のイベントで配信する。
+            # The execution record is settled together with the first confirmed chunk of the body.
+            # It is never mixed into the body and travels in an event of its own.
+            answer_trace = self._build_answer_trace(state) if not chunks else None
 
             with self._chunks_lock:
                 # cancel() が既にこのステップの本文を部分回答として保存済みなら、
@@ -273,7 +275,11 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
                 # cancel()'s own salvage.
                 if self._cancelled:
                     return
+                if answer_trace is not None:
+                    self._answer_trace = answer_trace
                 chunks.append(chunk)
+            if answer_trace is not None:
+                self._publish("answer_trace_updated", {"trace": answer_trace})
             streaming_evidence = combine_web_search_results(
                 [*state.web_search_results, *self._prior_web_search_results]
             )
@@ -488,12 +494,12 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
         本文をストリームしている最中に失敗すると、モデルが書き終えた分がバッファにしか
         存在しない。停止時はこれを保存しているのに失敗時だけ捨てていたため、エラー文
         だけが残っていた。成功時と同じ `_publish_completed_answer_step` へ載せることで、
-        トレース前置と引用解決も同じ形で適用される。
+        実行記録の配信と引用解決も同じ形で適用される。
         The body of an answer step is not published until the step is known to request no
         tools, so a failure mid-body leaves everything the model wrote in the buffer only.
         Cancellation persisted that text while failures dropped it, which is why an error
         message was all that remained. Routing it through the same
-        `_publish_completed_answer_step` keeps the trace prefix and citation resolution identical
+        `_publish_completed_answer_step` keeps the execution record and citation resolution identical
         to the success path.
         """
         self._reset_answer_draft()

@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "summary": "参照サイト1件",
+  "steps": [
+    {
+      "id": "s1",
+      "kind": "decide",
+      "status": "done",
+      "title": "検索が必要か判断",
+      "detail": "最新情報が必要なため検索します。",
+      "query": "",
+      "badge": "",
+      "chips": [],
+      "sources": []
+    },
+    {
+      "id": "s2",
+      "kind": "answer",
+      "status": "done",
+      "title": "回答を作成",
+      "detail": "1回の検索で集めた1件の情報と会話の文脈を突き合わせ、出典を示しながら回答を作成しました。",
+      "query": "",
+      "badge": "",
+      "chips": [],
+      "sources": []
+    },
+    {
+      "id": "s3",
+      "kind": "search",
+      "status": "done",
+      "title": "参照したWebサイト",
+      "detail": "「那覇 レンタカー 料金」の検索結果を回答の根拠に使いました。",
+      "query": "",
+      "badge": "1件",
+      "chips": [],
+      "sources": [
+        {
+          "url": "https://rent.example.com/naha",
+          "title": "那覇のレンタカー料金比較",
+          "hostname": "rent.example.com",
+          "favicon_url": "https://rent.example.com/favicon.ico",
+          "fallback_label": "R",
+          "link_depth": 0,
+          "linked_from": ""
+        }
+      ]
+    }
+  ]
+}

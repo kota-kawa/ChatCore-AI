@@ -1,18 +1,28 @@
-# 「回答までのステップ」UI（回答生成トレース）のデータ構造とHTML組み立てを担当する。
+# 「回答までのステップ」（回答の実行記録）の各ステップを作り、回答パーツ用の構造化データへまとめる。
 # 各ステップは自分自身が参照したソースを保持するため、1回目の検索でも追加検索でも
-# 同じように「参照したWebサイト」を展開できる。
-# Owns the data model and HTML assembly for the answer-trace UI ("steps to the answer").
-# Every step carries the sources it used, so the first search and any follow-up
-# searches all expand their own "referenced websites" panel.
+# 同じように「参照したWebサイト」を展開できる。データの形と上限は answer_trace.py、描画は画面側が持つ。
+# Builds the steps of the "steps to the answer" (the answer's execution record) and gathers them
+# into the structured data of an answer part. Every step carries the sources it used, so the first
+# search and any follow-up searches all expand their own "referenced websites" panel. The shape and
+# limits of the data belong to answer_trace.py, and rendering to the screen.
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
-from html import escape
 from typing import Any
 
-from .message_parts_display import ANSWER_TRACE_DETAILS_CLASS
+from .answer_trace import (
+    ANSWER_TRACE_STEP_KINDS,
+    ANSWER_TRACE_VERSION,
+    DEFAULT_ANSWER_TRACE_STEP_KIND,
+    STEP_BADGE_MAX_CHARS,
+    STEP_CHIP_MAX_CHARS,
+    STEP_DETAIL_MAX_CHARS,
+    STEP_QUERY_MAX_CHARS,
+    STEP_TITLE_MAX_CHARS,
+    normalize_answer_trace,
+)
 from .selected_reference_context import (
     PERSONAL_KNOWLEDGE_SOURCE,
     SelectedReferenceLookupTrace,
@@ -20,33 +30,9 @@ from .selected_reference_context import (
 from .web_search import (
     WebSearchResult,
     WebSearchSource,
-    build_web_search_source_items,
     normalize_text,
     source_hostname_label,
 )
-
-# ステップ見出し・説明文の最大文字数
-# Maximum lengths for step titles and descriptions.
-STEP_TITLE_MAX_CHARS = 120
-STEP_DETAIL_MAX_CHARS = 260
-STEP_QUERY_MAX_CHARS = 120
-
-# ステップ種別ごとのアイコン（Bootstrap Icons）。未知の種別は既定のアイコンへ寄せる。
-# Bootstrap Icons per step kind; unknown kinds fall back to the default icon.
-_STEP_ICONS: dict[str, str] = {
-    "decide": "bi-compass",
-    "search": "bi-search",
-    "reuse": "bi-arrow-repeat",
-    "read": "bi-file-earmark-text",
-    "follow": "bi-signpost-split",
-    "review": "bi-check2-circle",
-    "answer": "bi-stars",
-    "warning": "bi-exclamation-triangle",
-    "knowledge": "bi-journal-text",
-    "prompt": "bi-card-text",
-    "info": "bi-record-circle",
-}
-_DEFAULT_STEP_KIND = "info"
 
 # 旧形式（title/detailのみ）のステップから種別を推定するための接頭辞。
 # 「メモとマイコンテキスト」は画面名を「記憶」に改める前に保存された題名なので、読み取り用に残す。
@@ -90,7 +76,7 @@ class TraceStep:
 
     title: str
     detail: str = ""
-    kind: str = _DEFAULT_STEP_KIND
+    kind: str = DEFAULT_ANSWER_TRACE_STEP_KIND
     query: str = ""
     badge: str = ""
     chips: tuple[str, ...] = ()
@@ -400,7 +386,7 @@ def _infer_kind(title: str) -> str:
     for prefix, kind in _TITLE_KIND_PREFIXES:
         if title.startswith(prefix):
             return kind
-    return _DEFAULT_STEP_KIND
+    return DEFAULT_ANSWER_TRACE_STEP_KIND
 
 
 # 日本語: 文字数の上限を適用して正規化する。題名が空のステップは捨てて、未知の種別は既定の種別に寄せる。
@@ -427,139 +413,18 @@ def _coerce_step(step: Any) -> TraceStep | None:
     title = normalize_text(source.title, max_chars=STEP_TITLE_MAX_CHARS)
     if not title:
         return None
-    kind = source.kind if source.kind in _STEP_ICONS else _DEFAULT_STEP_KIND
+    kind = source.kind if source.kind in ANSWER_TRACE_STEP_KINDS else DEFAULT_ANSWER_TRACE_STEP_KIND
     return TraceStep(
         title=title,
         detail=normalize_text(source.detail, max_chars=STEP_DETAIL_MAX_CHARS),
         kind=kind,
         query=normalize_text(source.query, max_chars=STEP_QUERY_MAX_CHARS),
-        badge=normalize_text(source.badge, max_chars=24),
+        badge=normalize_text(source.badge, max_chars=STEP_BADGE_MAX_CHARS),
         chips=tuple(
-            chip for chip in (normalize_text(chip, max_chars=40) for chip in source.chips) if chip
+            chip for chip in (normalize_text(chip, max_chars=STEP_CHIP_MAX_CHARS) for chip in source.chips) if chip
         ),
         sources=source.sources,
     )
-
-
-def _render_step_marker(kind: str) -> str:
-    # タイムラインの丸印とステップ種別アイコン
-    # The timeline dot and the icon for the step kind.
-    icon = _STEP_ICONS.get(kind, _STEP_ICONS[_DEFAULT_STEP_KIND])
-    return (
-        f'<span class="web-search-sources__step-marker web-search-sources__step-marker--{escape(kind)}">'
-        f'<i class="bi {escape(icon)}"></i>'
-        "</span>"
-    )
-
-
-def _render_step_chips(chips: Iterable[str]) -> str:
-    # ステップ要約に並べるドメインチップ
-    # The domain chips shown under a step summary.
-    rendered = [
-        f'<span class="web-search-sources__step-chip">{escape(chip)}</span>' for chip in chips
-    ]
-    if not rendered:
-        return ""
-    return '<span class="web-search-sources__step-chips">' + "".join(rendered) + "</span>"
-
-
-# 日本語: ステップ本文の HTML。ユーザー由来の文字列は escape して埋め込む。
-# English: HTML of the step body; user-derived strings are escaped before embedding.
-def _render_step_main(step: TraceStep, *, toggle_count: int = 0) -> str:
-    # ステップ本文（見出し・検索語・説明・チップ・展開ボタン）を組み立てる
-    # Build the step body: heading, query, description, chips, and the expand affordance.
-    badge = (
-        f'<span class="web-search-sources__step-badge">{escape(step.badge)}</span>'
-        if step.badge
-        else ""
-    )
-    query = (
-        f'<span class="web-search-sources__step-query">{escape(step.query)}</span>'
-        if step.query
-        else ""
-    )
-    detail = (
-        f'<span class="web-search-sources__step-detail">{escape(step.detail)}</span>'
-        if step.detail
-        else ""
-    )
-    toggle = (
-        (
-            '<span class="web-search-sources__step-toggle">'
-            '<i class="bi bi-globe2"></i>'
-            '<span class="web-search-sources__step-toggle-label">参照したWebサイト</span>'
-            f'<span class="web-search-sources__step-toggle-count">{toggle_count}件</span>'
-            '<span class="web-search-sources__step-chevron"><i class="bi bi-chevron-down"></i></span>'
-            "</span>"
-        )
-        if toggle_count
-        else ""
-    )
-    return (
-        '<span class="web-search-sources__step-main">'
-        '<span class="web-search-sources__step-head">'
-        f'<span class="web-search-sources__step-title">{escape(step.title)}</span>'
-        f"{badge}"
-        "</span>"
-        f"{query}"
-        f"{detail}"
-        f"{_render_step_chips(step.chips)}"
-        f"{toggle}"
-        "</span>"
-    )
-
-
-def _render_source_panel(source_items: list[str]) -> str:
-    # ステップ内に展開される参照Webサイト一覧。
-    # 見出しは開閉ボタン側にあるため、パネル内では繰り返さない。
-    # The referenced-website list that expands inside a step; the toggle already
-    # carries the heading, so it is not repeated here.
-    return (
-        '<div class="web-search-sources__step-body">'
-        '<ul class="web-search-sources__links">' + "".join(source_items) + "</ul>"
-        "</div>"
-    )
-
-
-def _render_step(step: TraceStep, source_items: list[str]) -> str:
-    # 1ステップ分のHTMLを組み立てる。ソースを持つステップだけ展開可能にする。
-    # Render one step; only steps that carry sources become expandable.
-    marker = _render_step_marker(step.kind)
-    if not source_items:
-        return (
-            f'<li class="web-search-sources__step web-search-sources__step--{escape(step.kind)}">'
-            f"{marker}"
-            '<div class="web-search-sources__step-card">'
-            f"{_render_step_main(step)}"
-            "</div>"
-            "</li>"
-        )
-    return (
-        f'<li class="web-search-sources__step web-search-sources__step--{escape(step.kind)}'
-        ' web-search-sources__step--has-sources">'
-        f"{marker}"
-        '<details class="web-search-sources__step-details">'
-        '<summary class="web-search-sources__step-summary">'
-        f"{_render_step_main(step, toggle_count=len(source_items))}"
-        "</summary>"
-        f"{_render_source_panel(source_items)}"
-        "</details>"
-        "</li>"
-    )
-
-
-def _render_fallback_source_step(result: WebSearchResult | None, source_items: list[str]) -> str:
-    # どのステップにも紐づかなかったソースを、独立した展開ブロックとして描画する
-    # Render sources that belong to no step as a standalone expandable block.
-    query = (result.query if result is not None else "").strip()
-    step = TraceStep(
-        title="参照したWebサイト",
-        detail=f"「{query}」の検索結果を回答の根拠に使いました。" if query else "",
-        kind="search",
-        badge=f"{len(source_items)}件",
-        sources=result,
-    )
-    return _render_step(step, source_items)
 
 
 def _summary_detail(steps: Sequence[TraceStep], source_total: int) -> str:
@@ -586,81 +451,92 @@ def _summary_detail(steps: Sequence[TraceStep], source_total: int) -> str:
     return " · ".join(parts)
 
 
-# 日本語: ステップ一覧とフォールバックの全体で、参照したソースを URL の重複なしで数える。
-# English: Count the referenced sources across all steps and the fallback, deduplicated by URL.
-def _unique_source_total(
-    rendered_steps: Sequence[tuple[TraceStep, list[str]]],
-    fallback_result: WebSearchResult | None,
-    fallback_items: Sequence[str],
-) -> int:
-    # 同じソースが複数ステップの一覧に出るため、URLで重複を除いて数える
+def _trace_source(source: WebSearchSource) -> dict[str, Any] | None:
+    # 出典 1 件を、画面がリンク・favicon・たどった階層を描ける形にする。URL の無い出典は出さない。
+    # Shape one source so the screen can draw its link, favicon and followed depth; a source without a URL is skipped.
+    url = source.url.strip()
+    if not url:
+        return None
+    hostname = source.hostname.strip()
+    title = source.title.strip()
+    return {
+        "url": url,
+        "title": title or url,
+        "hostname": hostname,
+        "favicon_url": source.favicon_url.strip(),
+        "fallback_label": (hostname or title or url).removeprefix("www.")[:1].upper() or "?",
+        "link_depth": source.link_depth,
+        "linked_from": source_hostname_label(source.linked_from_url) if source.link_depth >= 1 else "",
+    }
+
+
+def _trace_sources(result: WebSearchResult | None) -> list[dict[str, Any]]:
+    if result is None:
+        return []
+    return [item for item in (_trace_source(source) for source in result.sources) if item is not None]
+
+
+def _trace_step(step: TraceStep, sources: list[dict[str, Any]]) -> dict[str, Any]:
+    # 結果を回答に使えなかったステップ（warning）は失敗として渡す。それ以外は完了済み。
+    # A step whose result could not be used (warning) is handed over as failed; every other one is done.
+    return {
+        "kind": step.kind,
+        "status": "failed" if step.kind == "warning" else "done",
+        "title": step.title,
+        "detail": step.detail,
+        "query": step.query,
+        "badge": step.badge,
+        "chips": list(step.chips),
+        "sources": sources,
+    }
+
+
+def _unique_source_total(source_lists: Iterable[Sequence[dict[str, Any]]]) -> int:
+    # 同じ出典が複数ステップに出るため、URL で重複を除いて数える
     # The same source appears under several steps, so count distinct URLs.
-    urls: set[str] = set()
-    results = [step.sources for step, source_items in rendered_steps if source_items]
-    if fallback_items:
-        results.append(fallback_result)
-    for result in results:
-        if result is None:
-            continue
-        for source in result.sources:
-            url = source.url.strip()
-            if url:
-                urls.add(url)
-    return len(urls)
+    return len({source["url"] for sources in source_lists for source in sources})
 
 
-def build_web_search_trace_markdown(
+def build_answer_trace(
     result: WebSearchResult | None = None,
     *,
     steps: Sequence[Any] | None = None,
-) -> str:
-    # 回答生成プロセスのトレースと検索ソースを表示するMarkdown/HTMLを構築する
-    # Build markdown/HTML to display the response generation process trace and search sources.
+) -> dict[str, Any] | None:
+    """「回答までのステップ」を、回答パーツとして保存・配信する構造化データにする。出すものが無ければ ``None``。
+
+    どのステップも出典を持たないときは、``result`` の出典を「参照したWebサイト」のステップとして末尾に足す。
+
+    Build the "steps to the answer" as the structured data stored and delivered in an answer part;
+    ``None`` when there is nothing to show.
+
+    When no step carries sources, the sources of ``result`` are appended as a "referenced websites" step.
+    """
     normalized_steps = [
         coerced for coerced in (_coerce_step(step) for step in steps or []) if coerced is not None
     ]
-    fallback_items = (
-        build_web_search_source_items(result)
-        if result is not None and not any(step.sources is not None for step in normalized_steps)
-        else []
-    )
-    if not normalized_steps and not fallback_items:
-        return ""
-
-    rendered_steps = [(step, build_web_search_source_items(step.sources)) for step in normalized_steps]
-    step_html = [_render_step(step, source_items) for step, source_items in rendered_steps]
-    if fallback_items:
-        step_html.append(_render_fallback_source_step(result, fallback_items))
-
-    source_total = _unique_source_total(rendered_steps, result, fallback_items)
-    summary_detail = _summary_detail(normalized_steps, source_total)
-    # Markdown上でHTMLブロックが途切れないよう、空行になる要素は差し込まない。
-    # Never emit an empty line: a blank line would end the HTML block in Markdown.
-    summary_detail_html = (
-        [f'<span class="web-search-sources__summary-detail">{escape(summary_detail)}</span>']
-        if summary_detail
-        else []
-    )
-
-    return "\n".join(
-        [
-            f'<details class="{ANSWER_TRACE_DETAILS_CLASS}">',
-            '<summary class="web-search-sources__summary">',
-            '<span class="web-search-sources__summary-main">',
-            '<span class="web-search-sources__summary-icon"><i class="bi bi-list-check"></i></span>',
-            '<span class="web-search-sources__summary-text">',
-            '<span class="web-search-sources__label">回答までのステップ</span>',
-            *summary_detail_html,
-            "</span>",
-            "</span>",
-            f'<span class="web-search-sources__count">{len(step_html)}ステップ</span>',
-            '<span class="web-search-sources__chevron"><i class="bi bi-chevron-down"></i></span>',
-            "</summary>",
-            '<div class="web-search-sources__list">',
-            '<ol class="web-search-sources__steps">',
-            *step_html,
-            "</ol>",
-            "</div>",
-            "</details>",
-        ]
+    trace_steps = [_trace_step(step, _trace_sources(step.sources)) for step in normalized_steps]
+    if result is not None and not any(step.sources is not None for step in normalized_steps):
+        fallback_sources = _trace_sources(result)
+        if fallback_sources:
+            query = result.query.strip()
+            trace_steps.append(
+                _trace_step(
+                    TraceStep(
+                        title="参照したWebサイト",
+                        detail=f"「{query}」の検索結果を回答の根拠に使いました。" if query else "",
+                        kind="search",
+                        badge=f"{len(fallback_sources)}件",
+                    ),
+                    fallback_sources,
+                )
+            )
+    if not trace_steps:
+        return None
+    source_total = _unique_source_total(step["sources"] for step in trace_steps)
+    return normalize_answer_trace(
+        {
+            "version": ANSWER_TRACE_VERSION,
+            "summary": _summary_detail(normalized_steps, source_total),
+            "steps": trace_steps,
+        }
     )

@@ -371,14 +371,13 @@ export function isGenerativeUiPending(text: string, parts?: ChatMessagePart[]) {
 }
 
 // 確定済みのテキストパーツが全文の先頭に順に並んでいれば、その直後の位置を返す。
-// パーツはトレースと本文の間の改行や空白だけの区間を落として届くため、パーツの境目に
-// ある全文側の空白は読み飛ばして照合する。表示は語の境界まで巻き戻されるので、全文が
-// 確定済みテキストの途中で終わることがある。その場合は続きがまだ無いので全文の末尾を返す。
-// Return the offset right after the committed text parts when they lead the full
-// text in order. Parts arrive without the newlines between the trace and the answer
-// or whitespace-only spans, so full-text whitespace at each part boundary is skipped.
-// The display is pulled back to a word boundary, so the full text can end inside the
-// committed text; nothing follows it yet, so the end of the full text is returned.
+// 全文側はパーツと空白の量が揃わないことがあるため、パーツの境目にある全文側の空白は読み飛ばして照合する。
+// 表示は語の境界まで巻き戻されるので、全文が確定済みテキストの途中で終わることがある。
+// その場合は続きがまだ無いので全文の末尾を返す。
+// Return the offset right after the committed text parts when they lead the full text in order.
+// The full text may not carry the same whitespace as the parts, so full-text whitespace at each part
+// boundary is skipped. The display is pulled back to a word boundary, so the full text can end inside
+// the committed text; nothing follows it yet, so the end of the full text is returned.
 function findCommittedTextEnd(text: string, committedSegments: string[]): number | null {
   let cursor = 0;
   for (const segment of committedSegments) {
@@ -432,10 +431,10 @@ export function updateStreamingTextPart(
       return normalizeMessagePartsForDisplay(cloned);
     }
     // 確定済みテキストを全文の中に見つけられないとき、最後のパーツへ全文を入れると確定済みの
-    // トレースと本文がもう一度表示される。生成中は届いたままの最後のパーツを残し、次の更新を待つ。
+    // 本文がもう一度表示される。生成中は届いたままの最後のパーツを残し、次の更新を待つ。
     // 全文が確定しているなら待つ更新が無いので、テキストを全文1つにまとめて欠落も重複も防ぐ。
     // When the committed text cannot be found in the full text, putting the full text in the
-    // last part shows the committed trace and prose twice. While streaming, the last part stays
+    // last part shows the committed prose twice. While streaming, the last part stays
     // as delivered until the next update. A settled full text has no update to wait for, so the
     // text parts collapse into that single text, which neither drops nor repeats anything.
     if (!isFinalText) return normalizeMessagePartsForDisplay(cloned);

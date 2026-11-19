@@ -1,22 +1,18 @@
-"""メッセージパーツの表示順規約（回答トレースとWeb検索画像の並び）を検証する。
+"""メッセージパーツの表示順規約（実行記録とWeb検索画像の並び）と、旧形式の回答の読み出しを検証する。
 
-Verifies the display-order contract of message parts (the answer trace and web search images).
+Verifies the display-order contract of message parts (the execution record and web search images) and how
+answers saved in the legacy shape are read.
 """
 
 import unittest
 
+from services.answer_trace import answer_trace_part
 from services.message_parts_display import (
-    apply_visual_part_contract,
     normalize_message_parts_for_display,
-    split_answer_trace_block,
+    separate_legacy_answer_trace,
     strip_web_search_sources_html,
 )
-from services.web_search import WebSearchResult, WebSearchSource
-from services.web_search_trace import (
-    answer_step,
-    build_web_search_trace_markdown,
-    search_step,
-)
+from tests.helpers.answer_trace_fixtures import load_answer_trace, load_legacy_answer_trace_html
 
 IMAGE_PART = {
     "type": "web_search_image",
@@ -28,62 +24,79 @@ IMAGE_PART = {
 }
 
 
-# 回答トレースの Markdown ブロックを組み立てる。with_sources=True なら検索結果（出典）付きのトレースにする。
-# Builds an answer-trace Markdown block; with_sources=True includes search results as sources.
-def _trace_markdown(*, with_sources: bool = False) -> str:
-    if not with_sources:
-        return build_web_search_trace_markdown(
-            steps=[{"title": "検索が必要か判断", "detail": "最新情報が必要でした。"}]
-        )
-    result = WebSearchResult(
-        query="鎌倉 紅葉",
-        searched_at="2026-04-30T00:00:00+00:00",
-        sources=(
-            WebSearchSource(
-                url="https://example.com/article",
-                title="記事",
-                hostname="example.com",
-                age="",
-                snippets=("抜粋",),
-                page_text="本文",
-            ),
-        ),
-    )
-    return build_web_search_trace_markdown(
-        result, steps=[search_step(result), answer_step([result])]
-    )
+# 構造化前に保存された回答を、本文と実行記録のパーツへ分ける読み出しの変換を確かめる。
+# Checks the read-time conversion that splits an answer saved before structuring into body and record part.
+class SeparateLegacyAnswerTraceTestCase(unittest.TestCase):
+    def setUp(self):
+        # 出典を持つステップは、内側にも <details> を持つ。
+        # Steps that carry sources nest a <details> of their own.
+        self.trace = load_legacy_answer_trace_html("full")
+        self.assertIn('<details class="web-search-sources__step-details">', self.trace)
+        self.legacy_part = {"type": "legacy_answer_trace", "html": self.trace}
+
+    def test_body_only_answer_becomes_a_record_part_and_a_text_part(self):
+        message, parts = separate_legacy_answer_trace(f"{self.trace}\n\n本文です。", None)
+
+        self.assertEqual(message, "本文です。")
+        self.assertEqual(parts, [self.legacy_part, {"type": "text", "text": "本文です。"}])
+
+    def test_the_record_is_removed_from_the_leading_text_part(self):
+        text = f"{self.trace}\n\n本文です。"
+
+        message, parts = separate_legacy_answer_trace(text, [{"type": "text", "text": text}])
+
+        self.assertEqual(message, "本文です。")
+        self.assertEqual(parts, [self.legacy_part, {"type": "text", "text": "本文です。"}])
+
+    def test_an_image_saved_ahead_of_the_record_ends_up_after_it(self):
+        text = f"{self.trace}\n\n本文です。"
+
+        _, parts = separate_legacy_answer_trace(text, [IMAGE_PART, {"type": "text", "text": text}])
+
+        self.assertEqual(parts, [self.legacy_part, IMAGE_PART, {"type": "text", "text": "本文です。"}])
+
+    def test_a_text_part_holding_only_the_record_is_dropped(self):
+        # 画像のある回答では、記録だけのテキストパーツに分けて保存していた。
+        # Answers with images were saved with the record split into a text part of its own.
+        parts = [{"type": "text", "text": self.trace}, IMAGE_PART, {"type": "text", "text": "本文です。"}]
+
+        _, converted = separate_legacy_answer_trace(f"{self.trace}\n\n本文です。", parts)
+
+        self.assertEqual(converted, [self.legacy_part, IMAGE_PART, {"type": "text", "text": "本文です。"}])
+
+    def test_a_record_without_a_body_leaves_no_text_part(self):
+        message, parts = separate_legacy_answer_trace(self.trace, None)
+
+        self.assertEqual(message, "")
+        self.assertEqual(parts, [self.legacy_part])
+
+    def test_an_answer_without_a_leading_record_is_returned_unchanged(self):
+        parts = [{"type": "text", "text": "本文だけの回答"}, IMAGE_PART]
+
+        message, converted = separate_legacy_answer_trace("本文だけの回答", parts)
+
+        self.assertEqual(message, "本文だけの回答")
+        self.assertIs(converted, parts)
+        self.assertEqual(separate_legacy_answer_trace("本文だけの回答", None), ("本文だけの回答", None))
+
+    def test_markup_later_in_the_body_is_not_treated_as_the_record(self):
+        text = f"本文です。\n\n{self.trace}"
+
+        self.assertEqual(separate_legacy_answer_trace(text, None), (text, None))
+
+    def test_converting_twice_changes_nothing(self):
+        text = f"{self.trace}\n\n本文です。"
+        message, parts = separate_legacy_answer_trace(text, [IMAGE_PART, {"type": "text", "text": text}])
+
+        self.assertEqual(separate_legacy_answer_trace(message, parts), (message, parts))
 
 
-# split_answer_trace_block が先頭のトレースブロックと回答本文を分けることを確かめる。
-# Checks split_answer_trace_block separates the trace block from the answer text.
-class SplitAnswerTraceBlockTestCase(unittest.TestCase):
-    def test_splits_the_trace_block_off_the_answer_text(self):
-        trace = _trace_markdown()
-
-        block, remainder = split_answer_trace_block(f"{trace}\n\n本文です。")
-
-        self.assertEqual(block, trace)
-        self.assertEqual(remainder, "本文です。")
-
-    def test_keeps_nested_step_details_inside_the_trace_block(self):
-        trace = _trace_markdown(with_sources=True)
-        self.assertIn('<details class="web-search-sources__step-details">', trace)
-
-        block, remainder = split_answer_trace_block(f"{trace}\n\n本文です。")
-
-        self.assertEqual(block, trace)
-        self.assertEqual(remainder, "本文です。")
-
-    def test_text_without_a_trace_block_is_returned_unchanged(self):
-        block, remainder = split_answer_trace_block("本文だけの回答")
-
-        self.assertEqual(block, "")
-        self.assertEqual(remainder, "本文だけの回答")
-
-
-# 画像の枚数上限と、トレース・画像・本文の並び（旧形式を含む）が冪等に整うことを確かめる。
-# Checks the image cap and that trace, image and text ordering (including legacy shapes) is normalised idempotently.
+# 画像の枚数上限と、実行記録・画像・本文の並びが冪等に整うことを確かめる。
+# Checks the image cap and that record, image and text ordering is normalised idempotently.
 class NormalizeMessagePartsForDisplayTestCase(unittest.TestCase):
+    def setUp(self):
+        self.trace_part = answer_trace_part(load_answer_trace("full"))
+
     def test_at_most_five_images_are_retained_per_reply(self):
         images = [
             {
@@ -105,70 +118,45 @@ class NormalizeMessagePartsForDisplayTestCase(unittest.TestCase):
             5,
         )
 
-    def test_legacy_leading_image_is_placed_below_the_answer_trace(self):
-        trace = _trace_markdown()
-        parts = [IMAGE_PART, {"type": "text", "text": f"{trace}\n\n本文です。"}]
+    def test_the_execution_record_is_placed_first(self):
+        parts = [IMAGE_PART, {"type": "text", "text": "本文です。"}, self.trace_part]
 
         normalized = normalize_message_parts_for_display(parts)
 
-        self.assertEqual(
-            [part["type"] for part in normalized],
-            ["text", "web_search_image", "text"],
+        self.assertEqual(normalized, [self.trace_part, IMAGE_PART, {"type": "text", "text": "本文です。"}])
+
+    def test_only_the_first_execution_record_is_kept(self):
+        legacy_part = {"type": "legacy_answer_trace", "html": load_legacy_answer_trace_html("full")}
+
+        normalized = normalize_message_parts_for_display(
+            [{"type": "text", "text": "本文です。"}, self.trace_part, legacy_part]
         )
-        self.assertEqual(normalized[0]["text"], trace)
-        self.assertEqual(normalized[2]["text"], "本文です。")
+
+        self.assertEqual(normalized, [self.trace_part, {"type": "text", "text": "本文です。"}])
 
     def test_placement_is_idempotent(self):
-        trace = _trace_markdown()
-        parts = [IMAGE_PART, {"type": "text", "text": f"{trace}\n\n本文です。"}]
-
-        once = normalize_message_parts_for_display(parts)
+        once = normalize_message_parts_for_display([IMAGE_PART, {"type": "text", "text": "本文です。"}, self.trace_part])
 
         self.assertEqual(normalize_message_parts_for_display(once), once)
 
-    def test_legacy_trace_only_answer_keeps_the_image_below_the_trace(self):
-        trace = _trace_markdown()
-        parts = [{"type": "text", "text": trace}, IMAGE_PART]
-
-        normalized = normalize_message_parts_for_display(parts)
-
-        self.assertEqual([part["type"] for part in normalized], ["text", "web_search_image"])
-        self.assertEqual(normalized[0]["text"], trace)
-
-    def test_inline_image_order_is_preserved_without_a_trace(self):
+    def test_inline_image_order_is_preserved_without_a_record(self):
         parts = [{"type": "text", "text": "本文です。"}, IMAGE_PART]
 
         normalized = normalize_message_parts_for_display(parts)
 
         self.assertEqual([part["type"] for part in normalized], ["text", "web_search_image"])
 
-    def test_generated_ui_suppresses_the_image(self):
-        trace = _trace_markdown()
+    def test_generated_ui_suppresses_the_image_and_keeps_the_record(self):
         parts = [
             IMAGE_PART,
-            {"type": "text", "text": f"{trace}\n\n本文です。"},
+            {"type": "text", "text": "本文です。"},
             {"type": "sandbox_artifact", "artifact": {"title": "図"}},
+            self.trace_part,
         ]
 
         normalized = normalize_message_parts_for_display(parts)
 
-        self.assertEqual([part["type"] for part in normalized], ["text", "sandbox_artifact"])
-        self.assertEqual(normalized[0]["text"], f"{trace}\n\n本文です。")
-
-
-# 表示規約の適用がトレースブロックを分割しないことを確かめる。
-# Checks applying the visual part contract never splits the trace block.
-class ApplyVisualPartContractTestCase(unittest.TestCase):
-    def test_contract_does_not_split_the_trace_block(self):
-        # 引用解決が本文テキストを書き戻す前段では、テキストパートを分割しない。
-        # The mid-pipeline contract must keep one text part so citation
-        # resolution can rewrite the answer text safely.
-        trace = _trace_markdown()
-        text_part = {"type": "text", "text": f"{trace}\n\n本文です。"}
-
-        contracted = apply_visual_part_contract([text_part, IMAGE_PART])
-
-        self.assertEqual(contracted, [text_part, IMAGE_PART])
+        self.assertEqual([part["type"] for part in normalized], ["answer_trace", "text", "sandbox_artifact"])
 
 
 # 日本語: Web 検索の表示ブロックを本文から取り除く処理を検証するテストクラス。

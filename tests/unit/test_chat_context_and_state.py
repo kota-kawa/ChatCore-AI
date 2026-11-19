@@ -14,8 +14,7 @@ from services.chat_context import (
 )
 from services.chat_prompt import build_base_system_prompt as _build_base_system_prompt
 from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT
-from services.web_search import WebSearchResult, WebSearchSource
-from services.web_search_trace import answer_step, build_web_search_trace_markdown, search_step
+from tests.helpers.answer_trace_fixtures import load_legacy_answer_trace_html
 
 
 # 日本語: チャットのコンテキスト構築と状態管理ロジックをテストするクラス。
@@ -470,24 +469,11 @@ class ChatContextAndStateTestCase(unittest.TestCase):
     # 日本語: 過去の回答の「回答までのステップ」は、モデルへ戻す履歴から取り除かれることを検証します。
     # English: Verify that the answer-steps block of an earlier answer is stripped from replayed history.
     def test_normalize_message_text_strips_answer_trace_block(self):
-        result = WebSearchResult(
-            query="京都の紅葉",
-            searched_at="2026-08-19T00:00:00+00:00",
-            sources=(
-                WebSearchSource(
-                    url="https://example.com/kyoto",
-                    title="京都の紅葉ガイド </details> 2026",
-                    hostname="example.com",
-                    age="",
-                    snippets=(),
-                ),
-            ),
-        )
-        trace_block = build_web_search_trace_markdown(
-            result,
-            steps=[search_step(result), answer_step([result])],
-        )
+        # 出典のタイトルに、エスケープされた閉じタグの文字列を含む見本。
+        # A sample whose source title contains an escaped closing-tag string.
+        trace_block = load_legacy_answer_trace_html("escaped_markup")
         self.assertIn("回答までのステップ", trace_block)
+        self.assertIn("&lt;/details&gt;", trace_block)
 
         self.assertEqual(
             normalize_message_text(f"{trace_block}\n\n京都の紅葉は11月が見頃です。"),

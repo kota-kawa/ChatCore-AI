@@ -1,0 +1,216 @@
+{
+  "version": 1,
+  "summary": "Web検索2回 · 参照サイト6件 · 本文精読あり · リンク深掘りあり · メモ検索あり",
+  "steps": [
+    {
+      "id": "s1",
+      "kind": "knowledge",
+      "status": "done",
+      "title": "メモと記憶を検索",
+      "detail": "保存済みのメモと記憶から、回答に関連する情報を3件読み込みました。",
+      "query": "沖縄旅行の予算",
+      "badge": "3件",
+      "chips": [
+        "メモ 2件",
+        "記憶 1件"
+      ],
+      "sources": []
+    },
+    {
+      "id": "s2",
+      "kind": "warning",
+      "status": "failed",
+      "title": "共有プロンプトを検索",
+      "detail": "検索に失敗したため、取得済みの情報で回答を続けました。",
+      "query": "沖縄旅行の予算",
+      "badge": "",
+      "chips": [],
+      "sources": []
+    },
+    {
+      "id": "s3",
+      "kind": "search",
+      "status": "done",
+      "title": "Web検索",
+      "detail": "回答の根拠を集めるため、1か月以内の情報に絞り込んで検索を実行し、5件の候補ページを取得しました。",
+      "query": "沖縄 旅行 予算 2026",
+      "badge": "5件",
+      "chips": [
+        "example.com",
+        "travel.example.org",
+        "blog.example.net",
+        "+2"
+      ],
+      "sources": [
+        {
+          "url": "https://www.example.com/okinawa/budget?year=2026&lang=ja",
+          "title": "沖縄旅行の予算ガイド <2026年版> & 節約術",
+          "hostname": "www.example.com",
+          "favicon_url": "https://www.example.com/static/icon.png",
+          "fallback_label": "E",
+          "link_depth": 0,
+          "linked_from": ""
+        },
+        {
+          "url": "https://travel.example.org/plan",
+          "title": "https://travel.example.org/plan",
+          "hostname": "travel.example.org",
+          "favicon_url": "https://travel.example.org/favicon.ico",
+          "fallback_label": "T",
+          "link_depth": 0,
+          "linked_from": ""
+        },
+        {
+          "url": "https://blog.example.net/a",
+          "title": "格安航空券の探し方",
+          "hostname": "blog.example.net",
+          "favicon_url": "https://blog.example.net/favicon.ico",
+          "fallback_label": "B",
+          "link_depth": 0,
+          "linked_from": ""
+        },
+        {
+          "url": "https://news.example.jp/b",
+          "title": "那覇のホテル相場",
+          "hostname": "news.example.jp",
+          "favicon_url": "https://news.example.jp/favicon.ico",
+          "fallback_label": "N",
+          "link_depth": 0,
+          "linked_from": ""
+        },
+        {
+          "url": "https://docs.example.com/deep/page",
+          "title": "たどった先の詳細ページ",
+          "hostname": "docs.example.com",
+          "favicon_url": "https://docs.example.com/favicon.ico",
+          "fallback_label": "D",
+          "link_depth": 2,
+          "linked_from": "example.com"
+        }
+      ]
+    },
+    {
+      "id": "s4",
+      "kind": "read",
+      "status": "done",
+      "title": "重要なページを精読",
+      "detail": "検索結果のうち「example.com」など2件は、スニペットではなくページ本文まで読み込んで根拠にしました。",
+      "query": "",
+      "badge": "2件",
+      "chips": [
+        "example.com",
+        "blog.example.net"
+      ],
+      "sources": [
+        {
+          "url": "https://www.example.com/okinawa/budget?year=2026&lang=ja",
+          "title": "沖縄旅行の予算ガイド <2026年版> & 節約術",
+          "hostname": "www.example.com",
+          "favicon_url": "https://www.example.com/static/icon.png",
+          "fallback_label": "E",
+          "link_depth": 0,
+          "linked_from": ""
+        },
+        {
+          "url": "https://blog.example.net/a",
+          "title": "格安航空券の探し方",
+          "hostname": "blog.example.net",
+          "favicon_url": "https://blog.example.net/favicon.ico",
+          "fallback_label": "B",
+          "link_depth": 0,
+          "linked_from": ""
+        }
+      ]
+    },
+    {
+      "id": "s5",
+      "kind": "follow",
+      "status": "done",
+      "title": "リンクをたどって深掘り",
+      "detail": "「example.com」など検索結果のページから参照先のリンクをたどり、最大2階層先までの1件を追加で読み込んで根拠にしました。",
+      "query": "",
+      "badge": "1件・最大2階層",
+      "chips": [
+        "docs.example.com"
+      ],
+      "sources": [
+        {
+          "url": "https://docs.example.com/deep/page",
+          "title": "たどった先の詳細ページ",
+          "hostname": "docs.example.com",
+          "favicon_url": "https://docs.example.com/favicon.ico",
+          "fallback_label": "D",
+          "link_depth": 2,
+          "linked_from": "example.com"
+        }
+      ]
+    },
+    {
+      "id": "s6",
+      "kind": "review",
+      "status": "done",
+      "title": "検索結果を確認",
+      "detail": "取得した5件を読み比べ、質問に直接答えている記述と、根拠として弱い記述を切り分けました。",
+      "query": "",
+      "badge": "",
+      "chips": [],
+      "sources": []
+    },
+    {
+      "id": "s7",
+      "kind": "search",
+      "status": "done",
+      "title": "追加検索",
+      "detail": "不足していた情報を補うため、検索を実行し、1件の候補ページを取得しました。",
+      "query": "那覇 レンタカー 料金",
+      "badge": "1件",
+      "chips": [
+        "rent.example.com"
+      ],
+      "sources": [
+        {
+          "url": "https://rent.example.com/naha",
+          "title": "那覇のレンタカー料金比較",
+          "hostname": "rent.example.com",
+          "favicon_url": "https://rent.example.com/favicon.ico",
+          "fallback_label": "R",
+          "link_depth": 0,
+          "linked_from": ""
+        }
+      ]
+    },
+    {
+      "id": "s8",
+      "kind": "review",
+      "status": "done",
+      "title": "検索結果を確認",
+      "detail": "取得した1件を読み比べ、質問に直接答えている記述と、根拠として弱い記述を切り分けました。",
+      "query": "",
+      "badge": "",
+      "chips": [],
+      "sources": []
+    },
+    {
+      "id": "s9",
+      "kind": "warning",
+      "status": "failed",
+      "title": "Web検索を試行",
+      "detail": "検索結果を回答に使える形では取得できませんでした。",
+      "query": "那覇 天気 来週",
+      "badge": "",
+      "chips": [],
+      "sources": []
+    },
+    {
+      "id": "s10",
+      "kind": "answer",
+      "status": "done",
+      "title": "回答を作成",
+      "detail": "2回の検索で集めた6件の情報と会話の文脈を突き合わせ、出典を示しながら回答を作成しました。",
+      "query": "",
+      "badge": "",
+      "chips": [],
+      "sources": []
+    }
+  ]
+}

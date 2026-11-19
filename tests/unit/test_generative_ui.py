@@ -8,13 +8,14 @@ from services.generative_ui import (
     GenerativeUiValidationError,
     build_message_parts_context,
     decode_message_parts,
+    encode_message_parts,
     normalize_response_with_artifact_retry,
     normalize_response_with_artifacts,
     requested_artifact_quality_issues,
     validate_artifact_payload,
 )
 from services.user_skills import GENERATIVE_UI_EXECUTION_CONTRACT, GENERATIVE_UI_SKILL_INSTRUCTIONS
-from services.web_search_trace import build_web_search_trace_markdown
+from tests.helpers.answer_trace_fixtures import load_answer_trace, load_legacy_answer_trace_html
 
 # 有効なアーティファクトの定義
 # Definition of a valid artifact
@@ -747,10 +748,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
 
         self.assertEqual(decode_message_parts(parts), [parts[0], parts[1]])
 
-    def test_decode_message_parts_keeps_legacy_image_below_the_answer_trace(self):
-        trace = build_web_search_trace_markdown(
-            steps=[{"title": "検索が必要か判断", "detail": "最新情報が必要でした。"}]
-        )
+    def test_decode_message_parts_puts_the_execution_record_first(self):
+        trace = load_answer_trace("full")
         image_part = {
             "type": "web_search_image",
             "image": {
@@ -759,18 +758,46 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
                 "source_url": "https://example.com/article",
             },
         }
-        parts = [image_part, {"type": "text", "text": f"{trace}\n\nanswer"}]
+        parts = [image_part, {"type": "text", "text": "answer"}, {"type": "answer_trace", "trace": trace}]
 
         decoded = decode_message_parts(parts)
 
         self.assertEqual(
             decoded,
             [
-                {"type": "text", "text": trace},
+                {"type": "answer_trace", "trace": trace},
                 image_part,
                 {"type": "text", "text": "answer"},
             ],
         )
+
+    def test_message_parts_keep_a_pre_structuring_execution_record_through_storage(self):
+        # 旧形式の回答を読み出して別のルームへ複製するとき、記録のパーツをそのまま保存して読み戻せる。
+        # An answer read in the legacy shape and copied into another room stores its record part and reads it back.
+        legacy_part = {"type": "legacy_answer_trace", "html": load_legacy_answer_trace_html("full")}
+        parts = [legacy_part, {"type": "text", "text": "answer"}]
+
+        self.assertEqual(decode_message_parts(encode_message_parts(parts)), parts)
+
+    def test_decode_message_parts_drops_markup_that_is_not_a_pre_structuring_record(self):
+        legacy_html = load_legacy_answer_trace_html("references_only")
+        parts = [
+            {"type": "legacy_answer_trace", "html": "<script>alert(1)</script>"},
+            {"type": "legacy_answer_trace", "html": f"{legacy_html}<p>extra</p>"},
+            {"type": "legacy_answer_trace", "html": None},
+            {"type": "text", "text": "answer"},
+        ]
+
+        self.assertEqual(decode_message_parts(parts), [{"type": "text", "text": "answer"}])
+
+    def test_decode_message_parts_drops_an_execution_record_that_is_not_valid(self):
+        parts = [
+            {"type": "answer_trace", "trace": {"version": 1, "steps": [{"title": "  "}]}},
+            {"type": "answer_trace", "trace": {"version": 99, "steps": [{"title": "Web検索"}]}},
+            {"type": "text", "text": "answer"},
+        ]
+
+        self.assertEqual(decode_message_parts(parts), [{"type": "text", "text": "answer"}])
 
     def test_decode_message_parts_drops_web_search_image_when_generated_ui_is_present(self):
         parts = [

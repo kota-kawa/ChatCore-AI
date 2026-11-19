@@ -27,6 +27,7 @@
 - [0021: デモは配布先ごとのアクセスコードで、期限付きの専用アカウントに入れる](0021-demo-access-codes.md)
 
 - [0022: 宣言的UIとsandbox Artifactを併用する](0022-native-and-sandbox-generated-ui.md)
+- [0024: 回答の実行記録を本文から分け、回答パーツとして構造化する](0024-structured-answer-trace.md)
 
 ## 追加・更新の基準
 

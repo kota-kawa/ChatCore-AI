@@ -353,13 +353,6 @@ test("updateStreamingTextPart keeps artifact parts while refreshing streamed tex
   assert.equal(updated?.[1]?.type, "sandbox_artifact");
 });
 
-const ANSWER_TRACE = [
-  '<details class="web-search-sources web-search-sources--trace">',
-  '<summary class="web-search-sources__summary">回答までのステップ</summary>',
-  '<div class="web-search-sources__list">参照したWebサイト</div>',
-  "</details>",
-].join("\n");
-
 const INLINE_IMAGE: ChatMessagePart = {
   type: "web_search_image",
   image: {
@@ -369,22 +362,20 @@ const INLINE_IMAGE: ChatMessagePart = {
   },
 };
 
-test("updateStreamingTextPart absorbs the newlines dropped between the trace and the answer", () => {
-  // パーツはトレースと本文の間の改行を落として届くが、ストリーム本文には残る。
-  // 最後のパーツに全文が入ると、画像の下にトレースと見出しがもう一度出る。
-  // Parts arrive without the newlines between the trace and the answer, but the
-  // streamed text keeps them; the full text in the last part duplicated the trace.
+test("updateStreamingTextPart absorbs whitespace the parts do not carry between committed text", () => {
+  // パーツの境目の空白が全文側にだけ残っていても、最後のパーツへ全文を入れて本文を二重にしない。
+  // Whitespace at a part boundary that only the full text keeps must not push the whole text into the last part.
   const parts: ChatMessagePart[] = [
-    { type: "text", text: ANSWER_TRACE },
+    { type: "text", text: "## 見頃と名所" },
     { type: "text", text: "京都の紅葉" },
     INLINE_IMAGE,
     { type: "text", text: "" },
   ];
 
-  const updated = updateStreamingTextPart(parts, `${ANSWER_TRACE}\n\n京都の紅葉は11月中旬が見頃です。`);
+  const updated = updateStreamingTextPart(parts, "## 見頃と名所\n\n京都の紅葉は11月中旬が見頃です。");
 
   assert.deepEqual(updated, [
-    { type: "text", text: ANSWER_TRACE },
+    { type: "text", text: "## 見頃と名所" },
     { type: "text", text: "京都の紅葉" },
     INLINE_IMAGE,
     { type: "text", text: "は11月中旬が見頃です。" },
@@ -395,38 +386,36 @@ test("updateStreamingTextPart leaves the tail empty while the display is still i
   // 表示は語の境界まで巻き戻されるので、確定済みパーツより短い全文が渡ることがある。
   // The display is pulled back to a word boundary, so the text can be shorter than the committed parts.
   const parts: ChatMessagePart[] = [
-    { type: "text", text: ANSWER_TRACE },
+    { type: "text", text: "## 見頃と名所" },
     { type: "text", text: "京都の紅葉は東福寺" },
     INLINE_IMAGE,
     { type: "text", text: "が有名です。" },
   ];
-  const committed = [{ type: "text", text: ANSWER_TRACE }, { type: "text", text: "京都の紅葉は東福寺" }, INLINE_IMAGE];
+  const committed = [
+    { type: "text", text: "## 見頃と名所" },
+    { type: "text", text: "京都の紅葉は東福寺" },
+    INLINE_IMAGE,
+  ];
 
-  for (const text of [`${ANSWER_TRACE}\n\n京都の紅葉は`, `${ANSWER_TRACE}\n\n`, ANSWER_TRACE]) {
+  for (const text of ["## 見頃と名所\n\n京都の紅葉は", "## 見頃と名所\n\n", "## 見頃と名所"]) {
     assert.deepEqual(updateStreamingTextPart(parts, text), [...committed, { type: "text", text: "" }]);
   }
 });
 
 test("updateStreamingTextPart keeps the delivered tail when the committed text is not in the full text", () => {
-  // 全文とパーツでトレースのHTMLが食い違っても、トレースを最後のパーツへ入れ直さない。
-  // A trace whose markup differs between the full text and the parts is not repeated in the last part.
+  // 全文とパーツで確定済みの本文が食い違っても、最後のパーツへ入れ直して本文を二重にしない。
+  // Committed text that differs between the full text and the parts is not repeated in the last part.
   const parts: ChatMessagePart[] = [
-    { type: "text", text: ANSWER_TRACE },
     { type: "text", text: "比較します。" },
     INLINE_IMAGE,
     { type: "text", text: "以上が比較です。" },
   ];
-  const text = `${ANSWER_TRACE.replace("参照したWebサイト", "参照した Web サイト")}\n\n比較します。\n\n以上が比較です。続き`;
+  const text = "比較 します。\n\n以上が比較です。続き";
 
   assert.deepEqual(updateStreamingTextPart(parts, text), parts);
-  // 全文が確定していれば、欠落させずに全文1つへまとめる（トレースは表示規約どおり独立パーツになる）。
-  // A settled full text collapses into one text without loss; the trace is split off by the display contract.
-  const [trace, ...body] = text.split("\n\n");
-  assert.deepEqual(updateStreamingTextPart(parts, text, true), [
-    { type: "text", text: trace },
-    { type: "text", text: body.join("\n\n") },
-    INLINE_IMAGE,
-  ]);
+  // 全文が確定していれば、欠落させずに全文1つへまとめる。
+  // A settled full text collapses into one text without loss.
+  assert.deepEqual(updateStreamingTextPart(parts, text, true), [{ type: "text", text }, INLINE_IMAGE]);
 });
 
 test("updateStreamingTextPart keeps continuing when the separator newline is still in the parts", () => {
@@ -443,22 +432,19 @@ test("updateStreamingTextPart keeps continuing when the separator newline is sti
   ]);
 });
 
-test("updateStreamingTextPart keeps the trace in the single text part when there is no image", () => {
-  const text = `${ANSWER_TRACE}\n\n京都の紅葉は11月中旬が見頃です。`;
+test("updateStreamingTextPart keeps the prose in the single text part when there is no image", () => {
+  const text = "京都の紅葉は11月中旬が見頃です。";
 
   assert.deepEqual(updateStreamingTextPart([{ type: "text", text: "" }], text), [{ type: "text", text }]);
 });
 
-test("updateStreamingTextPart continues after the trace when the streamed text hides a generative UI fence", () => {
+test("updateStreamingTextPart continues after the committed text when the streamed text hides a generative UI fence", () => {
   const parts: ChatMessagePart[] = [
-    { type: "text", text: ANSWER_TRACE },
     { type: "text", text: "## 見頃と名所" },
     INLINE_IMAGE,
     { type: "text", text: "" },
   ];
   const streamed = [
-    ANSWER_TRACE,
-    "",
     "## 見頃と名所",
     "見頃は11月中旬です。",
     "```chatcore-artifact",
@@ -472,7 +458,6 @@ test("updateStreamingTextPart continues after the trace when the streamed text h
   const updated = updateStreamingTextPart(parts, getStreamingGenerativeUiDisplayText(streamed));
 
   assert.deepEqual(updated, [
-    { type: "text", text: ANSWER_TRACE },
     { type: "text", text: "## 見頃と名所" },
     INLINE_IMAGE,
     { type: "text", text: "見頃は11月中旬です。\n\n混雑は平日の朝が少なめです。" },
