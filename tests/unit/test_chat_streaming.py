@@ -1396,7 +1396,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
-        (trace_event,) = _sse_payloads(body, "answer_trace_updated")
+        trace_event = _sse_payloads(body, "answer_trace_updated")[-1]
         trace_part = {"type": "answer_trace", **trace_event}
         (aborted,) = _sse_payloads(body, "aborted")
         self.assertEqual(aborted["response"], "途中まで")
@@ -1682,7 +1682,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         # 実行記録は本文に混ぜず、確定した本文の最初のチャンクより前に専用のイベントで配信する。
         # The execution record is never mixed into the body: it travels in an event of its own,
         # ahead of the first confirmed chunk of the body.
-        (trace_event,) = _sse_payloads(body, "answer_trace_updated")
+        trace_event = _sse_payloads(body, "answer_trace_updated")[-1]
         trace = trace_event["trace"]
         self.assertEqual(trace["summary"], "Web検索1回 · 参照サイト1件")
         self.assertEqual([step["kind"] for step in trace["steps"]], ["search", "review", "answer"])
@@ -1690,7 +1690,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             [source["url"] for source in trace["steps"][0]["sources"]],
             ["https://example.com/python"],
         )
-        self.assertLess(body.index("event: answer_trace_updated"), body.index("event: chunk"))
+        self.assertLess(body.rindex("event: answer_trace_updated"), body.index("event: chunk"))
         self.assertEqual("".join(payload["text"] for payload in _sse_payloads(body, "chunk")), "回答本文")
         # 確定した回答では、実行記録はパーツの先頭に入り、保存する本文には含まれない。
         # In the settled answer the record leads the parts and is absent from the persisted body.
@@ -1701,6 +1701,281 @@ class ChatStreamingTestCase(unittest.TestCase):
             [{"type": "answer_trace", "trace": trace}, {"type": "text", "text": "回答本文"}],
         )
         self.assertEqual(persisted_messages, ["回答本文"])
+
+    # 日本語: Web検索の実行中は「実行中」のステップを配信し、終わったら同じ ID のまま結果のステップへ置き換えることを検証します。
+    # English: Verify a web search publishes a running step while it runs and replaces it with the
+    # result step under the same id once it ends.
+    def test_background_generation_job_publishes_search_progress_before_the_answer(self):
+        search_result = WebSearchResult(
+            query="Python news",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                WebSearchSource(url="https://example.com/python", title="Python News", hostname="example.com", age="", snippets=()),
+            ),
+        )
+
+        with (
+            patch("services.chat_generation_web_search.search_brave_llm_context", return_value=search_result),
+            patch(
+                "services.chat_generation_llm_stream.get_llm_response_stream",
+                side_effect=_search_then_answer_stream("Python news", "回答本文"),
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-progress:default",
+                conversation_messages=[{"role": "user", "content": "Pythonの最新ニュース"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: None,
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        snapshots = [payload["trace"] for payload in _sse_payloads(body, "answer_trace_updated")]
+        self.assertEqual(
+            [[(step["id"], step["title"], step["status"]) for step in snapshot["steps"]] for snapshot in snapshots],
+            [
+                [("s1", "Web検索", "running")],
+                [("s1", "Web検索", "done"), ("s2", "検索結果を確認", "done")],
+                [("s1", "Web検索", "done"), ("s2", "検索結果を確認", "done"), ("s3", "回答を作成", "done")],
+            ],
+        )
+        self.assertEqual(snapshots[0]["steps"][0]["query"], "Python news")
+        self.assertEqual(snapshots[0]["steps"][0]["sources"], [])
+        # 実行中のステップは検索開始の直後、結果のステップは完了の通知より前に届く。
+        # The running step follows the search start at once; the result steps precede the completion notice.
+        self.assertLess(body.index("event: web_search_started"), body.index("event: answer_trace_updated"))
+        self.assertLess(body.index("event: answer_trace_updated"), body.index("event: web_search_completed"))
+        self.assertEqual(_sse_payloads(body, "done")[0]["parts"][0], {"type": "answer_trace", "trace": snapshots[-1]})
+
+    # 日本語: 検索に失敗したときは、実行中だったステップが完了ではなく失敗へ変わることを検証します。
+    # English: Verify the step that was running turns failed, not done, when the search fails.
+    def test_background_generation_job_turns_a_running_search_step_into_failed(self):
+        with (
+            patch(
+                "services.chat_generation_llm_stream.get_llm_response_stream",
+                side_effect=_search_then_answer_stream("今日のニュース", "回答"),
+            ),
+            patch(
+                "services.chat_generation_web_search.search_brave_llm_context",
+                side_effect=RuntimeError("brave is unavailable"),
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-progress-failed:default",
+                conversation_messages=[{"role": "user", "content": "今日のニュース"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: None,
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        snapshots = [payload["trace"] for payload in _sse_payloads(body, "answer_trace_updated")]
+        self.assertEqual(
+            [[(step["id"], step["kind"], step["status"]) for step in snapshot["steps"]] for snapshot in snapshots],
+            [
+                [("s1", "search", "running")],
+                [("s1", "warning", "failed")],
+                [("s1", "warning", "failed"), ("s2", "answer", "done")],
+            ],
+        )
+
+    # 日本語: モデルが呼んだ参照元の検索も、実行中のステップを配信してから結果のステップへ置き換えることを検証します。
+    # English: Verify a reference lookup the model calls publishes a running step and then replaces it with the result.
+    def test_background_generation_job_publishes_reference_lookup_progress(self):
+        lookup_call = json.dumps(
+            [
+                {
+                    "id": "call-memo",
+                    "type": "function",
+                    "function": {"name": "personal_knowledge_search", "arguments": json.dumps({"query": "好みのカフェ"})},
+                }
+            ]
+        )
+        streams = [iter([_turn_state_update(ready_to_answer=False), lookup_call]), _direct_answer_stream("回答本文")]
+
+        with patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=streams):
+            job = start_generation_job(
+                "guest:sid-progress-lookup:default",
+                conversation_messages=[{"role": "user", "content": "休憩を提案して"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: None,
+                personal_knowledge_search=lambda query: {
+                    "status": "ok",
+                    "query": query,
+                    "memo_count": 2,
+                    "context_fact_count": 0,
+                    "memos": [],
+                    "context_facts": [],
+                },
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        snapshots = [payload["trace"] for payload in _sse_payloads(body, "answer_trace_updated")]
+        self.assertEqual(
+            [[(step["id"], step["title"], step["status"], step["badge"]) for step in snapshot["steps"]] for snapshot in snapshots],
+            [
+                [("s1", "メモと記憶を検索", "running", "実行中")],
+                [("s1", "メモと記憶を検索", "done", "2件")],
+                [("s1", "メモと記憶を検索", "done", "2件"), ("s2", "回答を作成", "done", "")],
+            ],
+        )
+        self.assertEqual(snapshots[0]["steps"][0]["query"], "好みのカフェ")
+
+    # 日本語: 事前検索と同じ検索語で検索し直さなかった場合は、実行中のステップを出した後、ステップを残さず元の記録へ戻すことを検証します。
+    # English: Verify a lookup that was not searched again (same query as the prefetch) shows a running
+    # step and then leaves none, returning to the record as it was.
+    def test_background_generation_job_drops_the_running_step_of_an_already_searched_lookup(self):
+        lookup_call = json.dumps(
+            [
+                {
+                    "id": "call-memo",
+                    "type": "function",
+                    "function": {"name": "personal_knowledge_search", "arguments": json.dumps({"query": "好みのカフェ"})},
+                }
+            ]
+        )
+        streams = [iter([_turn_state_update(ready_to_answer=False), lookup_call]), _direct_answer_stream("回答本文")]
+
+        with patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=streams):
+            job = start_generation_job(
+                "guest:sid-progress-already-searched:default",
+                conversation_messages=[{"role": "user", "content": "休憩を提案して"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: None,
+                personal_knowledge_search=lambda query: {"status": "already_searched", "query": query},
+                selected_reference_trace=[
+                    SelectedReferenceLookupTrace(
+                        source=PERSONAL_KNOWLEDGE_SOURCE,
+                        query="好みのカフェ",
+                        payload={"status": "ok", "memo_count": 1, "context_fact_count": 0},
+                    )
+                ],
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        snapshots = [payload["trace"] for payload in _sse_payloads(body, "answer_trace_updated")]
+        self.assertEqual(
+            [[(step["title"], step["status"]) for step in snapshot["steps"]] for snapshot in snapshots],
+            [
+                [("メモと記憶を検索", "done")],
+                [("メモと記憶を検索", "done"), ("メモと記憶を検索", "running")],
+                [("メモと記憶を検索", "done")],
+                [("メモと記憶を検索", "done"), ("回答を作成", "done")],
+            ],
+        )
+
+    # 日本語: 本文が確定する前に停止しても、画面に配信済みの実行記録を、救済した本文と一緒に保存し aborted に含めることを検証します。
+    # English: Verify a stop before any body is confirmed still saves the record already published to the
+    # screen with the salvaged text, and includes it in the aborted event.
+    def test_background_generation_job_keeps_the_published_record_when_stopped_before_confirmation(self):
+        persisted_records = []
+        first_chunk_emitted = threading.Event()
+        release_second_chunk = threading.Event()
+
+        def fake_stream(*_args, **_kwargs):
+            yield "途中まで"
+            first_chunk_emitted.set()
+            release_second_chunk.wait(timeout=2)
+            yield "この続きは保存されない"
+
+        def persist_response(response, *, message_parts=None, web_search_context=None):
+            persisted_records.append({"response": response, "message_parts": message_parts})
+
+        with patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=fake_stream):
+            job = start_generation_job(
+                "guest:sid-cancel-published-record:default",
+                conversation_messages=[{"role": "user", "content": "休憩を提案して"}],
+                model="openai/gpt-oss-120b",
+                persist_response=persist_response,
+                selected_reference_trace=[
+                    SelectedReferenceLookupTrace(
+                        source=PERSONAL_KNOWLEDGE_SOURCE,
+                        query="好みのカフェ",
+                        payload={"status": "ok", "memo_count": 1, "context_fact_count": 0},
+                    )
+                ],
+            )
+            self.assertTrue(first_chunk_emitted.wait(timeout=2))
+            job.cancel()
+            release_second_chunk.set()
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        # 回答を書いたステップはまだ確定していないので、記録は画面に出ていたもの（参照元の検索）のまま。
+        # The step that writes the answer was never settled, so the record is what was on screen: the reference lookup.
+        (published,) = _sse_payloads(body, "answer_trace_updated")
+        self.assertEqual([step["title"] for step in published["trace"]["steps"]], ["メモと記憶を検索"])
+        trace_part = {"type": "answer_trace", **published}
+        (aborted,) = _sse_payloads(body, "aborted")
+        self.assertEqual(aborted["parts"], [trace_part, {"type": "text", "text": "途中まで"}])
+        self.assertEqual(
+            persisted_records,
+            [{"response": "途中まで", "message_parts": [trace_part, {"type": "text", "text": "途中まで"}]}],
+        )
+
+    # 日本語: 検索の実行中に停止した場合は、実行中の記録だけを回答として保存しないことを検証します。
+    # English: Verify a stop while a search is running does not save the in-progress record as an answer.
+    def test_background_generation_job_saves_nothing_when_stopped_during_a_search(self):
+        persisted_records = []
+        search_started = threading.Event()
+        release_search = threading.Event()
+
+        def slow_search(*_args, **_kwargs):
+            search_started.set()
+            release_search.wait(timeout=2)
+            raise RuntimeError("search interrupted")
+
+        with (
+            patch("services.chat_generation_web_search.search_brave_llm_context", side_effect=slow_search),
+            patch(
+                "services.chat_generation_llm_stream.get_llm_response_stream",
+                side_effect=_search_then_answer_stream("Python news", "回答本文"),
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-cancel-during-search:default",
+                conversation_messages=[{"role": "user", "content": "Pythonの最新ニュース"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response, *, message_parts=None, web_search_context=None: persisted_records.append(response),
+            )
+            self.assertTrue(search_started.wait(timeout=2))
+            job.cancel()
+            release_search.set()
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(
+            [[step["status"] for step in payload["trace"]["steps"]] for payload in _sse_payloads(body, "answer_trace_updated")],
+            [["running"]],
+        )
+        self.assertEqual(_sse_payloads(body, "aborted"), [{}])
+        self.assertEqual(persisted_records, [])
+
+    # 日本語: 生成前に済ませた参照元の検索は、最初の判断を待たずに実行記録として配信することを検証します。
+    # English: Verify reference lookups finished before generation are published as the record without
+    # waiting for the first decision.
+    def test_background_generation_job_publishes_prefetched_reference_steps_first(self):
+        with patch(
+            "services.chat_generation_llm_stream.get_llm_response_stream",
+            side_effect=_direct_answer_stream("回答本文"),
+        ):
+            job = start_generation_job(
+                "guest:sid-progress-reference:default",
+                conversation_messages=[{"role": "user", "content": "休憩を提案して"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: None,
+                selected_reference_trace=[
+                    SelectedReferenceLookupTrace(
+                        source=PERSONAL_KNOWLEDGE_SOURCE,
+                        query="好みのカフェ",
+                        payload={"status": "ok", "memo_count": 1, "context_fact_count": 0},
+                    )
+                ],
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        snapshots = [payload["trace"] for payload in _sse_payloads(body, "answer_trace_updated")]
+        self.assertEqual(
+            [[step["title"] for step in snapshot["steps"]] for snapshot in snapshots],
+            [["メモと記憶を検索"], ["メモと記憶を検索", "回答を作成"]],
+        )
+        self.assertLess(body.index("event: answer_trace_updated"), body.index("event: response_generation_started"))
 
     # 日本語: 検索根拠を得たターンだけが引用・回答方針のsystem指示を受け取り、検索しない
     # 通常のターンには渡らないことを検証します。
@@ -2015,7 +2290,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
-        (trace_event,) = _sse_payloads(body, "answer_trace_updated")
+        trace_event = _sse_payloads(body, "answer_trace_updated")[-1]
         self.assertEqual(
             [step["title"] for step in trace_event["trace"]["steps"]],
             ["メモと記憶を検索", "共有プロンプトを検索", "回答を作成"],
@@ -2496,7 +2771,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(mock_search.call_args_list[0].kwargs["search_language"], "")
         self.assertEqual(mock_search.call_args_list[1].kwargs["search_language"], "en")
         self.assertIn("検索結果を踏まえた回答", body)
-        (trace_event,) = _sse_payloads(body, "answer_trace_updated")
+        trace_event = _sse_payloads(body, "answer_trace_updated")[-1]
         trace = trace_event["trace"]
         steps = trace["steps"]
         self.assertEqual(len(steps), 6)
@@ -2981,7 +3256,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(mock_search.call_args.kwargs["search_language"], "")
         self.assertEqual(mock_search.call_args.kwargs["page_fetch_budget"].max_attempts, 10)
         self.assertIn('"cached": true', body)
-        (trace_event,) = _sse_payloads(body, "answer_trace_updated")
+        trace_event = _sse_payloads(body, "answer_trace_updated")[-1]
         steps = trace_event["trace"]["steps"]
         self.assertEqual(len(steps), 5)
         self.assertIn(("reuse", "検索結果を再利用", "OpenAI news"), [(step["kind"], step["title"], step["query"]) for step in steps])

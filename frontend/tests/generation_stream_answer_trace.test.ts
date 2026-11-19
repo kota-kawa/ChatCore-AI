@@ -1,5 +1,5 @@
 // 生成中に届く回答までのステップ（answer_trace_updated）の扱いを検証する。
-// 本文より先・本文の途中・再送・パーツ更新・下書き・再読み込みからの復元のどれでも実行記録が正しく出ることを確かめる。
+// 本文より先（思考中の表示と並ぶ）・本文の途中・再送・パーツ更新・下書き・再読み込みからの復元のどれでも実行記録が正しく出ることを確かめる。
 // Tests how the steps to the answer (answer_trace_updated) are handled while generating: the record must show
 // correctly whether it arrives before the prose, in the middle of it, is resent, follows a parts update or a draft,
 // or has to be restored after a reload.
@@ -96,7 +96,7 @@ const TRACE_2 = makeTrace(
   "参照サイト1件",
 );
 
-test("a trace that arrives before the prose waits for the bubble and then leads its parts", async () => {
+test("a trace that arrives before the prose shows above the thinking indicator and then leads the prose", async () => {
   const clock = createFakeClock();
   const recorder = createStreamHostRecorder({ clock });
   recorder.host.messages.updateActiveMessages(() => [
@@ -107,14 +107,20 @@ test("a trace that arrives before the prose waits for the bubble and then leads 
 
   stream.push(sseBlock(1, "answer_trace_updated", { trace: TRACE_1 }));
   await drive(clock);
-  // 実行記録だけでは吹き出しを作らず、思考中の表示を残す
-  // A record alone creates no bubble, so the thinking indicator stays
-  assert.equal(streamingMessage(recorder.messages()), undefined);
-  assert.equal(recorder.messages()[0]?.sender, "thinking");
+  // 実行記録だけの吹き出しができ、その下に思考中の表示が残る
+  // A bubble holding only the record appears, with the thinking indicator still below it
+  const recordOnly = streamingMessage(recorder.messages());
+  assert.deepEqual(partTypes(recordOnly?.parts), ["answer_trace"]);
+  assert.equal(recordOnly?.text, "");
+  assert.deepEqual(recorder.messages().map((message) => message.sender), ["assistant", "thinking"]);
 
   stream.push(sseBlock(2, "chunk", { text: "京都の紅葉は見頃です。" }));
   await drive(clock);
+  // 本文は同じ吹き出しに加わり、思考中の表示は外れる
+  // The prose joins the same bubble and the thinking indicator goes away
   const message = streamingMessage(recorder.messages());
+  assert.equal(message?.id, recordOnly?.id);
+  assert.deepEqual(recorder.messages().map((entry) => entry.sender), ["assistant"]);
   assert.deepEqual(partTypes(message?.parts), ["answer_trace", "text"]);
   assert.equal(message?.parts?.[0].type === "answer_trace" && message.parts[0].trace.steps[0].status, "running");
   assert.ok(bodyText(message?.parts).startsWith("京都"));
@@ -247,7 +253,7 @@ test("a trace does not cancel the draft shown ahead of confirmation", async () =
   assert.equal(partTypes(final?.parts)[0], "answer_trace");
 });
 
-test("a draft bubble dropped by a retry keeps the record for the next bubble", async () => {
+test("a draft dropped by a retry leaves the record on screen and brings the thinking indicator back", async () => {
   const clock = createFakeClock();
   const recorder = createStreamHostRecorder({ clock });
   recorder.host.messages.updateActiveMessages(() => [
@@ -256,20 +262,203 @@ test("a draft bubble dropped by a retry keeps the record for the next bubble", a
   const stream = createControlledStream();
   const consumed = consumeGenerationStream(stream.response, recorder.host);
 
-  stream.push(sseBlock(null, "answer_draft", { text: "下書き" }));
   stream.push(sseBlock(1, "answer_trace_updated", { trace: TRACE_1 }));
+  stream.push(sseBlock(null, "answer_draft", { text: "下書き" }));
+  await drive(clock);
+  const drafting = streamingMessage(recorder.messages());
+  assert.deepEqual(recorder.messages().map((message) => message.sender), ["assistant"]);
+  assert.ok(drafting?.text);
+
   stream.push(sseBlock(2, "answer_draft_reset", { confirming: false }));
   await drive(clock);
-  assert.equal(streamingMessage(recorder.messages()), undefined);
+  // 下書きは消えるが、表示済みのステップは残り、思考中の表示が戻る
+  // The draft goes, the steps already on screen stay, and the thinking indicator returns
+  const afterDiscard = streamingMessage(recorder.messages());
+  assert.equal(afterDiscard?.id, drafting?.id);
+  assert.equal(afterDiscard?.text, "");
+  assert.deepEqual(partTypes(afterDiscard?.parts), ["answer_trace"]);
+  assert.deepEqual(recorder.messages().map((message) => message.sender), ["assistant", "thinking"]);
 
   stream.push(sseBlock(3, "chunk", { text: "確定本文" }));
   await drive(clock);
   assert.deepEqual(partTypes(streamingMessage(recorder.messages())?.parts), ["answer_trace", "text"]);
+  assert.deepEqual(recorder.messages().map((message) => message.sender), ["assistant"]);
 
   stream.push(sseBlock(4, "done", { response: "確定本文" }));
   stream.end();
   await settleStream(consumed, clock);
 });
+
+test("a running step turning done updates the record in the same bubble before any prose", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({ clock });
+  recorder.host.messages.updateActiveMessages(() => [
+    { id: "thinking-0", sender: "thinking", text: "Web検索中", generationPhase: "web-search" },
+  ]);
+  const stream = createControlledStream();
+  const consumed = consumeGenerationStream(stream.response, recorder.host);
+
+  stream.push(sseBlock(1, "answer_trace_updated", { trace: TRACE_1 }));
+  await drive(clock);
+  const running = streamingMessage(recorder.messages());
+
+  stream.push(sseBlock(2, "answer_trace_updated", { trace: TRACE_2 }));
+  await drive(clock);
+  const done = streamingMessage(recorder.messages());
+  assert.equal(done?.id, running?.id);
+  assert.deepEqual(done?.parts, [{ type: "answer_trace", trace: TRACE_2 }]);
+  assert.deepEqual(recorder.messages().map((message) => message.sender), ["assistant", "thinking"]);
+
+  stream.push(sseBlock(3, "done", { response: "本文", parts: [{ type: "answer_trace", trace: TRACE_2 }, { type: "text", text: "本文" }] }));
+  stream.end();
+  await settleStream(consumed, clock);
+});
+
+test("a cleared record removes the bubble that held nothing else", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({ clock });
+  recorder.host.messages.updateActiveMessages(() => [
+    { id: "thinking-0", sender: "thinking", text: "思考中", generationPhase: "preparing" },
+  ]);
+  const stream = createControlledStream();
+  const consumed = consumeGenerationStream(stream.response, recorder.host);
+
+  stream.push(sseBlock(1, "answer_trace_updated", { trace: TRACE_1 }));
+  await drive(clock);
+  assert.ok(streamingMessage(recorder.messages()));
+
+  stream.push(sseBlock(2, "answer_trace_updated", { trace: null }));
+  await drive(clock);
+  assert.deepEqual(recorder.messages().map((message) => message.sender), ["thinking"]);
+
+  stream.push(sseBlock(3, "done", { response: "本文" }));
+  stream.end();
+  await settleStream(consumed, clock);
+  const final = recorder.messages().find((entry) => entry.sender === "assistant");
+  assert.equal(final?.text, "本文");
+  assert.equal(final?.parts, undefined);
+});
+
+test("a record cleared right after a discarded draft brings the thinking indicator back", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({ clock });
+  recorder.host.messages.updateActiveMessages(() => [
+    { id: "thinking-0", sender: "thinking", text: "思考中", generationPhase: "preparing" },
+  ]);
+  const stream = createControlledStream();
+  const consumed = consumeGenerationStream(stream.response, recorder.host);
+
+  stream.push(sseBlock(1, "answer_trace_updated", { trace: TRACE_1 }));
+  stream.push(sseBlock(null, "answer_draft", { text: "下書き" }));
+  await drive(clock);
+  assert.deepEqual(recorder.messages().map((message) => message.sender), ["assistant"]);
+
+  // 下書きの取り消しと記録の消去が、次の描画より前に続けて届く
+  // The draft discard and the cleared record arrive back to back, before the next frame is drawn
+  stream.push(sseBlock(2, "answer_draft_reset", { confirming: false }) + sseBlock(3, "answer_trace_updated", { trace: null }));
+  await drive(clock);
+  assert.deepEqual(recorder.messages().map((message) => message.sender), ["thinking"]);
+
+  stream.push(sseBlock(4, "done", { response: "本文" }));
+  stream.end();
+  await settleStream(consumed, clock);
+  assert.deepEqual(recorder.messages().map((message) => message.sender), ["assistant"]);
+});
+
+test("after a reload a saved record shows at once even with no prose yet", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({
+    clock,
+    storedGeneration: {
+      roomId: "room-1",
+      roomMode: "normal",
+      generationId: "gen-1",
+      lastEventId: 1,
+      streamedText: "",
+      updatedAt: 0,
+      answerTrace: TRACE_1,
+    },
+  });
+  recorder.host.messages.updateActiveMessages(() => [
+    { id: "thinking-0", sender: "thinking", text: "思考中", generationPhase: "preparing" },
+  ]);
+  const stream = createControlledStream();
+  const consumed = consumeGenerationStream(stream.response, recorder.host);
+  await drive(clock);
+
+  // 再接続は保存後のイベントしか再送しないので、記録は保存から戻す
+  // A reconnect only replays events after the save, so the record comes back from storage
+  assert.deepEqual(streamingMessage(recorder.messages())?.parts, [{ type: "answer_trace", trace: TRACE_1 }]);
+  assert.deepEqual(recorder.messages().map((message) => message.sender), ["assistant", "thinking"]);
+
+  stream.push(sseBlock(2, "answer_trace_updated", { trace: TRACE_2 }));
+  stream.push(sseBlock(3, "done", { response: "本文", parts: [{ type: "answer_trace", trace: TRACE_2 }, { type: "text", text: "本文" }] }));
+  stream.end();
+  assert.equal(await settleStream(consumed, clock), true);
+  const final = recorder.messages().find((entry) => entry.sender === "assistant");
+  assert.deepEqual(final?.parts, [{ type: "answer_trace", trace: TRACE_2 }, { type: "text", text: "本文" }]);
+});
+
+test("a connection lost with only the record on screen hands the turn back as unanswered", async () => {
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({
+    clock,
+    withUnansweredFailureHandler: true,
+    openStream: () => Promise.resolve({ ok: false, status: 404, headers: { get: () => null }, body: null } as unknown as Response),
+  });
+  recorder.host.messages.updateActiveMessages(() => [
+    { id: "thinking-0", sender: "thinking", text: "思考中", generationPhase: "preparing" },
+  ]);
+  const stream = createControlledStream();
+  const consumed = consumeGenerationStream(stream.response, recorder.host);
+
+  stream.push(sseBlock(1, "answer_trace_updated", { trace: TRACE_1 }));
+  await drive(clock);
+  assert.ok(streamingMessage(recorder.messages()));
+
+  // 終端イベントが来ないまま接続が切れ、再接続もできない
+  // The connection drops with no terminal event, and reconnecting is not possible
+  stream.end();
+  await settleStream(consumed, clock);
+
+  assert.equal(recorder.unansweredFailures().length, 1);
+  assert.equal(
+    recorder.messages().some((message) => (message.parts ?? []).some((part) => part.type === "answer_trace")),
+    false,
+  );
+  assert.equal(recorder.persistedAnswers().length, 0);
+});
+
+for (const [name, block] of [
+  ["an error", sseBlock(2, "error", { message: "失敗しました" })],
+  ["an empty answer", sseBlock(2, "done", { response: "" })],
+  ["a stop before any prose", sseBlock(2, "aborted", {})],
+] as const) {
+  test(`a turn that ends with ${name} leaves no bubble holding only the record`, async () => {
+    const clock = createFakeClock();
+    const recorder = createStreamHostRecorder({ clock });
+    recorder.host.messages.updateActiveMessages(() => [
+      { id: "thinking-0", sender: "thinking", text: "思考中", generationPhase: "preparing" },
+    ]);
+    const stream = createControlledStream();
+    const consumed = consumeGenerationStream(stream.response, recorder.host);
+
+    stream.push(sseBlock(1, "answer_trace_updated", { trace: TRACE_1 }));
+    await drive(clock);
+    assert.ok(streamingMessage(recorder.messages()));
+
+    stream.push(block);
+    stream.end();
+    await settleStream(consumed, clock);
+    // 記録だけでは回答にならないので、記録を見せていた吹き出しは残らない
+    // A record alone is not an answer, so the bubble that showed it does not remain
+    assert.equal(
+      recorder.messages().some((message) => (message.parts ?? []).some((part) => part.type === "answer_trace")),
+      false,
+    );
+    assert.equal(recorder.persistedAnswers().length, 0);
+  });
+}
 
 test("an interrupted generation saves the received record with the text it has", async () => {
   const clock = createFakeClock();

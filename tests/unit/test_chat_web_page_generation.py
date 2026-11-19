@@ -96,6 +96,57 @@ class WebPageGenerationTestCase(unittest.TestCase):
         self.assertEqual(job._telemetry.web_search_count, 0)
         self.assertEqual(job._telemetry.evidence_read_count, 2)
 
+    def _read_page_snapshots(self, document):
+        """既知のページを 1 回読んで回答するターンを流し、配信した実行記録を順に返す。"""
+        prior = result()
+        source = prior.sources[2]
+        calls = 0
+
+        def stream(_messages, _model, **_kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                yield json.dumps([tool_call("read_web_page", evidence_id=source.evidence_id)])
+            else:
+                yield "読んだ内容に基づく回答です。"
+
+        job, _saved = self.make_job(prior=[prior])
+        with (
+            patch("services.chat_generation_tools.is_web_search_enabled", return_value=False),
+            patch("services.chat_generation_llm_stream.get_llm_response_stream", side_effect=stream),
+            patch("services.chat_web_page_reader.fetch_url_document", return_value=document),
+        ):
+            job._run()
+        snapshots = [event.payload["trace"] for event in job._events if event.event == "answer_trace_updated"]
+        done = next(event.payload for event in job._events if event.event == "done")
+        return snapshots, done
+
+    # ページを読んでいる間は実行中のステップを見せ、読めたら同じ位置で完了へ変わる。
+    # A running step shows while the page is read, and turns done in place once it has been read.
+    def test_page_read_shows_a_running_step_that_turns_done(self):
+        document = FetchedUrlDocument("https://example.com/3", "https://example.com/3", "Article 3", "Page body.")
+
+        snapshots, done = self._read_page_snapshots(document)
+
+        self.assertEqual(
+            [[(step["id"], step["title"], step["status"]) for step in snapshot["steps"]] for snapshot in snapshots],
+            [
+                [("s1", "参照先のページ本文を確認", "running")],
+                [("s1", "参照先のページ本文を確認", "done")],
+                [("s1", "参照先のページ本文を確認", "done"), ("s2", "回答を作成", "done")],
+            ],
+        )
+        self.assertEqual(done["parts"][0], {"type": "answer_trace", "trace": snapshots[-1]})
+
+    # ページを読めなかったときはステップを残さず、表示済みの実行記録を消すよう伝える。
+    # A page that could not be read leaves no step, and the client is told to drop the record it shows.
+    def test_page_read_that_fails_clears_the_running_step(self):
+        snapshots, done = self._read_page_snapshots(None)
+
+        self.assertEqual([step["status"] for step in snapshots[0]["steps"]], ["running"])
+        self.assertEqual(snapshots[1:], [None])
+        self.assertFalse(any(part.get("type") == "answer_trace" for part in done.get("parts") or []))
+
     def test_snippet_sufficient_followup_never_fetches_page(self):
         prior = result()
         calls = 0

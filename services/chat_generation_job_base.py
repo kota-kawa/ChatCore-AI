@@ -58,6 +58,7 @@ from .generative_ui_images import attach_web_search_images_to_artifacts
 from .selected_reference_context import SelectedReferenceLookupTrace
 from .web_search import WebSearchResult
 from .web_search_images import append_web_search_image_parts
+from .web_search_trace import TraceStep, build_answer_trace, settle_running_answer_trace
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +205,9 @@ class ChatGenerationJobBase:
         # The execution record (the "steps to the answer") published with the confirmed body; a stop
         # saves it together with that body.
         self._answer_trace: dict[str, Any] | None = None
+        # 直前に配信した実行記録。同じ内容を続けて送らないために持つ。
+        # The execution record published last, kept so the same content is never sent twice in a row.
+        self._published_answer_trace: dict[str, Any] | None = None
         # ツール呼び出しの有無が確定するまでの一時チャンク。キャンセル時だけ部分応答として使う。
         # Buffer the current model step until tool-call presence is known; use it as a partial
         # response only when the user cancels generation.
@@ -330,6 +334,56 @@ class ChatGenerationJobBase:
         if self._answer_draft_request is None:
             return None
         return AnswerDraftFilter(self._answer_draft_request)
+
+    # 実行記録（「回答までのステップ」）の途中経過を配信する。記録全体のスナップショットを送るので、再接続で
+    # 途中のイベントを取りこぼしても、最後に届いたものがそのまま現在の状態になる。内容が前回と同じなら送らない。
+    # 出すステップが無くなったときは、表示済みの記録を消すよう null を送る。
+    # Publish the progress of the execution record (the "steps to the answer"). Each event is a snapshot
+    # of the whole record, so a reconnect that missed earlier ones still ends up with the current state
+    # from the last one. Nothing is sent when the content is unchanged. When no step is left, null tells
+    # the client to drop the record it is showing.
+    def _publish_answer_trace_progress(self, trace_steps: Sequence[TraceStep]) -> None:
+        self._publish_answer_trace(build_answer_trace(steps=trace_steps))
+
+    def _publish_answer_trace(self, trace: dict[str, Any] | None) -> None:
+        if trace == self._published_answer_trace:
+            return
+        self._published_answer_trace = trace
+        self._publish("answer_trace_updated", {"trace": trace})
+
+    # 保存と終端イベントに入れる実行記録を返す。確定した本文と一緒に確定した記録があればそれを使う。
+    # 本文が確定する前に終わる経路（停止で未確定の本文を保存する、承認カードだけを残す）では、画面に配信済みの
+    # 記録を使い、実行中のまま残ったステップは失敗にする。画面に見せた記録と保存する記録を食い違わせないため。
+    # Return the execution record that goes into storage and the terminal event. The record settled with the
+    # confirmed body is used when there is one. On paths that end before any body is confirmed (a stop
+    # that saves unconfirmed text, a reply that keeps only approval cards) the record already published
+    # to the screen is used, with steps still running turned into failed, so what was shown and what is
+    # stored never disagree.
+    def _settled_answer_trace(self) -> dict[str, Any] | None:
+        if self._answer_trace is not None:
+            return self._answer_trace
+        return settle_running_answer_trace(self._published_answer_trace)
+
+    # ステップの実行を始めたことを記録して配信する。戻り値は、終わったときに置き換える目印。
+    # Record and publish that a step has started; the return value marks what to replace once it ends.
+    def _begin_trace_step(self, trace_steps: list[TraceStep], step: TraceStep) -> TraceStep:
+        trace_steps.append(step)
+        self._publish_answer_trace_progress(trace_steps)
+        return step
+
+    # 実行中だったステップを、結果を持つステップへその場で置き換えて配信する。同じ位置に入るので、
+    # 画面側ではステップの ID が変わらず、実行中から完了・失敗へ状態だけが変わる。結果のステップが
+    # 無ければ、実行中のステップを取り除く。
+    # Replace the step that was running with the steps carrying its result, in place, and publish. They
+    # take the same position, so on screen the step keeps its id and only its status moves from running
+    # to done or failed. With no result steps, the running step is removed.
+    def _finish_trace_step(self, trace_steps: list[TraceStep], running: TraceStep, *steps: TraceStep) -> None:
+        index = next((position for position, step in enumerate(trace_steps) if step is running), None)
+        if index is None:
+            trace_steps.extend(steps)
+        else:
+            trace_steps[index : index + 1] = steps
+        self._publish_answer_trace_progress(trace_steps)
 
     # 表示済みの下書きがあれば取り消しを配信する。下書きを出していなければ何もしないので、保留バッファを
     # 空にする・差し替える箇所から重ねて呼んでよい。`confirming=True` は確定した本文を直後に配信する
@@ -506,7 +560,7 @@ class ChatGenerationJobBase:
             )
             if message_parts:
                 message_parts = normalize_message_parts_for_display(message_parts) or None
-        message_parts = with_answer_trace_part(message_parts, bot_reply, self._answer_trace)
+        message_parts = with_answer_trace_part(message_parts, bot_reply, self._settled_answer_trace())
         message_parts = _with_tool_approval_parts(message_parts, bot_reply, approval_cards)
         self.response = bot_reply
 

@@ -81,6 +81,9 @@ class TraceStep:
     badge: str = ""
     chips: tuple[str, ...] = ()
     sources: WebSearchResult | None = None
+    # 実行中のステップだけが "running" を持つ。空なら種類から決まる（warning は失敗、それ以外は完了）。
+    # Only a step still in progress carries "running"; empty means the kind decides (warning is failed, anything else done).
+    status: str = ""
 
 
 def _hostnames(result: WebSearchResult | None) -> list[str]:
@@ -251,6 +254,111 @@ def review_step(result: WebSearchResult | None, *, reused: bool = False) -> Trac
     return TraceStep(title="検索結果を確認", detail=detail, kind="review")
 
 
+# 実行中のステップと結果のステップは同じ題名を使う。同じ ID のまま状態だけが変わったように見せるため。
+# A running step and its result share one title, so the step appears to change only its status under the same id.
+_PERSONAL_KNOWLEDGE_STEP_TITLE = "メモと記憶を検索"
+_SHARED_PROMPT_STEP_TITLE = "共有プロンプトを検索"
+_KNOWN_PAGE_READ_STEP_TITLE = "参照先のページ本文を確認"
+# 打ち切られて実行中のまま残ったステップに付ける説明。
+# The description given to a step that was cut off while still running.
+_INTERRUPTED_STEP_DETAIL = "完了を確認できなかったため、取得済みの情報で回答を続けました。"
+
+
+def running_step(title: str, detail: str, *, kind: str, query: str = "") -> TraceStep:
+    # 始めたがまだ結果の出ていないステップ。終わったら、結果を持つステップへ置き換える。
+    # A step that has started and has no result yet; it is replaced by the step carrying the result once it ends.
+    return TraceStep(title=title, detail=detail, kind=kind, query=query, badge="実行中", status="running")
+
+
+def running_search_step(query: str, *, additional: bool = False) -> TraceStep:
+    # Web検索を実行している間のステップ
+    # The step shown while a web search is running.
+    return running_step(
+        "追加検索" if additional else "Web検索",
+        "検索を実行しています。",
+        kind="search",
+        query=query,
+    )
+
+
+def running_reference_step(source: str, query: str) -> TraceStep:
+    # メモ／記憶、または共有プロンプトを検索している間のステップ
+    # The step shown while memos/Memory or shared prompts are being searched.
+    if source == PERSONAL_KNOWLEDGE_SOURCE:
+        return running_step(
+            _PERSONAL_KNOWLEDGE_STEP_TITLE, "保存済みのメモと記憶を検索しています。", kind="knowledge", query=query
+        )
+    return running_step(_SHARED_PROMPT_STEP_TITLE, "共有プロンプトを検索しています。", kind="prompt", query=query)
+
+
+def running_known_page_read_step() -> TraceStep:
+    # 以前に見つけた URL のページを読み込んでいる間のステップ
+    # The step shown while a page behind a previously found URL is being read.
+    return running_step(_KNOWN_PAGE_READ_STEP_TITLE, "ページを読み込んでいます。", kind="read")
+
+
+def known_page_read_step() -> TraceStep:
+    # 以前に見つけた URL のページ本文を読めたステップ
+    # The step for a page behind a previously found URL whose body was read.
+    return TraceStep(
+        title=_KNOWN_PAGE_READ_STEP_TITLE,
+        detail="以前に見つけたURLから、回答に必要な箇所を読みました。",
+        kind="read",
+    )
+
+
+def settle_running_steps(steps: Sequence[TraceStep]) -> list[TraceStep]:
+    """実行中のまま残ったステップを、結果を使えなかったステップにする。
+
+    回答を確定する時点で終わっていないステップは、障害で打ち切られたもの。完了したようには見せない。
+
+    Turn every step still marked as running into one whose result could not be used.
+
+    A step that has not ended when the answer is settled was cut off by a failure, and must not look completed.
+    """
+    return [
+        replace(
+            step,
+            kind="warning",
+            status="",
+            detail=_INTERRUPTED_STEP_DETAIL,
+            badge="",
+            chips=(),
+            sources=None,
+        )
+        if step.status == "running"
+        else step
+        for step in steps
+    ]
+
+
+def settle_running_answer_trace(trace: dict[str, Any] | None) -> dict[str, Any] | None:
+    """配信済みの実行記録のうち、実行中のまま残ったステップを、結果を使えなかったステップにする。
+
+    本文が確定する前にターンが終わる経路（停止で未確定の本文を保存する、承認カードだけを残す）では、画面に
+    配信済みの記録をそのまま保存する。そのとき実行中のステップを完了したようには残さない。
+
+    Turn every step still running in an already published record into one whose result could not be used.
+
+    When a turn ends before any body is confirmed (a stop that saves unconfirmed text, a reply that keeps only
+    approval cards), the record already on screen is what gets stored, and a running step must not be kept
+    as if it had completed.
+    """
+    if trace is None or not any(step.get("status") == "running" for step in trace["steps"]):
+        return trace
+    return normalize_answer_trace(
+        {
+            **trace,
+            "steps": [
+                {**step, "kind": "warning", "status": "failed", "detail": _INTERRUPTED_STEP_DETAIL, "badge": "", "chips": [], "sources": []}
+                if step.get("status") == "running"
+                else step
+                for step in trace["steps"]
+            ],
+        }
+    )
+
+
 def search_failed_step(query: str = "", *, reason: str = "") -> TraceStep:
     # 検索を試みたが結果を使えなかったステップ
     # The step for a search attempt whose result could not be used.
@@ -306,7 +414,7 @@ def selected_reference_step(
         memo_count = int(payload.get("memo_count") or 0)
         fact_count = int(payload.get("context_fact_count") or 0)
         total = memo_count + fact_count
-        title = "メモと記憶を検索"
+        title = _PERSONAL_KNOWLEDGE_STEP_TITLE
         kind = "knowledge"
         chips = tuple(
             label
@@ -323,7 +431,7 @@ def selected_reference_step(
         )
     else:
         total = int(payload.get("prompt_count") or 0)
-        title = "共有プロンプトを検索"
+        title = _SHARED_PROMPT_STEP_TITLE
         kind = "prompt"
         chips = (f"共有プロンプト {total}件",) if total else ()
         success_detail = (
@@ -424,6 +532,7 @@ def _coerce_step(step: Any) -> TraceStep | None:
             chip for chip in (normalize_text(chip, max_chars=STEP_CHIP_MAX_CHARS) for chip in source.chips) if chip
         ),
         sources=source.sources,
+        status=source.status if source.status == "running" else "",
     )
 
 
@@ -477,11 +586,11 @@ def _trace_sources(result: WebSearchResult | None) -> list[dict[str, Any]]:
 
 
 def _trace_step(step: TraceStep, sources: list[dict[str, Any]]) -> dict[str, Any]:
-    # 結果を回答に使えなかったステップ（warning）は失敗として渡す。それ以外は完了済み。
-    # A step whose result could not be used (warning) is handed over as failed; every other one is done.
+    # 実行中のステップはそのまま渡す。結果を回答に使えなかったステップ（warning）は失敗、それ以外は完了済み。
+    # A running step is handed over as such. A step whose result could not be used (warning) is failed; every other one is done.
     return {
         "kind": step.kind,
-        "status": "failed" if step.kind == "warning" else "done",
+        "status": step.status or ("failed" if step.kind == "warning" else "done"),
         "title": step.title,
         "detail": step.detail,
         "query": step.query,
@@ -536,7 +645,9 @@ def build_answer_trace(
     return normalize_answer_trace(
         {
             "version": ANSWER_TRACE_VERSION,
-            "summary": _summary_detail(normalized_steps, source_total),
+            # 要約には、終わったステップだけを数える。実行中の検索を「検索 1 回」と見せない。
+            # The summary counts finished steps only, so a search still running does not read as one search done.
+            "summary": _summary_detail([step for step in normalized_steps if step.status != "running"], source_total),
             "steps": trace_steps,
         }
     )

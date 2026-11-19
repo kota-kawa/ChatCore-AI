@@ -49,6 +49,7 @@ from .web_search_images import (
 from .web_search_trace import (
     answer_step,
     build_answer_trace,
+    settle_running_steps,
 )
 
 logger = logging.getLogger(__name__)
@@ -240,6 +241,9 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
     # Gather this turn's "steps to the answer" into the execution record, adding the step that wrote
     # the answer; None when there is nothing to show.
     def _build_answer_trace(self, state: ChatTurnRunState) -> dict[str, Any] | None:
+        # 障害で打ち切られて実行中のまま残ったステップは、完了したように見せず、失敗として確定する。
+        # A step a failure cut off while still running is settled as failed, never shown as completed.
+        state.web_search_trace_steps[:] = settle_running_steps(state.web_search_trace_steps)
         combined_web_search_result = combine_web_search_results(state.web_search_results)
         if state.web_search_trace_steps or combined_web_search_result is not None:
             state.web_search_trace_steps.append(answer_step(state.web_search_results))
@@ -260,9 +264,11 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
                 step_chunks = [fallback]
         chunks = state.chunks
         for chunk in step_chunks:
-            # 実行記録は、確定した本文の最初のチャンクと同時に確定する。本文には混ぜず、別のイベントで配信する。
-            # The execution record is settled together with the first confirmed chunk of the body.
-            # It is never mixed into the body and travels in an event of its own.
+            # 実行記録は、確定した本文の最初のチャンクと同時に確定する（途中経過はステップの開始・終了ごとに
+            # 配信済み）。本文には混ぜず、別のイベントで配信する。
+            # The execution record is settled together with the first confirmed chunk of the body (its
+            # progress has already been published as steps started and ended). It is never mixed into the
+            # body and travels in an event of its own.
             answer_trace = self._build_answer_trace(state) if not chunks else None
 
             with self._chunks_lock:
@@ -279,7 +285,7 @@ class ChatGenerationAnswerStreamMixin(ChatGenerationJobBase):
                     self._answer_trace = answer_trace
                 chunks.append(chunk)
             if answer_trace is not None:
-                self._publish("answer_trace_updated", {"trace": answer_trace})
+                self._publish_answer_trace(answer_trace)
             streaming_evidence = combine_web_search_results(
                 [*state.web_search_results, *self._prior_web_search_results]
             )

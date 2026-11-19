@@ -417,8 +417,12 @@ test("an answer_trace_updated event carries a normalized whole snapshot", () => 
   });
   assert.equal(action.kind, "answer_trace_updated");
   if (action.kind !== "answer_trace_updated") return;
-  assert.equal(action.trace.steps[0].kind, "info");
-  assert.equal(action.trace.steps[0].sources.length, 1);
+  assert.equal(action.trace?.steps[0].kind, "info");
+  assert.equal(action.trace?.steps[0].sources.length, 1);
+});
+
+test("an answer_trace_updated event carrying null clears the record", () => {
+  assert.deepEqual(interpret("answer_trace_updated", { trace: null }), { kind: "answer_trace_updated", trace: null });
 });
 
 test("an answer_trace_updated event with no usable trace changes nothing", () => {
