@@ -1,5 +1,6 @@
-// チャットなどから AI が抽出した「マイコンテキスト」の候補を一覧し、承認（内容を編集して登録）または却下するパネル。MyContextPanel から使われる。
-// Panel that lists AI-extracted "my context" candidates (from chat and similar) for approval, with optional edits, or rejection; used by MyContextPanel.
+// 記憶の承認待ち候補（有効な記憶が上限に達して自動保存できなかったもの）を一覧し、承認（内容を編集して登録）または却下するパネルと、
+// チャットからの自動保存の ON/OFF。MyContextPanel から使われる。
+// Panel listing pending memory candidates (extractions that could not be auto-saved because the active memory is full) for approval, with optional edits, or rejection, plus the auto-save toggle; used by MyContextPanel.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 
