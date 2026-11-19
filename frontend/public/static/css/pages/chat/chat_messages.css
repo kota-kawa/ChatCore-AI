@@ -1822,6 +1822,158 @@
   }
 }
 
+/* 回答から自動保存された記憶の通知。回答の操作ボタンの下に、白地に罫線の細い行で出す（面は線と余白で分ける）。
+   保存済みは成功色のアイコン、取り消し後は副次色。押す部品（取り消す・リンク）は 44px 以上で、ホバーに頼らない。
+   長いタイトルは折り返し、幅が足りなければ操作が本文の下へ回る。 */
+/* Notices for memories auto-saved from an answer: a thin bordered row on the white face under the answer's action
+   buttons (surfaces are set apart by border and spacing). Saved uses the success icon colour, undone the secondary
+   one. Pressable parts (undo, link) are at least 44px and never depend on hover. A long title wraps, and the
+   actions drop below the text when the width runs out. */
+:where(body.chat-page, .chat-page-shell) .memory-notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 0.5rem);
+  width: 100%;
+  margin: var(--space-2, 0.5rem) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1, 0.25rem) var(--space-3, 0.75rem);
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: calc(var(--tap-target-min, 44px) + var(--space-2, 0.5rem) + 2px);
+  padding: var(--space-1, 0.25rem) var(--space-3, 0.75rem);
+  background: var(--surface-primary, #ffffff);
+  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-sm, 8px);
+  color: var(--text-dark, #1a1a1a);
+  font-size: var(--text-sm, 0.875rem);
+  line-height: var(--leading-normal, 1.5);
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice__body {
+  display: flex;
+  flex: 1 1 14rem;
+  align-items: flex-start;
+  gap: var(--space-2, 0.5rem);
+  min-width: 0;
+  padding: var(--space-1, 0.25rem) 0;
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice__body > i {
+  flex: 0 0 auto;
+  margin-top: 0.2em;
+  color: var(--success-color, #15803d);
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice[data-status="undone"] .memory-notice__body > i {
+  color: var(--text-secondary, #6b7280);
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice[data-status="undone"] .memory-notice__text,
+:where(body.chat-page, .chat-page-shell) .memory-notice__label {
+  color: var(--text-secondary, #6b7280);
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice__title {
+  color: var(--text-dark, #1a1a1a);
+  font-weight: 600;
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice__undo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-target-min, 44px);
+  padding: 0.5rem 1.1rem;
+  box-sizing: border-box;
+  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-full, 999px);
+  background: var(--surface-primary, #ffffff);
+  color: var(--text-dark, #1a1a1a);
+  font-family: inherit;
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 500;
+  line-height: var(--leading-tight, 1.4);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background var(--transition-fast, 0.15s ease),
+    border-color var(--transition-fast, 0.15s ease),
+    color var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice__undo:hover:not(:disabled) {
+  border-color: var(--primary-border, rgba(25, 195, 125, 0.18));
+  background: var(--primary-subtle, rgba(25, 195, 125, 0.08));
+  color: var(--primary-dark, #0f7a51);
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice__undo:disabled {
+  opacity: var(--disabled-opacity, 0.6);
+  cursor: not-allowed;
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  min-height: var(--tap-target-min, 44px);
+  color: var(--primary-dark, #0f7a51);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice__link:hover {
+  text-decoration: underline;
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice__undo:focus-visible,
+:where(body.chat-page, .chat-page-shell) .memory-notice__link:focus-visible {
+  outline: 2px solid var(--primary-dark, #0f7a51);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 8px);
+}
+
+:where(body.chat-page, .chat-page-shell) .memory-notice__undo:focus-visible {
+  border-radius: var(--radius-full, 999px);
+}
+
+/* 濃色面では白地用の --primary-dark が沈むため、明るい --primary-color に替える */
+/* On the dark surface --primary-dark sinks, so switch to the brighter --primary-color */
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) :is(
+  .memory-notice__link,
+  .memory-notice__undo:hover:not(:disabled)
+) {
+  color: var(--primary-color, #19c37d);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) :is(
+  .memory-notice__undo,
+  .memory-notice__link
+):focus-visible {
+  outline-color: var(--primary-color, #19c37d);
+}
+
 /* タスク起動メッセージの「裏側のタスクプロンプト」を折り畳みで表示する。 */
 /* Collapsible disclosure for the underlying task prompt of a task-launch message. */
 :where(body.chat-page, .chat-page-shell) .task-prompt-disclosure {

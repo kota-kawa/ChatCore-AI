@@ -25,8 +25,10 @@ import { KnowledgeLookupChips, SetupAttachMenu } from "./setup_attach_menu";
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
 import { useChatClipboardPaste } from "../../hooks/chat_page/use_chat_clipboard_paste";
 import { useChatFooterHeight } from "../../hooks/chat_page/use_chat_footer_height";
+import { useAutoSavedMemories } from "../../hooks/chat_page/use_auto_saved_memories";
 import { useChatToolApprovals } from "../../hooks/chat_page/use_chat_tool_approvals";
 import { useDismissOnEscape } from "../../hooks/use_dismiss_on_escape";
+import { findLastAssistantServerId } from "../../lib/chat_page/auto_saved_memory_state";
 import { isNearBottom } from "../../lib/chat_page/dom";
 import { extractUrlsFromText, getUrlDomain } from "../../lib/chat_page/url_utils";
 import { useTranslation } from "../../contexts/locale_context";
@@ -237,6 +239,19 @@ function ChatMainSectionComponent() {
   // 承認カードの決定を送る。決定してもチャットは送信しない。
   // Send approval-card decisions; a decision never sends a chat message.
   const { handleToolApprovalDecide } = useChatToolApprovals({ messages, applyToolApproval });
+
+  // 回答から自動保存された記憶の通知。部屋を開いたときと回答の確定後に取得し、取り消しもここで受ける。
+  // 通知の状態が変わらないあいだは同じ参照を渡すので、ストリーミング中の再描画や入力へは広がらない。
+  // Notices for memories auto-saved from answers: fetched when a room opens and after an answer settles, and
+  // undone here. The same reference is passed while nothing changes, so streaming re-renders and input are unaffected.
+  const lastAssistantServerId = useMemo(() => findLastAssistantServerId(messages), [messages]);
+  const { memoriesByMessageId: autoSavedMemories, undo: handleUndoAutoSavedMemory } = useAutoSavedMemories({
+    roomId: currentRoomId,
+    roomMode: currentRoomMode,
+    loggedIn,
+    isGenerating,
+    lastAssistantServerId,
+  });
 
   // 浮かせた入力コンテナの実高さを .chat-area の CSS 変数へ反映するフック。
   // Hook mirroring the floating composer's height into a CSS variable on .chat-area.
@@ -653,6 +668,8 @@ function ChatMainSectionComponent() {
             onToolApprovalDecide={handleToolApprovalDecide}
             onEditAndRegenerate={handleEditAndRegenerateMessage}
             onSwitchBranch={handleSwitchBranch}
+            autoSavedMemories={autoSavedMemories}
+            onUndoAutoSavedMemory={handleUndoAutoSavedMemory}
             tasks={tasks}
           />
 

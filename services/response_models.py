@@ -419,6 +419,22 @@ class ContextExtractionSettingsResponse(ResponsePayloadModel):
     enabled: bool = True
 
 
+# 日本語: あるチャットのメッセージから自動保存された事実 1 件。取り消し(PUT で deprecated にする)に必要な revision を含む。
+# English: One fact auto-saved from a chat message, with the revision needed to undo it (deprecate through PUT).
+class ContextAutoSavedFactResponse(ResponsePayloadModel):
+    id: int
+    message_id: int
+    title: str
+    revision: int = Field(ge=1)
+
+
+# 日本語: 指定した部屋で自動保存された事実の一覧と、自動抽出が有効かどうか(無効ならクライアントは取り直さない)。
+# English: Facts auto-saved in one room plus whether auto-extraction is enabled (clients stop re-fetching when it is off).
+class ContextAutoSavedFactListResponse(ResponsePayloadModel):
+    enabled: bool = True
+    facts: list[ContextAutoSavedFactResponse] = Field(default_factory=list)
+
+
 # 日本語: fact_type ごとにまとめた active な事実のグループ。
 # English: Group of active facts collected under one fact_type.
 class ContextDigestGroup(ResponsePayloadModel):

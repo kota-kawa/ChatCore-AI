@@ -1,6 +1,6 @@
-"""パーソナル・コンテキスト金庫の事実・抽出候補・インポート/エクスポートを扱う HTTP API（/api/context-facts）。
+"""記憶（パーソナル・コンテキスト金庫）の事実・自動保存した事実・承認待ち候補・インポート/エクスポートの HTTP API（/api/context-facts）。
 
-HTTP API for the personal context vault: facts, extraction candidates, and import/export (/api/context-facts).
+HTTP API for memory (the personal context vault): facts, auto-saved facts, pending candidates, and import/export (/api/context-facts).
 """
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from services.context_vault_candidate_service import (
     MAX_CONTEXT_CANDIDATE_LIST_LIMIT,
     approve_candidate,
     get_extraction_settings,
+    list_auto_saved_facts,
     list_candidates,
     reject_candidate,
     update_extraction_settings,
@@ -33,6 +34,7 @@ from services.context_vault_service import (
 )
 from services.csrf import require_csrf
 from services.error_messages import (
+    ERROR_CONTEXT_AUTO_SAVED_ROOM_INVALID,
     ERROR_CONTEXT_EXTRACTION_SETTINGS_PAYLOAD_INVALID,
     ERROR_CONTEXT_FACT_CANDIDATE_APPROVE_PAYLOAD_INVALID,
     ERROR_CONTEXT_FACT_CANDIDATE_REJECT_PAYLOAD_INVALID,
@@ -79,6 +81,9 @@ _VALID_STATUSES = {"active", "deprecated"}
 _VALID_CANDIDATE_STATUSES = {"pending", "approved", "rejected"}
 _VALID_PORTABILITY_FORMATS = {"json", "markdown"}
 _MAX_CONTEXT_VAULT_IMPORT_REQUEST_BYTES = 32 * 1024 * 1024
+# source_ref（500 文字）に収まらない room_id は、保存された事実と一致し得ないので受け付けない。
+# A room_id too long for source_ref (500 chars) can never match a stored fact, so it is rejected.
+_MAX_AUTO_SAVED_ROOM_ID_LENGTH = 200
 
 
 async def _require_bounded_import_json(request: Request):
@@ -158,6 +163,26 @@ async def api_list_context_facts(
         return jsonify(result.model_dump())
     except ApiServiceError as exc:
         return jsonify_service_error(exc, status="fail")
+
+
+@context_vault_bp.get("/auto-saved", name="context_vault.api_list_auto_saved")
+async def api_list_auto_saved_context_facts(request: Request, room_id: str = ""):
+    # 指定した部屋のチャットから自動保存された自分の有効な事実と、自動抽出が有効かを返す（チャットの「記憶しました」通知用）。
+    # Return the owner's active facts auto-saved from one room's chat and whether auto-extraction is on
+    # (for the chat's "remembered" notice).
+    """指定した部屋のチャットから自動保存された自分の有効な事実と、自動抽出が有効かを返す。"""
+    user_id = user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
+    if not room_id or len(room_id) > _MAX_AUTO_SAVED_ROOM_ID_LENGTH:
+        return jsonify({"status": "fail", "error": ERROR_CONTEXT_AUTO_SAVED_ROOM_INVALID}, status_code=400)
+    try:
+        result = await list_auto_saved_facts(user_id, room_id)
+        return jsonify(result.model_dump())
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc, status="fail")
+    except Exception:
+        return log_and_internal_server_error(logger, CONTEXT_FACT_UPDATE_ERROR, status="fail")
 
 
 @context_vault_bp.get("/export", name="context_vault.api_export")
@@ -270,9 +295,9 @@ async def api_list_context_fact_candidates(
     limit: int = DEFAULT_CONTEXT_CANDIDATE_LIST_LIMIT,
     cursor: str | None = None,
 ):
-    # ユーザー確認待ちの抽出候補をkeysetページングで取得する。
-    # List extraction candidates awaiting user review, using keyset paging.
-    """ユーザー確認待ちの抽出候補をkeysetページングで取得する。"""
+    # 承認待ちの抽出候補（有効な事実が上限に達して直接保存できなかったもの）をkeysetページングで取得する。
+    # List pending candidates (extractions that could not be saved directly because the active-fact cap was reached), using keyset paging.
+    """承認待ちの抽出候補（有効な事実が上限に達して直接保存できなかったもの）をkeysetページングで取得する。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
@@ -376,9 +401,9 @@ async def api_reject_context_fact_candidate(request: Request, candidate_id: int)
     name="context_vault.api_get_extraction_settings",
 )
 async def api_get_context_extraction_settings(request: Request):
-    # 現在の会話コンテキスト自動抽出opt-in設定を取得する。
-    # Get the current opt-in setting for automatic context extraction from conversations.
-    """現在の会話コンテキスト自動抽出opt-in設定を取得する。"""
+    # 現在の会話からの記憶の自動抽出の設定（初期値は有効）を取得する。
+    # Get the current setting for automatic memory extraction from conversations (on by default).
+    """現在の会話からの記憶の自動抽出の設定（初期値は有効）を取得する。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
@@ -396,9 +421,9 @@ async def api_get_context_extraction_settings(request: Request):
     name="context_vault.api_update_extraction_settings",
 )
 async def api_update_context_extraction_settings(request: Request):
-    # 会話コンテキスト自動抽出をユーザーの明示操作で有効・無効化する。
-    # Enable or disable automatic context extraction through an explicit user action.
-    """会話コンテキスト自動抽出をユーザーの明示操作で有効・無効化する。"""
+    # 会話からの記憶の自動抽出をユーザーの明示操作で有効・無効化する。
+    # Enable or disable automatic memory extraction through an explicit user action.
+    """会話からの記憶の自動抽出をユーザーの明示操作で有効・無効化する。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)

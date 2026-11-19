@@ -1,7 +1,7 @@
-"""ContextFactCandidateRepository（自動抽出の保存、候補の承認・却下）が発行する SQL と、
+"""ContextFactCandidateRepository（自動抽出の保存、自動保存した事実の一覧、候補の承認・却下）が発行する SQL と、
 リビジョンによる楽観的排他を検証するテスト。
 
-Tests the SQL emitted by ContextFactCandidateRepository (storing extractions,
+Tests the SQL emitted by ContextFactCandidateRepository (storing extractions, listing auto-saved facts,
 approving and rejecting candidates) and its optimistic revision checks.
 """
 
@@ -201,6 +201,30 @@ class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual((stored.saved_facts, stored.queued_count), ([], 0))
         self.assertEqual(session.execute.await_count, 3)
+
+    async def test_list_auto_saved_in_room_is_owner_scoped_and_escapes_like_wildcards(self):
+        session = MagicMock()
+        session.execute = AsyncMock(
+            return_value=[SimpleNamespace(id=31, title="Rust", revision=2, source_ref="chat:a_b:message:5")]
+        )
+
+        rows = await ContextFactCandidateRepository(session).list_auto_saved_in_room(7, "a_b%")
+
+        self.assertEqual(rows, [{"id": 31, "title": "Rust", "revision": 2, "source_ref": "chat:a_b:message:5"}])
+        compiled = session.execute.await_args.args[0].compile(dialect=dialect())
+        sql = " ".join(str(compiled).split())
+        self.assertIn("context_facts.user_id =", sql)
+        self.assertIn("context_facts.status =", sql)
+        self.assertIn("context_facts.source_kind =", sql)
+        self.assertIn("ESCAPE", sql)
+        # 候補の承認で作られた事実(本人が見て承認したもの)は通知の対象にしない。
+        # Facts created by approving a candidate (reviewed by the owner) are not notified.
+        self.assertIn("NOT (EXISTS (SELECT * FROM context_fact_candidates WHERE", sql)
+        self.assertIn(7, compiled.params.values())
+        like_values = [value for value in compiled.params.values() if isinstance(value, str) and "message:" in value]
+        self.assertEqual(len(like_values), 1)
+        self.assertNotIn("a_b%", like_values[0])
+        self.assertIn("a/_b/%", like_values[0])
 
     async def test_get_extraction_settings_defaults_to_on_when_no_user_row_exists(self):
         session = MagicMock()

@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 845b673964a1ea7ac58151e588b5c522245b59988225bc2692850ce65da3b1e6
+// Schema fingerprint: c9f139172fab5e36dbc1af4b09e168996d61313c88f40a33a9ac8cabdc8ab60e
 
 import { z } from "zod";
 
@@ -262,6 +262,12 @@ export type ContextFactCandidateApprovalResponse = z.infer<typeof ContextFactCan
 
 export const ContextExtractionSettingsResponseSchema = z.object({ "enabled": z.boolean().default(true) }).catchall(z.any());
 export type ContextExtractionSettingsResponse = z.infer<typeof ContextExtractionSettingsResponseSchema>;
+
+export const ContextAutoSavedFactResponseSchema = z.object({ "id": z.number().int(), "message_id": z.number().int(), "title": z.string(), "revision": z.number().int().gte(1) }).catchall(z.any());
+export type ContextAutoSavedFactResponse = z.infer<typeof ContextAutoSavedFactResponseSchema>;
+
+export const ContextAutoSavedFactListResponseSchema = z.object({ "enabled": z.boolean().default(true), "facts": z.array(z.object({ "id": z.number().int(), "message_id": z.number().int(), "title": z.string(), "revision": z.number().int().gte(1) }).catchall(z.any())).optional() }).catchall(z.any());
+export type ContextAutoSavedFactListResponse = z.infer<typeof ContextAutoSavedFactListResponseSchema>;
 
 export const ContextDigestGroupSchema = z.object({ "fact_type": z.string(), "facts": z.array(z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "status": z.enum(["active","deprecated"]), "revision": z.number().int(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("manual"), "importance": z.number().int().gte(0).lte(100).default(50), "confidence": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "last_confirmed_at": z.union([z.string(), z.null()]).default(null), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())).optional() }).catchall(z.any());
 export type ContextDigestGroup = z.infer<typeof ContextDigestGroupSchema>;
