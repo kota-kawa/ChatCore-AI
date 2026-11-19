@@ -70,6 +70,7 @@ from services.llm import LlmOutputLimitError
 from services.message_parts_display import (
     MAX_WEB_SEARCH_IMAGES_PER_REPLY,
     normalize_message_parts_for_display,
+    strip_web_search_sources_html,
 )
 from services.structured_ui import buttons_as_text as _buttons_as_text
 from services.structured_ui import has_structured_ui_source, is_text_only_request, ui_fallback, validate_structured_ui
@@ -247,16 +248,6 @@ _ARTIFACT_SOURCE_KEY_RE = re.compile(
 )
 _ARTIFACT_CONTEXT_KEY_RE = re.compile(
     r'"(?:artifact|version|title|name|label|height|description|summary|caption|libraries)"\s*:',
-    re.IGNORECASE,
-)
-# Web検索結果は <details class="web-search-sources …">…</details> として本文へ差し込まれる。
-# fallback生成やintent判定では本文だけを見たいので、このブロックを除去する。
-# Web search results are injected as <details class="web-search-sources …">…</details>
-# blocks. Strip them before inferring intent or building a fallback so the raw markup
-# never leaks into a generated UI card.
-_WEB_SEARCH_SOURCES_BLOCK_RE = re.compile(
-    r"<details\b[^>]*\bclass\s*=\s*(?P<quote>[\"'])[^\"']*web-search-sources[^\"']*(?P=quote)[^>]*>"
-    r"(?:(?!</?details\b)[\s\S])*?</details>",
     re.IGNORECASE,
 )
 # JavaScript は大文字小文字を区別するため、この表は大小を区別して照合する。IGNORECASE を
@@ -659,29 +650,10 @@ def _looks_like_artifact_json(source: str) -> bool:
     return bool(source_keys) and (len(source_keys) >= 2 or bool(_ARTIFACT_CONTEXT_KEY_RE.search(source)))
 
 
-# 本文から、ネストを含むWeb検索結果ソースのdetailsタグブロックをすべて除去します。
-# Strip nested Web search source details blocks from the raw text.
-def _strip_web_search_sources_html(text: str) -> str:
-    if "web-search-sources" not in text:
-        return text
-    # ネストした details を含まない最も内側のブロックから順に除去し、変化が無くなるまで
-    # 繰り返すことで外側のトレースブロックも安全に取り除く。
-    # Remove the innermost blocks first and repeat until stable so nested trace
-    # blocks are stripped safely as well.
-    current = text
-    # 正規表現だけではネスト全体を一度に消せないため、内側から消して安定するまで繰り返します。
-    # Since regular expressions alone cannot remove the entire nest at once, repeat removing from the inside until it stabilizes.
-    while True:
-        stripped = _WEB_SEARCH_SOURCES_BLOCK_RE.sub("", current)
-        if stripped == current:
-            return current
-        current = stripped
-
-
 # 本文の最初の空でない行などから、アーティファクトのタイトルを推測します。
 # Infer a title for the sandbox artifact from the surrounding prose.
 def _infer_artifact_title(text: str) -> str:
-    cleaned = FENCED_BLOCK_RE.sub("", _strip_web_search_sources_html(text)).strip()
+    cleaned = FENCED_BLOCK_RE.sub("", strip_web_search_sources_html(text)).strip()
     for line in cleaned.splitlines():
         line = line.strip(" #:-\t")
         if line:
