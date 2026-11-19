@@ -99,7 +99,7 @@ describe("MyContextPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "持ち運び" }));
 
     expect(
-      screen.getByRole("dialog", { name: "コンテキストの持ち運び" }),
+      screen.getByRole("dialog", { name: "記憶の持ち運び" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /書き出し/ })).toHaveAttribute(
       "aria-selected",
@@ -143,8 +143,8 @@ describe("MyContextPanel", () => {
     const create = vi.fn().mockResolvedValue(sampleFact);
     renderPanel({ isLoggedIn: true, api: { load, create } });
 
-    fireEvent.click(screen.getByRole("button", { name: /コンテキストを追加/ }));
-    expect(screen.getByRole("dialog", { name: "コンテキストを追加" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /記憶を追加/ }));
+    expect(screen.getByRole("dialog", { name: "記憶を追加" })).toBeInTheDocument();
     expect(document.body.style.overflow).toBe("hidden");
     fireEvent.change(screen.getByLabelText("タイトル"), {
       target: { value: "エディタの好み" },
@@ -170,8 +170,8 @@ describe("MyContextPanel", () => {
     const load = vi.fn().mockResolvedValue({ facts: [], totalActive: 0, nextCursor: null });
     renderPanel({ isLoggedIn: true, api: { load } });
 
-    fireEvent.click(screen.getByRole("button", { name: /コンテキストを追加/ }));
-    expect(screen.getByRole("dialog", { name: "コンテキストを追加" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /記憶を追加/ }));
+    expect(screen.getByRole("dialog", { name: "記憶を追加" })).toBeInTheDocument();
     expect(document.body.style.overflow).toBe("hidden");
 
     fireEvent.keyDown(document, { key: "Escape" });
@@ -180,13 +180,13 @@ describe("MyContextPanel", () => {
     // Right after closing, the shell stays and keeps the form on screen while it fades
     const overlay = document.getElementById("context-editor-modal");
     expect(overlay).toHaveClass("is-closing");
-    expect(overlay).toHaveTextContent("コンテキストを追加");
+    expect(overlay).toHaveTextContent("記憶を追加");
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "コンテキストを追加" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "記憶を追加" })).not.toBeInTheDocument();
       expect(document.body.style.overflow).toBe("");
       expect(overlay).not.toHaveClass("is-closing");
-      expect(overlay).not.toHaveTextContent("コンテキストを追加");
+      expect(overlay).not.toHaveTextContent("記憶を追加");
     });
   });
 
@@ -273,13 +273,13 @@ describe("MyContextPanel", () => {
     const create = vi.fn().mockRejectedValue(new Error("保存件数の上限に達しました。"));
     renderPanel({ isLoggedIn: true, api: { load, create } });
 
-    fireEvent.click(screen.getByRole("button", { name: /コンテキストを追加/ }));
+    fireEvent.click(screen.getByRole("button", { name: /記憶を追加/ }));
     fireEvent.change(screen.getByLabelText("タイトル"), { target: { value: "好み" } });
     fireEvent.change(screen.getByLabelText("内容"), { target: { value: "簡潔な回答" } });
     fireEvent.click(screen.getByRole("button", { name: "追加" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("保存件数の上限に達しました。");
-    expect(screen.getByRole("dialog", { name: "コンテキストを追加" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "記憶を追加" })).toBeInTheDocument();
   });
 
   it("updates the importance when editing a fact", async () => {

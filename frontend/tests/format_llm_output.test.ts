@@ -65,7 +65,7 @@ test("formatLLMOutput renders selected-reference markers as readable pills", () 
 
   assert.match(html, /selected-reference-citation--personal/);
   assert.match(html, /bi-journal-text/);
-  assert.match(html, />メモ・マイコンテキスト</);
+  assert.match(html, />メモ・記憶</);
   assert.match(html, /selected-reference-citation--shared-prompt/);
   assert.match(html, />共有プロンプト</);
   assert.doesNotMatch(html, /personal_knowledge_result/);

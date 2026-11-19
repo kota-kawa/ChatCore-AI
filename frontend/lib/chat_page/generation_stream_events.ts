@@ -98,8 +98,8 @@ function interpretSharedPromptSearchEvent(
   return null;
 }
 
-// メモ・マイコンテキスト検索のイベントを、思考中ステータスの文言へ変換する。対象外のイベントなら null。
-// Converts memo / My Context search events into thinking-status text; null for other events.
+// メモ・記憶の検索イベントを、思考中ステータスの文言へ変換する。対象外のイベントなら null。
+// Converts memo / Memory search events into thinking-status text; null for other events.
 function interpretPersonalKnowledgeSearchEvent(
   event: string,
   data: Record<string, unknown>,
@@ -107,7 +107,7 @@ function interpretPersonalKnowledgeSearchEvent(
 ): GenerationStreamAction | null {
   if (event === "personal_knowledge_search_started") {
     return thinkingStatus(
-      localize("メモとマイコンテキストを検索しています", "Searching your memos and My Context"),
+      localize("メモと記憶を検索しています", "Searching your memos and Memory"),
       "web-search",
     );
   }

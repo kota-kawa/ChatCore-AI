@@ -326,7 +326,7 @@ test("search failures and the generation start move the thinking status on", () 
   });
   assert.deepEqual(interpret("personal_knowledge_search_started", {}), {
     kind: "thinking_status",
-    text: "メモとマイコンテキストを検索しています",
+    text: "メモと記憶を検索しています",
     phase: "web-search",
   });
 });

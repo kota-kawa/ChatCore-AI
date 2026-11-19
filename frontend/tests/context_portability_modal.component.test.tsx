@@ -113,7 +113,7 @@ describe("ContextPortabilityModal", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("書き出しに失敗しました。");
     expect(
-      screen.getByRole("dialog", { name: "コンテキストの持ち運び" }),
+      screen.getByRole("dialog", { name: "記憶の持ち運び" }),
     ).toBeInTheDocument();
   });
 

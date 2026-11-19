@@ -94,7 +94,7 @@ describe("ContextCandidatePanel", () => {
     expect(toggle).toHaveAttribute("aria-checked", "false");
     expect(
       screen.getByText(
-        "有効にすると、今後のチャットから保存候補を非同期で提案します。候補は承認するまで金庫に保存されません",
+        "有効にすると、今後のチャットから保存候補を非同期で提案します。候補は承認するまで記憶に保存されません",
       ),
     ).toBeInTheDocument();
 

@@ -192,7 +192,7 @@ describe("BotMessageHtml selected-reference citations", () => {
     );
 
     const pill = container.querySelector(".selected-reference-citation--personal");
-    expect(pill).toHaveTextContent("メモ・マイコンテキスト");
+    expect(pill).toHaveTextContent("メモ・記憶");
     expect(pill?.querySelector("i.bi.bi-journal-text")).not.toBeNull();
     expect(container).not.toHaveTextContent("personal_knowledge_result");
   });
