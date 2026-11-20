@@ -26,10 +26,7 @@ from services.api_errors import ApiServiceError
 from services.context_vault_embeddings import schedule_embedding
 from services.db import is_retryable_db_error, session_scope
 from services.error_messages import ERROR_CONTEXT_FACT_CANDIDATE_CURSOR_INVALID
-from services.repositories.context_fact_candidate_repository import (
-    ContextFactCandidateRepository,
-    ExtractedStoreResult,
-)
+from services.repositories.context_fact_candidate_repository import ContextFactCandidateRepository
 from services.request_models import (
     DEFAULT_CONTEXT_FACT_IMPORTANCE,
     MAX_CONTEXT_FACT_CONTENT_LENGTH,
@@ -174,16 +171,18 @@ async def store_extracted_facts(
     room_id: str | None = None,
     user_message_id: int | None = None,
     session: AsyncSession | None = None,
-) -> ExtractedStoreResult:
+) -> list[dict[str, Any]]:
     """LLM が抽出した内容を検証し、抽出を許可しているユーザーの記憶として重複なく保存する。
-    有効な事実に空きがある分は本人未確認の事実として直接保存し（保存後に埋め込みを予約する）、
-    空きが無い分だけ承認待ち候補へ入れる。検証に通らない候補は黙って捨てる。
+    本人未確認の事実として直接保存し（保存後に埋め込みを予約する）、有効件数が上限のときは、自動保存のまま本人が
+    手を入れていない事実を無効化して入れ替える（入れ替えられる事実が無ければ保存しない）。検証に通らない候補は
+    黙って捨てる。保存した事実の一覧を返す。
     room_id があれば、候補の evidence（本人発話の引用）を出典として残す（user_message_id は引用元の発話）。
     session を渡した場合、埋め込みの予約はコミット後に呼び出し側が行う。
 
     Validate LLM-extracted content and store it as unique memory for an owner who has extraction enabled.
-    What fits under the active-fact cap is saved directly as unconfirmed facts (embeddings are scheduled after
-    the commit); only the overflow is queued as pending candidates. Invalid candidates are silently skipped.
+    It is saved directly as unconfirmed facts (embeddings are scheduled after the commit); at the active-fact cap an
+    auto-saved fact the owner never touched is deprecated to make room, and nothing is saved when none can be replaced.
+    Invalid candidates are silently skipped. Returns the facts saved.
     With a room_id, each candidate's evidence (the owner's quoted words) is kept as a source (user_message_id is
     the message it came from). With a caller-supplied session, the caller schedules embeddings after its own commit.
     """
@@ -210,17 +209,17 @@ async def store_extracted_facts(
             }
         )
     if not prepared:
-        return ExtractedStoreResult([], 0)
+        return []
 
-    async def operation(db: AsyncSession) -> ExtractedStoreResult:
+    async def operation(db: AsyncSession) -> list[dict[str, Any]]:
         repo = _repository(db)
         if not await repo.get_extraction_settings(user_id):
-            return ExtractedStoreResult([], 0)
+            return []
         return await repo.store_extracted(user_id, prepared, room_id=room_id, user_message_id=user_message_id)
 
-    result = await _transaction(session, operation)
+    saved_facts = await _transaction(session, operation)
     if session is None:
-        for fact in result.saved_facts:
+        for fact in saved_facts:
             schedule_embedding(
                 int(fact["id"]),
                 str(fact["fact_type"]),
@@ -228,7 +227,7 @@ async def store_extracted_facts(
                 str(fact["content"]),
                 int(fact["revision"]),
             )
-    return result
+    return saved_facts
 
 
 # カーソルは「作成日時~ID」形式。最後の区切りで分割するので、日時側に区切り文字が含まれても壊れない。
@@ -358,17 +357,6 @@ async def is_context_extraction_enabled(
     return await _transaction(
         session,
         lambda db: _repository(db).get_extraction_settings(user_id),
-    )
-
-
-async def should_extract_context(
-    user_id: int,
-    *,
-    session: AsyncSession | None = None,
-) -> bool:
-    return await _transaction(
-        session,
-        lambda db: _repository(db).should_extract_context(user_id),
     )
 
 

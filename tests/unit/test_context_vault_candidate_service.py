@@ -11,12 +11,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from services.api_errors import ApiServiceError
 from services.context_vault_candidate_service import (
     approve_candidate,
+    is_context_extraction_enabled,
     list_candidates,
     reject_candidate,
     store_extracted_facts,
 )
 from services.error_messages import ERROR_CONTEXT_FACT_CANDIDATE_CURSOR_INVALID
-from services.repositories.context_fact_candidate_repository import ExtractedStoreResult
 
 
 # 日本語: 候補テーブルの 1 行分の辞書を作ります。
@@ -88,7 +88,7 @@ class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_store_extracted_facts_requires_setting_and_normalizes_input(self):
         repo = _repo()
         repo.get_extraction_settings.side_effect = [False, True]
-        repo.store_extracted.return_value = ExtractedStoreResult([], 1)
+        repo.store_extracted.return_value = [_fact()]
         with patch("services.context_vault_candidate_service._repository", return_value=repo):
             disabled = await store_extracted_facts(
                 7,
@@ -96,7 +96,7 @@ class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
                 source_ref="room-123",
                 session=object(),
             )
-            self.assertEqual(disabled, ExtractedStoreResult([], 0))
+            self.assertEqual(disabled, [])
             repo.store_extracted.assert_not_awaited()
             stored = await store_extracted_facts(
                 7,
@@ -114,7 +114,7 @@ class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
                 source_ref="  room-123  ",
                 session=object(),
             )
-        self.assertEqual(stored.queued_count, 1)
+        self.assertEqual([fact["id"] for fact in stored], [31])
         prepared = repo.store_extracted.call_args.args[1]
         self.assertEqual(len(prepared), 1)
         self.assertEqual(prepared[0]["title"], "Chat-Core")
@@ -125,7 +125,7 @@ class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_store_extracted_facts_passes_evidence_and_message_origin_to_the_repository(self):
         repo = _repo()
         repo.get_extraction_settings.return_value = True
-        repo.store_extracted.return_value = ExtractedStoreResult([], 0)
+        repo.store_extracted.return_value = []
         candidates = [
             {"fact_type": "project", "title": "T", "content": "C", "evidence": "  I build T  "},
             {"fact_type": "project", "title": "T2", "content": "C2", "evidence": "x" * 1500},
@@ -152,10 +152,10 @@ class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
         candidates = [{"fact_type": "project", "title": "T", "content": "C"}]
         with patch(
             "services.context_vault_candidate_service._transaction",
-            new=AsyncMock(return_value=ExtractedStoreResult(saved, 0)),
+            new=AsyncMock(return_value=saved),
         ), patch("services.context_vault_candidate_service.schedule_embedding") as schedule:
             result = await store_extracted_facts(7, candidates=candidates, source_ref="chat:r:message:1")
-        self.assertEqual(result.saved_facts, saved)
+        self.assertEqual(result, saved)
         self.assertEqual([call.args[0] for call in schedule.call_args_list], [31, 32])
         schedule.assert_any_call(32, "project", "Second", "Other", 1)
 
@@ -163,7 +163,7 @@ class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
         # With a caller-supplied session nothing is scheduled before the caller commits.
         repo = _repo()
         repo.get_extraction_settings.return_value = True
-        repo.store_extracted.return_value = ExtractedStoreResult(saved, 0)
+        repo.store_extracted.return_value = saved
         with patch("services.context_vault_candidate_service._repository", return_value=repo), patch(
             "services.context_vault_candidate_service.schedule_embedding"
         ) as schedule:
@@ -179,8 +179,17 @@ class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
                 source_ref="room-123",
                 session=object(),
             )
-        self.assertEqual(result, ExtractedStoreResult([], 0))
+        self.assertEqual(result, [])
         repo.get_extraction_settings.assert_not_awaited()
+
+    async def test_extraction_runs_whenever_the_setting_is_on_even_at_the_cap(self):
+        # 上限でも入れ替えと再言及の記録があるので、抽出を走らせる条件は設定だけにする。
+        # At the cap there is still replacement and re-mention recording, so the setting alone decides whether extraction runs.
+        repo = _repo()
+        repo.get_extraction_settings.side_effect = [True, False]
+        with patch("services.context_vault_candidate_service._repository", return_value=repo):
+            self.assertTrue(await is_context_extraction_enabled(7, session=object()))
+            self.assertFalse(await is_context_extraction_enabled(7, session=object()))
 
     async def test_list_candidates_returns_cursor_and_allowlisted_dto(self):
         repo = _repo()

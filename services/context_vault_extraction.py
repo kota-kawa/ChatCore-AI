@@ -1,11 +1,11 @@
 """完了した 1 回のチャットターンから、記憶（個人コンテキストの事実）にする内容を LLM で抽出する。
 厳格なプロンプトと検証（信頼度・重要度・発話根拠・秘密情報の除外）を通ったものだけを返し、
-バックグラウンドで保存する（有効な事実に空きがあれば未確認の事実として直接、上限で入らない分は承認待ち候補へ）。
+バックグラウンドで未確認の事実として保存する（有効な事実が上限のときは、自動保存のまま本人が手を入れていない事実を無効化して入れ替える）。
 
 Extract content worth remembering (personal-context facts) from one completed chat turn.
 Only candidates that pass the strict prompt and validation (confidence, importance, verbatim evidence,
-no secrets) are returned, and they are stored in the background (saved directly as unconfirmed facts while
-active slots remain; only the overflow is queued as pending candidates).
+no secrets) are returned, and they are stored in the background as unconfirmed facts (at the active-fact cap an
+auto-saved fact the owner never touched is deprecated to make room).
 """
 
 from __future__ import annotations
@@ -163,7 +163,7 @@ def build_extraction_system_prompt(locale: Any = None) -> str:
 # LLM が返す候補 1 件の厳格な検証モデル（余分なキーや型の曖昧さを許さない）。docstring はそのままにする。
 # Strict validation model for one LLM-returned candidate (no extra keys, no type coercion).
 class ExtractedContextCandidate(BaseModel):
-    # 厳密な検証を通過し、利用者の明示承認を待つ候補。
+    # 厳密な検証を通過した抽出候補。
     """One strictly validated candidate awaiting explicit user approval."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
