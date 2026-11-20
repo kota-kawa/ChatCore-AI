@@ -109,6 +109,7 @@ effort: high
 | プロンプト文言 | `services/chat_prompt.py`、`services/prompt_assist.py`、`blueprints/chat/tasks.py` | `tests/unit/test_task_launch_prompting.py`、`tests/unit/test_chat_prompt_management.py`、`tests/unit/test_prompt_assist_logic.py` |
 | ツール定義 | `services/llm_tool_schema.py` | `tests/unit/test_llm_tool_schema.py` |
 | 生成ループ・予算・継続生成 | `services/chat_generation.py`、`services/chat_generation_agent_loop.py`、`services/chat_generation_llm_stream.py`、`services/chat_generation_answer_stream.py`、`services/chat_agent_budget.py`、`services/chat_answer_continuation.py`、`services/llm_context_budget.py` | `tests/unit/test_chat_generation_failure_recovery.py`、`tests/unit/test_llm_context_budget.py`、`tests/unit/test_chat_context_and_state.py` |
+| 会話文脈の組み立て（プロフィール・記憶のまとめ・要約・履歴） | `services/chat_context.py`、`services/user_memory.py` | `tests/unit/test_user_memory.py`、`tests/unit/test_chat_user_memory_paths.py`、`tests/unit/test_prompt_cache_layout.py`、`tests/unit/test_chat_context_and_state.py` |
 | Web 検索 | `services/web_search.py`、`services/web_search_trace.py`、`services/answer_trace.py` | `tests/unit/test_web_search.py`、`tests/unit/test_web_search_trace.py`、`tests/unit/test_answer_trace.py` |
 | 生成 UI | `services/generative_ui.py`、`services/generative_ui_repair.py` | `tests/unit/test_generative_ui.py`、`tests/unit/test_generated_ui_reliability.py`、`tests/unit/test_generative_ui_contract_matches_validator.py` |
 | モデル設定・プロバイダ | `services/llm.py`、`services/llm_model_limits.py` | `tests/unit/test_llm_service.py` |
@@ -119,12 +120,12 @@ effort: high
   - TurnState の封筒: `missing_turn_state_updates`、`untagged_turn_state_recoveries`
   - 予算の使い切り: `llm_turn_budget_exhausted`、`tools_withdrawn_by_budget`、`truncated_evidence_payloads`
   - 生成 UI: `artifact_status`、`artifact_reason_codes`、`artifact_repair_attempted`、`artifact_repair_succeeded`
-  - 分量: `final_answer_input_tokens`（見積もり）、`final_answer_output_chars`、`web_search_count`
+  - 分量: `final_answer_input_tokens`（見積もり）、`final_answer_output_chars`、`web_search_count`、`user_memory_fact_count`・`user_memory_estimated_tokens`（そのターンの文脈に入れた記憶のまとめの件数と見積もりトークン数。入れなかったターンは 0）
   - 下書き: `answer_draft_discards`（画面に出した下書きが確定した本文に置き換わらず捨てられた回数）、`first_visible_text_ms`（ジョブ開始から最初の本文を送るまでのミリ秒）
 - これらの指標が変更前より悪化した場合は、回答文が良く見えても PR にしません。悪化していないことと、狙った改善が観点の比較で確認できたことの両方が揃ってから PR を作ります。
 - LLM に採点させる判定は実行ごとに揺れるため、CI の合否条件にはしません。CI で守るのは決定的に判定できるもの（形式、契約、引用先の存在、禁止パターンの不在、構造のしきい値）に限り、意味の判定は PR 本文に残す比較で扱います。
 - 検索 API への接続、結果の解析、エラー処理を変える場合は、固定した API 応答を使う関連テストで確認します。検索結果の画面表示や操作を変える場合は `../../AGENTS.md` の Playwright による実描画・実操作確認も行います。
 - 品質が上がったと確認できない場合は PR にせず、原因を調べて修正するかユーザーに報告してください。比較に使った入力・観点・結果は PR 本文に書きます。
 - ユーザーの指示で実 API を使って比較する場合は、実行前に「ターン数 × 1ターンの費用」で見込み費用を出して伝え、実行後は結果の `provider_usage.cost_nano_usd`（1e-9 USD 単位）を合算して報告します。呼び出しは直列に行います。並列にするとレート制限や上流エラーが混ざり、変更の影響と区別できなくなります。1回ずつの計測で差が出たケースは、そのケースだけ追加で2〜3回流してから退行かどうかを判断します。
-- 基本プロンプト（`services/chat_prompt.py`）の節を統合・並べ替えるときは、文言が同じでも位置だけで遵守率が変わります。実測では「Copy-ready deliverables」を大きな節の後ろへ移しただけで、GPT-OSS 120B が返信文を `chatcore-copy` に入れる割合が 3/3 から 1/3 に下がり、前方へ戻すと回復しました。節を動かしたら、フェンス契約（`chatcore-copy`・`chatcore-buttons`）と明示された形式（件数・「〜だけ」）のケースを各モデルで数回流して確認します。固定文言を並べて検査するテスト（`tests/unit/test_task_launch_prompting.py`）は、統合で文言が変わったら規則の意図を確かめる形へ書き換え、節名や廃止した規則を参照する文言（生成 UI Skill、Project・プロフィール・メモリのブロック、実行時文脈）が残っていないかを検索します。
+- 基本プロンプト（`services/chat_prompt.py`）の節を統合・並べ替えるときは、文言が同じでも位置だけで遵守率が変わります。実測では「Copy-ready deliverables」を大きな節の後ろへ移しただけで、GPT-OSS 120B が返信文を `chatcore-copy` に入れる割合が 3/3 から 1/3 に下がり、前方へ戻すと回復しました。節を動かしたら、フェンス契約（`chatcore-copy`・`chatcore-buttons`）と明示された形式（件数・「〜だけ」）のケースを各モデルで数回流して確認します。固定文言を並べて検査するテスト（`tests/unit/test_task_launch_prompting.py`）は、統合で文言が変わったら規則の意図を確かめる形へ書き換え、節名や廃止した規則を参照する文言（生成 UI Skill、Project・プロフィール・記憶のまとめ（`<user_memory>`）のブロック、実行時文脈）が残っていないかを検索します。
 - この比較は本番のプロバイダ・モデル（Groq、OpenAI、Anthropic 上の各モデル）とは別のモデルで行うため、確認できるのは指示文・文脈の組み立て・ツール説明文の改善方向までです。LLM が生成した疑似検索結果は、実際の検索サービスの最新性、結果の品質、接続障害、レート制限の確認には使えません。固定した検索結果を使う比較でも同じ限界があります。ツール引数のサーバー側検証（[ADR 0008](../decisions/0008-provider-safe-tool-schemas.md)）、出力上限の扱い、ストリームイベントの形式などプロバイダ固有の挙動も確認できません。JSON やツール呼び出しの契約が変わる場合は、`services/llm_tool_schema.py` や `services/chat_generation.py` の既存の単体テストで担保し、足りなければ同じ変更でテストを追加してください。
