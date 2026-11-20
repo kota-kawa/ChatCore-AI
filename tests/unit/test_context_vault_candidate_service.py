@@ -9,6 +9,7 @@ import unittest
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from services.context_vault_bm25 import find_bm25_duplicates
 from services.context_vault_candidate_service import (
     get_extraction_settings,
     is_context_extraction_enabled,
@@ -216,11 +217,22 @@ class _ReconcileHarness:
         self.repo.store_extracted = AsyncMock(side_effect=self._store_extracted)
         self.facts = MagicMock()
         self.facts.find_reconcile_neighbors = AsyncMock(side_effect=self._find_neighbors)
+        self.matched_rows: list[dict] | None = None
+        self.facts.get_reconcile_facts = AsyncMock(side_effect=self._get_reconcile_facts)
+        self.embedding_error_at: int | None = None
 
     async def _find_duplicate_matches(self, _user_id, candidates):
         if self.duplicate_matches is not None:
             return self.duplicate_matches
         return [None] * len(candidates)
+
+    # 日本語: 一致した事実の読み取り。既定では、渡された id の事実を matched_rows(無ければ _neighbor の既定値)から返す。
+    # English: The read of the matched facts; by default returns the requested ids from matched_rows (or default _neighbor rows).
+    async def _get_reconcile_facts(self, _user_id, fact_ids):
+        self.matched_ids_read = list(fact_ids)
+        if self.matched_rows is not None:
+            return [row for row in self.matched_rows if row["id"] in fact_ids]
+        return [_neighbor(fact_id) for fact_id in fact_ids]
 
     async def _find_neighbors(self, _user_id, embedding, **kwargs):
         self.neighbor_kwargs = kwargs
@@ -243,6 +255,8 @@ class _ReconcileHarness:
     def _generate_embedding(self, text):
         self.events.append("embed")
         self.embedded_texts.append(text)
+        if self.embedding_error_at is not None and len(self.embedded_texts) - 1 == self.embedding_error_at:
+            raise RuntimeError("embedding provider failed")
         return self.embedding
 
     def _llm(self, messages, model):
@@ -387,15 +401,127 @@ class ContextVaultReconcileFlowTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(harness.store_kwargs["plans"], {})
         harness.schedule.assert_called_once()
 
-    async def test_duplicates_are_neither_embedded_nor_reconciled(self):
-        harness = _ReconcileHarness(neighbors={"default": [_neighbor()]})
-        harness.duplicate_matches = [{"fact_id": 12, "fact_status": "active"}]
+    async def test_a_candidate_whose_best_bm25_match_is_not_an_active_fact_is_neither_embedded_nor_reconciled(self):
+        # 最良一致が本人の無効化した事実・却下済みの候補・同じバッチの候補（fact_status が無い）のときは、従来どおり対象にしない。
+        # A best match that is a fact the owner deactivated, a rejected candidate or a same-batch candidate (no fact_status) is
+        # left out as before.
+        for label, match in (("deactivated fact", {"fact_id": 12, "fact_status": "deprecated"}), ("batch or rejected", {"title": "x"})):
+            with self.subTest(label):
+                harness = _ReconcileHarness(neighbors={"default": [_neighbor()]})
+                harness.duplicate_matches = [match]
+
+                await harness.run()
+
+                self.assertEqual(harness.embedded_texts, [])
+                self.assertEqual(harness.llm_calls, [])
+                harness.facts.get_reconcile_facts.assert_not_awaited()
+                self.assertEqual(harness.store_kwargs["plans"], {})
+
+    async def test_a_candidate_whose_best_bm25_match_is_an_active_fact_is_reconciled_with_that_fact_first(self):
+        harness = _ReconcileHarness(
+            neighbors={"default": [_neighbor(13, content="Lives in Tokyo, Japan"), _neighbor(12)]},
+            llm_response=_decisions({"candidate": 0, "action": "update", "target_id": 12}),
+        )
+        harness.duplicate_matches = [{"fact_id": 12, "fact_revision": 3, "fact_status": "active"}]
+        harness.matched_rows = [_neighbor(12, revision=6)]
 
         await harness.run()
 
+        self.assertEqual(harness.matched_ids_read, [12])
+        [(messages, _model)] = harness.llm_calls
+        payload = json.loads(messages[1]["content"])
+        # 一致した事実が先頭で、埋め込みで見つかった近い記憶が重複を除いて続く。
+        # The matched fact comes first and the memories found by embedding follow without duplicates.
+        self.assertEqual(payload["candidates"][0]["nearby_memory_ids"], [12, 13])
+        # 判定の時点の revision は、一致した事実を読み直した値（6）。
+        # The revision judged against is the one read for the matched fact (6).
+        self.assertEqual(
+            harness.store_kwargs["plans"],
+            {
+                0: CandidatePlan(
+                    embedding=_EMBEDDING,
+                    resolution=ReconcileResolution("supersede", 12, 6),
+                    matched_fact_id=12,
+                )
+            },
+        )
+
+    async def test_a_bm25_matched_candidate_is_still_reconciled_when_embeddings_are_unavailable(self):
+        harness = _ReconcileHarness(llm_response=_decisions({"candidate": 0, "action": "noop", "target_id": 12}))
+        harness.duplicate_matches = [{"fact_id": 12, "fact_revision": 3, "fact_status": "active"}]
+
+        await harness.run(embeddings_available=False)
+
         self.assertEqual(harness.embedded_texts, [])
+        harness.facts.find_reconcile_neighbors.assert_not_awaited()
+        [(messages, _model)] = harness.llm_calls
+        self.assertEqual(json.loads(messages[1]["content"])["candidates"][0]["nearby_memory_ids"], [12])
+        self.assertEqual(
+            harness.store_kwargs["plans"],
+            {0: CandidatePlan(resolution=ReconcileResolution("mention", 12, 3), matched_fact_id=12)},
+        )
+
+    async def test_with_neither_a_bm25_match_nor_an_embedding_nothing_is_read_or_asked(self):
+        harness = _ReconcileHarness(neighbors={"default": [_neighbor()]})
+
+        await harness.run(embeddings_available=False)
+
+        self.assertEqual(harness.events, ["tx_open", "tx_close", "tx_open", "store", "tx_close"])
         self.assertEqual(harness.llm_calls, [])
-        self.assertEqual(harness.store_kwargs["plans"], {})
+
+    async def test_a_bm25_matched_candidate_without_a_decision_keeps_its_match_for_the_earlier_behavior(self):
+        for label, response, error in (
+            ("llm failed", None, RuntimeError("provider down")),
+            ("empty", "", None),
+            ("invalid", "no json", None),
+            ("no decision for it", _decisions(), None),
+        ):
+            with self.subTest(label):
+                harness = _ReconcileHarness(llm_response=response)
+                harness.llm_error = error
+                harness.duplicate_matches = [{"fact_id": 12, "fact_revision": 3, "fact_status": "active"}]
+
+                await harness.run()
+
+                self.assertEqual(
+                    harness.store_kwargs["plans"],
+                    {0: CandidatePlan(embedding=_EMBEDDING, matched_fact_id=12)},
+                )
+
+    async def test_a_failure_before_the_llm_still_keeps_the_bm25_match(self):
+        harness = _ReconcileHarness()
+        harness.duplicate_matches = [{"fact_id": 12, "fact_revision": 3, "fact_status": "active"}]
+        harness.facts.get_reconcile_facts = AsyncMock(side_effect=RuntimeError("db down"))
+
+        with self.assertLogs(_MODULE, level="WARNING"):
+            await harness.run()
+
+        self.assertEqual(harness.llm_calls, [])
+        self.assertEqual(harness.store_kwargs["plans"], {0: CandidatePlan(embedding=_EMBEDDING, matched_fact_id=12)})
+
+    async def test_when_the_matched_fact_can_no_longer_be_read_and_nothing_else_is_near_the_llm_is_not_called(self):
+        harness = _ReconcileHarness()
+        harness.duplicate_matches = [{"fact_id": 12, "fact_revision": 3, "fact_status": "active"}]
+        harness.matched_rows = []
+
+        await harness.run(embeddings_available=False)
+
+        self.assertEqual(harness.llm_calls, [])
+        self.assertEqual(harness.store_kwargs["plans"], {0: CandidatePlan(matched_fact_id=12)})
+
+    async def test_embeddings_made_before_a_failure_are_kept(self):
+        harness = _ReconcileHarness()
+        harness.embedding_error_at = 1
+
+        with self.assertLogs(_MODULE, level="WARNING"):
+            await harness.run(
+                [
+                    {"fact_type": "profile", "title": "A", "content": "first"},
+                    {"fact_type": "profile", "title": "B", "content": "second"},
+                ]
+            )
+
+        self.assertEqual(harness.store_kwargs["plans"], {0: CandidatePlan(embedding=_EMBEDDING)})
 
     async def test_when_the_setting_is_off_nothing_is_embedded_or_asked(self):
         harness = _ReconcileHarness(neighbors={"default": [_neighbor()]})
@@ -480,13 +606,14 @@ class ContextVaultReconcileFlowTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(harness.store_kwargs["plans"])
 
     async def test_candidates_are_reconciled_by_their_index_in_the_prepared_list(self):
-        # 2 件のうち 1 件目が重複なら、照合の対象は 2 件目（添字 1）だけで、結果もその添字で保存へ渡す。
-        # When the first of two candidates is a duplicate, only the second (index 1) is reconciled and the result keeps that index.
+        # 2 件のうち 1 件目の最良一致が本人の無効化した事実なら、照合の対象は 2 件目（添字 1）だけで、結果もその添字で保存へ渡す。
+        # When the first of two candidates matched a fact the owner deactivated, only the second (index 1) is reconciled and the
+        # result keeps that index.
         harness = _ReconcileHarness(
             neighbors={"default": [_neighbor(12, revision=2)]},
             llm_response=_decisions({"candidate": 1, "action": "update", "target_id": 12}),
         )
-        harness.duplicate_matches = [{"fact_id": 5, "fact_status": "active"}, None]
+        harness.duplicate_matches = [{"fact_id": 5, "fact_status": "deprecated"}, None]
 
         await harness.run(
             [
@@ -500,6 +627,135 @@ class ContextVaultReconcileFlowTestCase(unittest.IsolatedAsyncioTestCase):
             {1: CandidatePlan(embedding=_EMBEDDING, resolution=ReconcileResolution("supersede", 12, 2))},
         )
         self.assertEqual(len(harness.embedded_texts), 1)
+
+
+# 日本語: BM25 が重複とみなす言い回しの近い食い違いを、実際の find_bm25_duplicates と照合の流れに通して確かめます。
+# English: Runs contradictions with near-identical wording, which BM25 calls duplicates, through the real find_bm25_duplicates
+# and the reconciliation flow.
+_BM25_CONTRADICTIONS = (
+    ("jp_residence", "profile", "居住地", "東京に住んでいる", "居住地", "大阪に住んでいる"),
+    ("en_residence", "profile", "Residence", "Lives in Tokyo", "Residence", "Lives in Osaka; moved there last month"),
+    (
+        "jp_review_preference",
+        "preference",
+        "レビュー",
+        "コードレビューは日本語で書いてほしい",
+        "レビュー",
+        "コードレビューでは指摘の理由も書いてほしい",
+    ),
+)
+
+
+class ContextVaultReconcileBm25DuplicatesTestCase(unittest.IsolatedAsyncioTestCase):
+    def _bm25_harness(self, fact_type, old_title, old_content, new_title, new_content, **kwargs):
+        harness = _ReconcileHarness(**kwargs)
+        existing = {
+            "fact_id": 12,
+            "fact_revision": 3,
+            "fact_status": "active",
+            "fact_type": fact_type,
+            "title": old_title,
+            "content": old_content,
+            "updated_at": None,
+            "priority": 0,
+        }
+
+        async def find_matches(_user_id, candidates):
+            return find_bm25_duplicates(candidates, [dict(existing)])
+
+        harness.repo.find_duplicate_matches = AsyncMock(side_effect=find_matches)
+        harness.matched_rows = [
+            {**_neighbor(12, revision=3, content=old_content), "fact_type": fact_type, "title": old_title}
+        ]
+        candidate = {"fact_type": fact_type, "title": new_title, "content": new_content}
+        return harness, candidate
+
+    async def test_bm25_calls_each_of_these_contradictions_a_duplicate_of_the_active_memory(self):
+        # 固定: これらは BM25 の基準では重複で、照合が無ければ再言及として出典だけが足され、置き換えも追加も起きなかった。
+        # Fixed: BM25 calls these duplicates, so without reconciliation they were only re-mentioned and neither replaced nor added.
+        for label, fact_type, old_title, old_content, new_title, new_content in _BM25_CONTRADICTIONS:
+            with self.subTest(label):
+                match = find_bm25_duplicates(
+                    [{"fact_type": fact_type, "title": new_title, "content": new_content}],
+                    [
+                        {
+                            "fact_id": 12,
+                            "fact_revision": 3,
+                            "fact_status": "active",
+                            "fact_type": fact_type,
+                            "title": old_title,
+                            "content": old_content,
+                            "priority": 0,
+                        }
+                    ],
+                )
+
+                self.assertEqual(match[0]["fact_id"], 12)
+                self.assertEqual(match[0]["fact_status"], "active")
+
+    async def test_each_contradiction_reaches_the_llm_and_an_update_decision_replaces_the_memory(self):
+        for label, fact_type, old_title, old_content, new_title, new_content in _BM25_CONTRADICTIONS:
+            with self.subTest(label):
+                harness, candidate = self._bm25_harness(
+                    fact_type,
+                    old_title,
+                    old_content,
+                    new_title,
+                    new_content,
+                    llm_response=_decisions({"candidate": 0, "action": "update", "target_id": 12}),
+                )
+
+                await harness.run([candidate], embeddings_available=False)
+
+                [(messages, _model)] = harness.llm_calls
+                payload = json.loads(messages[1]["content"])
+                self.assertEqual(payload["memories"][0]["content"], old_content)
+                self.assertEqual(payload["candidates"][0]["content"], new_content)
+                self.assertEqual(
+                    harness.store_kwargs["plans"][0],
+                    CandidatePlan(resolution=ReconcileResolution("supersede", 12, 3), matched_fact_id=12),
+                )
+
+    async def test_an_add_decision_keeps_the_new_content_that_bm25_would_have_absorbed(self):
+        _label, fact_type, old_title, old_content, new_title, new_content = _BM25_CONTRADICTIONS[2]
+        harness, candidate = self._bm25_harness(
+            fact_type,
+            old_title,
+            old_content,
+            new_title,
+            new_content,
+            llm_response=_decisions({"candidate": 0, "action": "add"}),
+        )
+
+        await harness.run([candidate], embeddings_available=False)
+
+        self.assertEqual(
+            harness.store_kwargs["plans"][0],
+            CandidatePlan(resolution=ReconcileResolution(), matched_fact_id=12),
+        )
+
+    async def test_a_noop_decision_re_mentions_and_a_failure_falls_back_to_the_same_re_mention(self):
+        _label, fact_type, old_title, old_content, new_title, new_content = _BM25_CONTRADICTIONS[0]
+        noop, candidate = self._bm25_harness(
+            fact_type,
+            old_title,
+            old_content,
+            new_title,
+            new_content,
+            llm_response=_decisions({"candidate": 0, "action": "noop", "target_id": 12}),
+        )
+        failed, _candidate = self._bm25_harness(fact_type, old_title, old_content, new_title, new_content)
+        failed.llm_error = RuntimeError("provider down")
+
+        await noop.run([candidate], embeddings_available=False)
+        with self.assertLogs(_MODULE, level="WARNING"):
+            await failed.run([candidate], embeddings_available=False)
+
+        self.assertEqual(noop.store_kwargs["plans"][0].resolution, ReconcileResolution("mention", 12, 3))
+        # 失敗したときの判定は無し(None)で、保存の段が従来どおりの再言及にする。
+        # A failure leaves no decision (None), and the save stage makes it the earlier re-mention.
+        self.assertIsNone(failed.store_kwargs["plans"][0].resolution)
+        self.assertEqual(failed.store_kwargs["plans"][0].matched_fact_id, 12)
 
 
 if __name__ == "__main__":

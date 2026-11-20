@@ -3,15 +3,17 @@
 このモジュールは、照合に使う LLM へのプロンプトの組み立てと、応答の厳格な検証、検証後に適用する規則（コードで決める部分）だけを持つ。
 埋め込みの生成・近い記憶の検索・LLM の呼び出し・保存は呼び出し側（services/context_vault_candidate_service.py と
 リポジトリ）が行い、ここは外部に接続しない。誤った更新は本人の正しい記憶を黙って無効化するので、検証に通らないものと
-規則に合わないものはすべて「追加」（従来の挙動）に倒す。
+規則に合わないものは、判定が無いものとして照合の導入前の挙動に倒す（BM25 で有効な記憶と重複とみなされた候補は再言及、
+それ以外は追加）。
 
 Decide whether an extracted memory candidate is an add, an update, or a re-mention of what the user already has (ADR 0025).
 
 This module only builds the prompt for the reconciling LLM, strictly validates its answer, and applies the rules the code
 owns after validation. Embedding, the nearby-memory search, the LLM call and storage belong to the caller
 (services/context_vault_candidate_service.py and the repository); nothing here touches an external service. A wrong update
-silently deactivates a memory that is still true, so anything that fails validation or the rules falls back to an add
-(the behavior before reconciliation existed).
+silently deactivates a memory that is still true, so anything that fails validation or the rules counts as "no decision" and
+falls back to the behavior before reconciliation existed (a re-mention for a candidate BM25 called a duplicate of an active
+memory, an add for any other).
 """
 
 from __future__ import annotations
@@ -117,13 +119,18 @@ class ReconcileResolution:
 @dataclass(frozen=True)
 class CandidatePlan:
     """保存へ渡す、候補 1 件の照合の結果。embedding は照合のために作った候補の埋め込みで、新しい記憶の保存にそのまま使う。
+    matched_fact_id は、照合の前の BM25 の重複判定で最良一致が有効な記憶だった候補の、その記憶の id（それ以外は None）。
+    resolution は LLM の判定を規則に通した結果で、None は「判定が無い」（照合が失敗した、応答が不正、その候補の判定が無い）。
 
     The reconciliation result for one candidate handed to storage. embedding is the candidate's embedding made for
-    reconciling, reused as-is when the new memory is stored.
+    reconciling, reused as-is when the new memory is stored. matched_fact_id is the id of the active memory the BM25 duplicate
+    check matched before reconciliation (None otherwise). resolution is the LLM's decision after the rules; None means
+    "no decision" (reconciliation failed, the response was invalid, or it held no decision for this candidate).
     """
 
     embedding: list[float] | None = None
-    resolution: ReconcileResolution = ReconcileResolution()
+    resolution: ReconcileResolution | None = None
+    matched_fact_id: int | None = None
 
 
 # LLM が返す判定 1 件の検証モデル。余分なキーや型の曖昧さを許さない。
@@ -142,6 +149,50 @@ class _Envelope(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     decisions: list[Any]
+
+
+def nearby_for_candidate(matched: RelatedFact | None, neighbors: list[RelatedFact]) -> list[RelatedFact]:
+    """候補 1 件に渡す近い記憶の一覧。BM25 で一致した有効な記憶があれば、埋め込みの距離やベクトルの有無に関係なく先頭に入れ、
+    埋め込みで見つかった近い記憶を、重複を除いて合わせ、全体で RECONCILE_NEIGHBOR_LIMIT 件までにする。
+
+    The nearby memories shown for one candidate. The active memory BM25 matched, if any, comes first regardless of embedding
+    distance or whether it has a vector; the memories found by embedding follow without duplicates, up to
+    RECONCILE_NEIGHBOR_LIMIT in total.
+    """
+    nearby: list[RelatedFact] = [matched] if matched is not None else []
+    for fact in neighbors:
+        if len(nearby) >= RECONCILE_NEIGHBOR_LIMIT:
+            break
+        if all(fact.fact_id != existing.fact_id for existing in nearby):
+            nearby.append(fact)
+    return nearby
+
+
+def resolve_candidate_action(
+    plan: CandidatePlan,
+    matched_fact_id: int | None,
+    matched_revision: int | None,
+) -> ReconcileResolution:
+    """保存の段（ロックの中）で、候補 1 件をどう保存するかを決める。matched_fact_id・matched_revision は、保存の段で見た BM25 の
+    最良一致が有効な記憶だったときのその記憶（そうでなければ None）。
+
+    事前の照合の結果（plan）は、事前の BM25 の一致と保存の段の一致が同じ記憶（どちらも無いを含む）のときだけ使う。食い違えば
+    照合の結果は使わず、従来の挙動にする。判定が無い（None）ときも同じで、有効な記憶に一致していた候補は再言及（出典を足す）、
+    そうでない候補は追加にする。つまり照合が何もしないときの挙動は、照合の導入前と同じ。
+
+    Decide, at the save stage (inside the lock), how one candidate is stored. matched_fact_id and matched_revision are the
+    active memory the BM25 best match was at the save stage (None otherwise).
+
+    The earlier reconciliation result (plan) is used only when the BM25 match then and at the save stage are the same memory
+    (both absent counts). Otherwise the result is ignored and the earlier behavior applies. The same holds when there is no
+    decision (None): a candidate that matched an active memory becomes a re-mention (add a source), any other an add. So when
+    reconciliation does nothing, behavior equals that before reconciliation existed.
+    """
+    if plan.resolution is not None and plan.matched_fact_id == matched_fact_id:
+        return plan.resolution
+    if matched_fact_id is not None:
+        return ReconcileResolution("mention", matched_fact_id, matched_revision)
+    return ReconcileResolution()
 
 
 def build_reconcile_messages(
@@ -235,18 +286,23 @@ def resolve_reconcile_decisions(
     raw_response: str | None,
     related_by_candidate: dict[int, list[RelatedFact]],
 ) -> dict[int, ReconcileResolution]:
-    """LLM の応答を検証し、規則を適用して、add 以外になる候補だけを候補の添字ごとに返す（返らない候補は add）。
+    """LLM の応答を検証し、規則を適用して、判定のあった候補ごとの結果を候補の添字ごとに返す。返らない候補は判定が無い（応答が
+    空・不正、その候補の判定が不正・曖昧・無い）。add の判定と、規則で add に読み替えた判定は、結果が action=add として返る。
 
     規則: update は対象が有効な記憶のときだけ有効で、本人が無効化した記憶が対象なら add にする。1 つの対象を複数の候補が
     update しようとしたら、添字の小さい最初の 1 件だけを update にして、残りは add にする。noop は対象が有効な記憶なら
-    出典だけを足し（mention）、本人が無効化した記憶なら何も保存しない（skip）。
+    出典だけを足し（mention）、本人が無効化した記憶なら何も保存しない（skip）。同じバッチで update によって置き換えられる
+    記憶への noop は、置き換えられる記憶に出典を足さず、何も保存しない（skip）。
 
-    Validate the LLM response and apply the rules, returning only the candidates that are not a plain add, by candidate
-    index (a missing candidate is an add).
+    Validate the LLM response and apply the rules, returning the result per candidate that got a decision, by candidate
+    index. A missing candidate has no decision (the response was empty or invalid, or its decision was invalid, ambiguous or
+    absent). An add decision, and a decision the rules read as an add, come back as action add.
 
     Rules: an update is valid only against an active memory (against a memory the owner deactivated it becomes an add).
     When several candidates update one target, only the first by index stays an update and the rest become adds. A noop
     against an active memory only adds a source (mention); against a memory the owner deactivated nothing is saved (skip).
+    A noop against a memory that an update in the same batch replaces saves nothing (skip) instead of adding a source to a
+    memory that is being replaced.
     """
     related_ids = {index: {fact.fact_id for fact in related} for index, related in related_by_candidate.items()}
     decisions = _validated_decisions(raw_response, related_ids)
@@ -258,15 +314,23 @@ def resolve_reconcile_decisions(
     superseded_ids: set[int] = set()
     for index in sorted(decisions):
         decision = decisions[index]
+        if decision.action == "noop":
+            continue
         if decision.action == "add" or decision.target_id is None:
+            resolutions[index] = ReconcileResolution()
             continue
         target = facts_by_candidate[index][decision.target_id]
-        if decision.action == "update":
-            if target.status != "active" or target.fact_id in superseded_ids:
-                continue
-            superseded_ids.add(target.fact_id)
-            resolutions[index] = ReconcileResolution("supersede", target.fact_id, target.revision)
-        elif target.status == "active":
+        if target.status != "active" or target.fact_id in superseded_ids:
+            resolutions[index] = ReconcileResolution()
+            continue
+        superseded_ids.add(target.fact_id)
+        resolutions[index] = ReconcileResolution("supersede", target.fact_id, target.revision)
+    for index in sorted(decisions):
+        decision = decisions[index]
+        if decision.action != "noop" or decision.target_id is None:
+            continue
+        target = facts_by_candidate[index][decision.target_id]
+        if target.status == "active" and target.fact_id not in superseded_ids:
             resolutions[index] = ReconcileResolution("mention", target.fact_id, target.revision)
         else:
             resolutions[index] = ReconcileResolution("skip", target.fact_id, target.revision)

@@ -14,9 +14,12 @@ from services.context_vault_reconcile import (
     RECONCILE_MAX_DISTANCE,
     RECONCILE_NEIGHBOR_LIMIT,
     RECONCILE_SYSTEM_PROMPT,
+    CandidatePlan,
     ReconcileResolution,
     RelatedFact,
     build_reconcile_messages,
+    nearby_for_candidate,
+    resolve_candidate_action,
     resolve_reconcile_decisions,
 )
 from services.embeddings import SEMANTIC_MAX_DISTANCE
@@ -177,7 +180,9 @@ class ReconcileResolutionTestCase(unittest.TestCase):
     def test_update_against_a_memory_the_owner_deactivated_becomes_an_add(self):
         related = {0: [_related(12, status="deprecated")]}
 
-        self.assertEqual(resolve_reconcile_decisions(_response(_decision(0, "update", 12)), related), {})
+        # 判定があった候補なので、結果は add として返る（判定が無い候補とは区別される）。
+        # A decision was made, so the result comes back as an add (distinct from a candidate with no decision).
+        self.assertEqual(resolve_reconcile_decisions(_response(_decision(0, "update", 12)), related), {0: ReconcileResolution()})
 
     def test_noop_against_an_active_memory_only_adds_a_source(self):
         related = {0: [_related(12, revision=4)]}
@@ -193,10 +198,10 @@ class ReconcileResolutionTestCase(unittest.TestCase):
 
         self.assertEqual(resolutions, {0: ReconcileResolution("skip", 12, 2)})
 
-    def test_add_leaves_the_candidate_out_of_the_result(self):
+    def test_add_is_a_decision_and_is_returned_as_an_add(self):
         related = {0: [_related(12)]}
 
-        self.assertEqual(resolve_reconcile_decisions(_response(_decision(0, "add")), related), {})
+        self.assertEqual(resolve_reconcile_decisions(_response(_decision(0, "add")), related), {0: ReconcileResolution()})
 
     def test_when_several_candidates_update_one_memory_only_the_first_by_index_supersedes_it(self):
         related = {0: [_related(12)], 1: [_related(12)], 2: [_related(12)]}
@@ -206,7 +211,10 @@ class ReconcileResolutionTestCase(unittest.TestCase):
             related,
         )
 
-        self.assertEqual(resolutions, {0: ReconcileResolution("supersede", 12, 3)})
+        self.assertEqual(
+            resolutions,
+            {0: ReconcileResolution("supersede", 12, 3), 1: ReconcileResolution(), 2: ReconcileResolution()},
+        )
 
     def test_candidates_updating_different_memories_each_supersede_their_own(self):
         related = {0: [_related(12)], 1: [_related(13)]}
@@ -234,7 +242,9 @@ class ReconcileResolutionTestCase(unittest.TestCase):
             _response(_decision(0, "update"), _decision(1, "noop"), _decision(2, "add", 12)), related
         )
 
-        self.assertEqual(resolutions, {})
+        # 対象の無い update・noop は判定として成り立たず（結果に出ない）、add は対象があっても add として扱う。
+        # An update or noop without a target is no decision (absent), and an add stays an add even with a target.
+        self.assertEqual(resolutions, {2: ReconcileResolution()})
 
     def test_a_candidate_decided_twice_is_ambiguous_and_becomes_an_add(self):
         related = {0: [_related(12)], 1: [_related(13)]}
@@ -293,6 +303,101 @@ class ReconcileResolutionTestCase(unittest.TestCase):
 
         self.assertEqual(len(logs.records), 1)
         self.assertNotIn("secret-looking raw response", logs.output[0])
+
+
+    def test_a_noop_on_a_memory_another_candidate_supersedes_saves_nothing(self):
+        related = {0: [_related(12, revision=3)], 1: [_related(12, revision=3)]}
+
+        resolutions = resolve_reconcile_decisions(_response(_decision(0, "noop", 12), _decision(1, "update", 12)), related)
+
+        self.assertEqual(
+            resolutions,
+            {0: ReconcileResolution("skip", 12, 3), 1: ReconcileResolution("supersede", 12, 3)},
+        )
+
+    def test_a_noop_on_another_memory_still_adds_a_source_when_a_different_memory_is_superseded(self):
+        related = {0: [_related(12)], 1: [_related(13)]}
+
+        resolutions = resolve_reconcile_decisions(_response(_decision(0, "noop", 12), _decision(1, "update", 13)), related)
+
+        self.assertEqual(resolutions[0], ReconcileResolution("mention", 12, 3))
+        self.assertEqual(resolutions[1], ReconcileResolution("supersede", 13, 3))
+
+    def test_candidates_without_any_decision_are_absent_from_the_result(self):
+        related = {0: [_related(12)], 1: [_related(12)]}
+
+        resolutions = resolve_reconcile_decisions(_response(_decision(1, "noop", 12)), related)
+
+        self.assertEqual(set(resolutions), {1})
+
+
+class NearbyForCandidateTestCase(unittest.TestCase):
+    def test_the_bm25_matched_memory_comes_first_and_neighbors_follow_without_duplicates(self):
+        matched = _related(12)
+
+        nearby = nearby_for_candidate(matched, [_related(13), _related(12), _related(14)])
+
+        self.assertEqual([fact.fact_id for fact in nearby], [12, 13, 14])
+
+    def test_the_matched_memory_is_always_included_and_the_total_is_capped(self):
+        matched = _related(12)
+        neighbors = [_related(100 + number) for number in range(10)]
+
+        nearby = nearby_for_candidate(matched, neighbors)
+
+        self.assertEqual(len(nearby), RECONCILE_NEIGHBOR_LIMIT)
+        self.assertEqual(nearby[0].fact_id, 12)
+        self.assertEqual([fact.fact_id for fact in nearby[1:]], [100, 101, 102, 103])
+
+    def test_without_a_bm25_match_the_neighbors_are_used_up_to_the_cap(self):
+        neighbors = [_related(100 + number) for number in range(10)]
+
+        self.assertEqual(len(nearby_for_candidate(None, neighbors)), RECONCILE_NEIGHBOR_LIMIT)
+        self.assertEqual(nearby_for_candidate(None, []), [])
+
+    def test_a_matched_memory_without_neighbors_is_the_only_nearby_memory(self):
+        self.assertEqual([fact.fact_id for fact in nearby_for_candidate(_related(12), [])], [12])
+
+
+class ResolveCandidateActionTestCase(unittest.TestCase):
+    def test_a_decision_is_used_when_the_bm25_match_agrees(self):
+        decision = ReconcileResolution("supersede", 12, 3)
+
+        for matched_id in (None, 12):
+            with self.subTest(matched_id=matched_id):
+                plan = CandidatePlan(resolution=decision, matched_fact_id=matched_id)
+
+                self.assertEqual(resolve_candidate_action(plan, matched_id, 9), decision)
+
+    def test_without_a_decision_a_candidate_that_matched_an_active_memory_is_a_re_mention_at_the_current_revision(self):
+        plan = CandidatePlan(matched_fact_id=12)
+
+        self.assertEqual(resolve_candidate_action(plan, 12, 9), ReconcileResolution("mention", 12, 9))
+
+    def test_without_a_decision_a_unique_candidate_is_an_add(self):
+        self.assertEqual(resolve_candidate_action(CandidatePlan(), None, None), ReconcileResolution())
+
+    def test_a_decided_add_for_a_matched_candidate_stays_an_add(self):
+        plan = CandidatePlan(resolution=ReconcileResolution(), matched_fact_id=12)
+
+        self.assertEqual(resolve_candidate_action(plan, 12, 9), ReconcileResolution())
+
+    def test_a_disagreeing_bm25_match_discards_the_decision_and_keeps_the_earlier_behavior(self):
+        decision = ReconcileResolution("supersede", 12, 3)
+        cases = (
+            ("matched before, none now", CandidatePlan(resolution=decision, matched_fact_id=12), None, None, ReconcileResolution()),
+            ("none before, matched now", CandidatePlan(resolution=decision), 12, 9, ReconcileResolution("mention", 12, 9)),
+            (
+                "another memory now",
+                CandidatePlan(resolution=decision, matched_fact_id=12),
+                15,
+                4,
+                ReconcileResolution("mention", 15, 4),
+            ),
+        )
+        for label, plan, matched_id, revision, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(resolve_candidate_action(plan, matched_id, revision), expected)
 
 
 if __name__ == "__main__":

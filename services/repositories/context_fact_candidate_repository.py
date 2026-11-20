@@ -23,7 +23,7 @@ from sqlalchemy.orm import aliased
 
 from services.api_errors import ResourceNotFoundError
 from services.context_vault_bm25 import find_bm25_duplicates
-from services.context_vault_reconcile import CandidatePlan
+from services.context_vault_reconcile import CandidatePlan, resolve_candidate_action
 from services.datetime_serialization import serialize_datetime_iso
 from services.error_messages import ERROR_CONTEXT_EXTRACTION_SETTINGS_NOT_FOUND
 from services.models import ContextFact, ContextFactCandidate, User
@@ -218,7 +218,11 @@ class ContextFactCandidateRepository:
         room_id があり候補に evidence(本人発話の引用)があるときは出典行を残す。保存した事実には同じトランザクションで
         1 件入れ、有効な事実と重複した分は、その事実へ出典を足す(事実の行は更新しない)。
 
-        plans は、重複しなかった候補の照合の結果(候補の添字から)。重複判定を通った候補にだけ適用する。supersede は、対象が
+        plans は、照合の結果(候補の添字から)。照合の対象は、重複しなかった候補と、BM25 の最良一致が有効な事実だった候補。
+        最良一致が本人の無効化した事実・却下済みの候補・同じバッチの候補のときは何も保存しない(plans があっても変わらない)。
+        有効な事実に一致した候補は、事前の照合も同じ事実に一致していて判定があるときだけ、その判定を使う(判定が無い・事前と一致が
+        食い違うときは、従来どおりその事実への再言及)。重複しなかった候補で事前の照合も一致が無ければ、その判定を使う(判定が無ければ
+        新しい事実)。add の判定は新しい事実として保存する。supersede は、対象が
         判定の時点の revision のままの有効な事実なら、対象を無効化(理由 superseded)して新しい事実を入れ、対象に置き換え先を記録する
         (有効件数は変わらないので入れ替えは起こさない)。対象が変わっていたら置き換えず、新しい事実として保存する。mention は
         対象へ出典だけを足し、skip は何も保存しない。plans の embedding があれば、新しい事実にそのまま保存する。
@@ -232,9 +236,13 @@ class ContextFactCandidateRepository:
         With a room_id and a candidate evidence quote, a source row is kept: one in the same transaction for a saved
         fact, and one added to the matched fact when the content duplicates an active fact (the fact row is not updated).
 
-        plans holds the reconciliation result of candidates that were not duplicates (by candidate index) and applies only to
-        candidates that pass the duplicate checks. A supersede deprecates the target (reason superseded) when it is still an
-        active fact at the revision it was judged at, inserts the new fact and records the replacement on the target; the
+        plans holds the reconciliation results (by candidate index). Reconciliation covers candidates that were not duplicates and
+        candidates whose BM25 best match was an active fact. When the best match is a fact the owner deprecated, a rejected
+        candidate or a same-batch candidate nothing is saved, plan or not. A candidate that matched an active fact uses its
+        decision only when reconciliation matched the same fact and decided something (with no decision, or a different earlier
+        match, it is a re-mention of that fact as before). A unique candidate whose earlier match was also none uses its decision
+        (a new fact without one). An add decision saves a new fact. A supersede deprecates the target (reason superseded) when it
+        is still an active fact at the revision it was judged at, inserts the new fact and records the replacement on the target; the
         active count does not change, so it never triggers a replacement at the cap. A changed target is not replaced and the
         content is saved as a new fact. A mention only adds a source to the target and a skip saves nothing. An embedding in
         the plan is stored with the new fact as is.
@@ -257,35 +265,38 @@ class ContextFactCandidateRepository:
         protected_fact_ids: set[int] = set()
         replacement_exhausted = False
         for index, (candidate, match) in enumerate(zip(candidates, matches, strict=True)):
+            # 日本語: 重複した相手が有効な事実でなければ(同一バッチの候補・本人が無効化した事実・却下済みの候補)、何も保存しない。
+            # English: When the match is not an active fact (a same-batch candidate, a fact the owner deprecated, or a rejected
+            # candidate), nothing is saved.
+            matched_fact_id: int | None = None
+            matched_revision: int | None = None
             if match is not None:
-                # 日本語: 有効な事実と重複した分は、その事実への再言及として出典だけを足す。一致相手が同一バッチの候補
-                # (fact_id なし)・本人が無効化した事実・却下済みの候補のときは何も保存しない。
-                # English: A duplicate of an active fact is a repeat mention, so only a source is added to it. Nothing is
-                # saved when the match is a same-batch candidate (no fact_id), a fact the owner deprecated, or a rejected candidate.
-                if match.get("fact_status") == "active":
-                    protected_fact_ids.add(int(match["fact_id"]))
-                    await self._record_source(
-                        user_id,
-                        int(match["fact_id"]),
-                        candidate,
-                        room_id,
-                        user_message_id,
-                        expected_revision=int(match["fact_revision"]),
-                    )
-                continue
-            # 日本語: 本人が却下した候補と同じ fingerprint の内容は、保存しない。
-            # English: Content whose fingerprint matches a candidate the owner rejected is not saved.
-            already_rejected = await self.session.scalar(
-                select(ContextFactCandidate.id).where(
-                    ContextFactCandidate.user_id == user_id,
-                    ContextFactCandidate.fingerprint == candidate["fingerprint"],
-                    ContextFactCandidate.status == "rejected",
-                )
-            )
-            if already_rejected is not None:
-                continue
+                if match.get("fact_status") != "active":
+                    continue
+                matched_fact_id = int(match["fact_id"])
+                matched_revision = int(match["fact_revision"])
+            # 日本語: 事前の照合の結果は、事前の BM25 の一致とここでの一致が同じときだけ使う。判定が無い・食い違うときは従来の挙動で、
+            # 有効な事実と重複した分は、その事実への再言及として出典だけを足し、重複しなかった分は新しい事実として保存する。
+            # English: The earlier reconciliation result is used only when the BM25 match then and here agree. With no decision or a
+            # disagreement the earlier behavior applies: a duplicate of an active fact is a repeat mention (only a source is added),
+            # and a unique candidate is saved as a new fact.
             plan = (plans or {}).get(index) or CandidatePlan()
-            resolution = plan.resolution
+            resolution = resolve_candidate_action(plan, matched_fact_id, matched_revision)
+            # 日本語: 本人が却下した候補と同じ fingerprint の内容は、保存しない。重複しなかった候補は常に確かめ(従来どおり)、有効な事実に
+            # 一致した候補は、新しい事実として保存する判定(add・supersede)のときだけ確かめる(再言及・何もしない判定には関係しない)。
+            # English: Content whose fingerprint matches a candidate the owner rejected is not saved. A unique candidate is always
+            # checked (as before); one that matched an active fact is checked only when it would be saved as a new fact (add or
+            # supersede), since a re-mention or a decision to save nothing does not save content.
+            if matched_fact_id is None or resolution.action in ("add", "supersede"):
+                already_rejected = await self.session.scalar(
+                    select(ContextFactCandidate.id).where(
+                        ContextFactCandidate.user_id == user_id,
+                        ContextFactCandidate.fingerprint == candidate["fingerprint"],
+                        ContextFactCandidate.status == "rejected",
+                    )
+                )
+                if already_rejected is not None:
+                    continue
             if resolution.action == "skip":
                 continue
             if resolution.action == "mention" and resolution.target_fact_id is not None:

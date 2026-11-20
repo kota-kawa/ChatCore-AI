@@ -785,6 +785,116 @@ class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(_executed(session)[-1].params["embedding_vector"], [0.5] * 768)
 
+    async def test_store_extracted_applies_a_supersede_to_a_candidate_that_bm25_matched_to_an_active_fact(self):
+        # BM25 は有効な事実(12)との重複とみなすが、事前の照合が同じ事実を見て update と判定していれば、再言及にせず置き換える。
+        # BM25 calls it a duplicate of active fact 12, but when reconciliation saw the same fact and decided update, it is
+        # replaced instead of being re-mentioned.
+        session = _store_session(
+            active=MAX_ACTIVE_CONTEXT_FACTS,
+            facts=[_existing_fact("active", 12)],
+            inserts=[_result(inserted_id=12), _result(mapping=_fact(id=41)), MagicMock()],
+        )
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("supersede", 12, 3), matched_fact_id=12)}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual([fact["id"] for fact in saved], [41])
+        statements = _executed_sql(session)
+        self.assertTrue(statements[3].startswith("UPDATE context_facts"))
+        self.assertTrue(statements[4].startswith("INSERT INTO context_facts"))
+        self.assertTrue(statements[5].startswith("UPDATE context_facts"))
+        self.assertFalse(any(sql.startswith("INSERT INTO context_fact_sources") for sql in statements))
+
+    async def test_store_extracted_saves_a_candidate_that_bm25_matched_when_the_decision_is_add(self):
+        session = _store_session(
+            active=3,
+            facts=[_existing_fact("active", 12)],
+            inserts=[_result(mapping=_fact(id=41, embedding_status="ready"))],
+        )
+        plans = {0: CandidatePlan(embedding=[0.5] * 768, resolution=ReconcileResolution(), matched_fact_id=12)}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual([fact["id"] for fact in saved], [41])
+        insert = _executed(session)[-1]
+        self.assertTrue(str(insert).startswith("INSERT INTO context_facts"))
+        self.assertEqual(insert.params["embedding_vector"], [0.5] * 768)
+        # 再言及ではないので出典は足さない（room_id が無い）。一致した事実の行も更新しない。
+        # It is not a re-mention, so no source goes to the matched fact, and its row is not updated.
+        self.assertFalse(any(sql.startswith("UPDATE context_facts") for sql in _executed_sql(session)))
+
+    async def test_store_extracted_does_not_save_an_add_decision_whose_content_the_owner_rejected(self):
+        session = _store_session(active=3, facts=[_existing_fact("active", 12)], fingerprint_hit=99, inserts=[])
+        plans = {0: CandidatePlan(resolution=ReconcileResolution(), matched_fact_id=12)}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual(saved, [])
+        self.assertEqual(session.execute.await_count, 3)
+
+    async def test_store_extracted_re_mentions_a_bm25_matched_candidate_without_a_decision(self):
+        # 判定が無い（照合が失敗した・応答が不正・その候補の判定が無い）ときは、従来どおり有効な事実への再言及（出典だけを足す）。
+        # With no decision (reconciliation failed, the response was invalid, or it held none for this candidate) it is a re-mention
+        # of the active fact as before: only a source is added.
+        for label, plans in (("no plan", None), ("plan without a decision", {0: CandidatePlan(matched_fact_id=12)})):
+            with self.subTest(label):
+                session = _store_session(
+                    active=3,
+                    facts=[_existing_fact("active", 12)],
+                    fact_lock=12,
+                    inserts=[_result(inserted_id=70), MagicMock()],
+                )
+
+                saved = await ContextFactCandidateRepository(session).store_extracted(
+                    7, [_extracted()], room_id="room-1", user_message_id=8, plans=plans
+                )
+
+                self.assertEqual(saved, [])
+                statements = _executed_sql(session)
+                self.assertTrue(statements[3].startswith("INSERT INTO context_fact_sources"))
+                lock = session.scalar.await_args_list[-1].args[0].compile(dialect=dialect())
+                self.assertEqual({12, 7, 3, "active"}, set(lock.params.values()))
+
+    async def test_store_extracted_ignores_a_decision_when_the_bm25_match_differs_from_the_earlier_one(self):
+        # 事前は有効な事実に一致していなかった（plan の一致は None）のに、ここでは事実 12 に一致した: 事前の判定は使わず再言及。
+        # Earlier no active fact matched (the plan's match is None) but fact 12 matches now: the earlier decision is ignored and
+        # the candidate is re-mentioned.
+        session = _store_session(
+            active=3,
+            facts=[_existing_fact("active", 12)],
+            fact_lock=12,
+            inserts=[_result(inserted_id=70), MagicMock()],
+        )
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("supersede", 99, 1))}
+
+        await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], room_id="room-1", user_message_id=8, plans=plans)
+
+        statements = _executed_sql(session)
+        self.assertTrue(statements[3].startswith("INSERT INTO context_fact_sources"))
+        self.assertFalse(any(sql.startswith("UPDATE context_facts") for sql in statements))
+
+    async def test_store_extracted_ignores_a_decision_when_a_bm25_match_has_disappeared(self):
+        # 事前は事実 12 に一致していたが、ここでは一致しない: 事前の判定は使わず、従来どおり新しい事実として保存する。
+        # Earlier fact 12 matched but nothing matches now: the earlier decision is ignored and the content is saved as a new fact.
+        session = _store_session(active=3, inserts=[_result(mapping=_fact(id=41))])
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("supersede", 12, 3), matched_fact_id=12)}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual([fact["id"] for fact in saved], [41])
+        self.assertFalse(any(sql.startswith("UPDATE context_facts") for sql in _executed_sql(session)))
+
+    async def test_store_extracted_never_reconciles_a_candidate_matched_to_something_other_than_an_active_fact(self):
+        # 最良一致が本人の無効化した事実のときは、plan に何があっても何も保存しない（従来どおり）。
+        # When the best match is a fact the owner deprecated, nothing is saved whatever the plan holds (as before).
+        session = _store_session(active=3, facts=[_existing_fact("deprecated", 12)], inserts=[])
+        plans = {0: CandidatePlan(resolution=ReconcileResolution(), matched_fact_id=12)}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual(saved, [])
+        self.assertEqual(session.execute.await_count, 3)
+
     async def test_get_extraction_settings_is_disabled_when_the_user_row_cannot_be_read(self):
         # 列は NOT NULL。None は行が読めないときだけなので、有効扱いにせず抽出が走らない側へ倒す。
         # The column is NOT NULL, so None means the row could not be read; it must not count as enabled.

@@ -165,6 +165,28 @@ class ContextFactRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIn("max(context_fact_sources.observed_at)", sql)
         self.assertIn("AS last_mentioned", sql)
 
+    async def test_get_reconcile_facts_reads_only_the_given_owner_facts_the_comparison_can_see(self):
+        row = {"id": 10, "revision": 2, "fact_type": "profile", "title": "Home", "content": "Lives in Tokyo", "status": "active"}
+        result = MagicMock()
+        result.mappings.return_value.all.return_value = [row]
+        session = MagicMock()
+        session.execute = AsyncMock(return_value=result)
+
+        facts = await ContextFactRepository(session).get_reconcile_facts(7, [10, 11])
+
+        self.assertEqual(facts, [row])
+        statement = session.execute.await_args.args[0]
+        sql = " ".join(str(statement.compile(dialect=dialect())).split())
+        self.assertIn("context_facts.user_id = %(user_id_1)s AND context_facts.id IN (", sql)
+        self.assertIn("context_facts.deprecated_reason IS NULL OR context_facts.deprecated_reason = ", sql)
+        self.assertIn("AS last_mentioned", sql)
+        # 埋め込みの有無や距離には依らない(BM25 で一致した記憶をそのまま近い記憶に入れるため)。
+        # Independent of the embedding or distance (the BM25-matched memory goes into the nearby ones as it is).
+        self.assertNotIn("embedding_vector", sql)
+        bound = bind_statement_parameters(statement)
+        self.assertEqual(bound["user_id_1"], 7)
+        self.assertEqual(statement.compile(dialect=dialect()).params["id_1"], [10, 11])
+
     async def test_reconcile_neighbors_only_target_active_and_owner_deprecated_facts(self):
         # 置き換え(superseded)・上限(capacity)・統合(merged)で無効化した事実は対象にしない。条件は重複判定と同じ
         # matchable_fact_clause（有効、または理由が NULL か user の無効化済み）。

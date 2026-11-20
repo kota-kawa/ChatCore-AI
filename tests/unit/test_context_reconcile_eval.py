@@ -10,11 +10,13 @@ import unittest
 from pathlib import Path
 
 from services.context_vault_reconcile import (
+    CandidatePlan,
     ReconcileResolution,
     build_reconcile_messages,
+    resolve_candidate_action,
     resolve_reconcile_decisions,
 )
-from tests.helpers.context_reconcile_eval import DATASET_PATH, load_reconcile_dataset
+from tests.helpers.context_reconcile_eval import DATASET_PATH, ReconcileCase, load_reconcile_dataset
 from tests.helpers.llm_eval import EvalDatasetError
 
 
@@ -74,38 +76,69 @@ class ContextReconcileDatasetTestCase(unittest.TestCase):
                 load_reconcile_dataset(path)
 
 
+# 日本語: 事前の照合の結果（plan）と、保存の段で見た BM25 の一致が同じ記憶になるものとして、候補ごとの最終的な保存の仕方を返します。
+# English: The final way each candidate is stored, taking the BM25 match at the save stage to be the same memory as before reconciliation.
+def _final_resolutions(case: ReconcileCase) -> dict[int, ReconcileResolution]:
+    decided = resolve_reconcile_decisions(case.response, case.related_by_candidate)
+    finals: dict[int, ReconcileResolution] = {}
+    for index in range(len(case.candidates)):
+        matched = case.matched.get(index)
+        plan = CandidatePlan(
+            resolution=decided.get(index),
+            matched_fact_id=matched.fact_id if matched else None,
+        )
+        finals[index] = resolve_candidate_action(plan, matched.fact_id if matched else None, matched.revision if matched else None)
+    return finals
+
+
 class ContextReconcileEvalTestCase(unittest.TestCase):
     def test_every_case_resolves_to_the_recorded_outcome(self):
         for case in load_reconcile_dataset():
             with self.subTest(case.case_id):
-                resolutions = resolve_reconcile_decisions(case.response, case.related_by_candidate)
+                actual = {index: (final.action, final.target_fact_id) for index, final in _final_resolutions(case).items()}
 
-                actual = {
-                    index: (resolutions[index].action, resolutions[index].target_fact_id) if index in resolutions else ("add", None)
-                    for index in range(len(case.candidates))
-                }
                 self.assertEqual(actual, case.expected, case.description)
 
     def test_a_supersede_or_mention_carries_the_revision_that_was_read(self):
         for case in load_reconcile_dataset():
             with self.subTest(case.case_id):
                 revisions = {fact.fact_id: fact.revision for related in case.related_by_candidate.values() for fact in related}
-                resolutions = resolve_reconcile_decisions(case.response, case.related_by_candidate)
 
-                for resolution in resolutions.values():
-                    self.assertIsInstance(resolution, ReconcileResolution)
-                    self.assertEqual(resolution.target_revision, revisions[resolution.target_fact_id])
+                for final in _final_resolutions(case).values():
+                    self.assertIsInstance(final, ReconcileResolution)
+                    if final.action != "add":
+                        self.assertEqual(final.target_revision, revisions[final.target_fact_id])
 
     def test_no_case_supersedes_a_memory_twice_or_supersedes_a_deactivated_one(self):
         for case in load_reconcile_dataset():
             with self.subTest(case.case_id):
                 statuses = {fact.fact_id: fact.status for related in case.related_by_candidate.values() for fact in related}
-                resolutions = resolve_reconcile_decisions(case.response, case.related_by_candidate)
 
-                superseded = [resolution.target_fact_id for resolution in resolutions.values() if resolution.action == "supersede"]
+                superseded = [final.target_fact_id for final in _final_resolutions(case).values() if final.action == "supersede"]
                 self.assertEqual(len(superseded), len(set(superseded)))
                 for target_id in superseded:
                     self.assertEqual(statuses[target_id], "active")
+
+    def test_no_case_adds_a_source_to_a_memory_that_another_candidate_supersedes(self):
+        for case in load_reconcile_dataset():
+            with self.subTest(case.case_id):
+                finals = _final_resolutions(case).values()
+
+                superseded = {final.target_fact_id for final in finals if final.action == "supersede"}
+                mentioned = {final.target_fact_id for final in finals if final.action == "mention"}
+                self.assertFalse(superseded & mentioned)
+
+    def test_the_dataset_covers_bm25_matched_candidates_with_every_outcome_and_the_failure_fallback(self):
+        cases = [case for case in load_reconcile_dataset() if case.matched]
+
+        outcomes = {
+            (case.case_id, final.action)
+            for case in cases
+            for index, final in _final_resolutions(case).items()
+            if index in case.matched
+        }
+        self.assertTrue({"add", "supersede", "mention", "skip"} <= {action for _id, action in outcomes})
+        self.assertTrue(any(case.response is None for case in cases), "an LLM failure case is required")
 
     def test_every_case_builds_a_prompt_that_shows_only_candidates_with_nearby_memory(self):
         for case in load_reconcile_dataset():

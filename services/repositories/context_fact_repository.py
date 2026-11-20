@@ -331,6 +331,20 @@ class ContextFactRepository:
         )
         return [self._serialize_row(fact) for fact in result.scalars().all()]
 
+    # 日本語: 照合に渡す事実の列。最後に話題に出た時刻(last_mentioned)も読む。
+    # English: The fact columns handed to reconciliation, including when each was last mentioned (last_mentioned).
+    @staticmethod
+    def _reconcile_columns():
+        return (
+            ContextFact.id,
+            ContextFact.revision,
+            ContextFact.fact_type,
+            ContextFact.title,
+            ContextFact.content,
+            ContextFact.status,
+            last_mentioned_at(ContextFact).label("last_mentioned"),
+        )
+
     # 日本語: 照合のために、候補の埋め込みに意味が近い記憶を近い順に limit 件まで返す。対象は matchable_fact_clause の事実
     # (有効な事実と本人が無効化した事実)で、埋め込みのある行だけ。距離は max_distance 以内。最後に話題に出た時刻(last_mentioned)も返す。
     # English: For reconciliation, returns up to limit memories semantically close to the candidate's embedding, nearest first. Only
@@ -346,15 +360,7 @@ class ContextFactRepository:
     ) -> list[dict[str, Any]]:
         distance = self._distance(embedding)
         result = await self.session.execute(
-            select(
-                ContextFact.id,
-                ContextFact.revision,
-                ContextFact.fact_type,
-                ContextFact.title,
-                ContextFact.content,
-                ContextFact.status,
-                last_mentioned_at(ContextFact).label("last_mentioned"),
-            )
+            select(*self._reconcile_columns())
             .where(
                 ContextFact.user_id == user_id,
                 matchable_fact_clause(),
@@ -363,6 +369,20 @@ class ContextFactRepository:
             )
             .order_by(distance)
             .limit(limit)
+        )
+        return [dict(row) for row in result.mappings().all()]
+
+    # 日本語: 照合のために、指定した id の事実(matchable_fact_clause に合うもの)を読む。BM25 で一致した有効な記憶を、埋め込みの有無や
+    # 距離に関係なく近い記憶に入れるための読み取りで、読んだ時点の revision を判定の時点の revision として使う。
+    # English: For reconciliation, reads the given facts (those matching matchable_fact_clause). It brings the active memory BM25
+    # matched into the nearby memories regardless of embedding or distance; the revision read here is the one judged against.
+    async def get_reconcile_facts(self, user_id: int, fact_ids: list[int]) -> list[dict[str, Any]]:
+        result = await self.session.execute(
+            select(*self._reconcile_columns()).where(
+                ContextFact.user_id == user_id,
+                ContextFact.id.in_(fact_ids),
+                matchable_fact_clause(),
+            )
         )
         return [dict(row) for row in result.mappings().all()]
 

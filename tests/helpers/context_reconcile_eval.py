@@ -15,7 +15,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from services.context_vault_reconcile import RelatedFact
+from services.context_vault_reconcile import RelatedFact, nearby_for_candidate
 from tests.helpers.llm_eval import EvalDatasetError
 
 DATASET_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "llm_eval" / "context_reconcile_cases_v1.json"
@@ -36,8 +36,15 @@ class ReconcileCase:
     case_id: str
     description: str
     candidates: list[dict[str, Any]]
+    # 近い記憶の一覧（BM25 で一致した有効な記憶があれば先頭に入れ、埋め込みで近い記憶を合わせたもの）。
+    # The nearby memories (the active memory BM25 matched, first, plus the memories close by embedding).
     related_by_candidate: dict[int, list[RelatedFact]]
-    response: str
+    # 候補の添字から、BM25 の最良一致だった有効な記憶（一致が無い候補は含まない）。
+    # Candidate index to the active memory that was the BM25 best match (candidates without one are absent).
+    matched: dict[int, RelatedFact]
+    # 固定した LLM の応答。None は LLM の呼び出しが失敗した（例外）ことを表す。
+    # The frozen LLM response; None stands for a failed LLM call (an exception).
+    response: str | None
     # 候補の添字から (期待する action, 対象の記憶の id または None)。
     # Candidate index to (expected action, target memory id or None).
     expected: dict[int, tuple[str, int | None]]
@@ -94,8 +101,8 @@ def _build_memories(case_id: str, raw_memories: Any) -> dict[str, RelatedFact]:
 # 日本語: 応答は文字列ならそのまま（壊れた応答のケース用）、オブジェクトなら target（記憶の label）を target_id へ置き換えて JSON にする。
 # English: A string response is used as is (for malformed-response cases); an object response has each target (a memory label)
 # replaced by its target_id before it is dumped as JSON.
-def _build_response(case_id: str, raw: Any, memories: dict[str, RelatedFact]) -> str:
-    if isinstance(raw, str):
+def _build_response(case_id: str, raw: Any, memories: dict[str, RelatedFact]) -> str | None:
+    if raw is None or isinstance(raw, str):
         return raw
     _require(isinstance(raw, dict), f"{case_id}: response must be a string or an object")
     decisions = raw.get("decisions")
@@ -121,6 +128,7 @@ def _build_case(raw: Any) -> ReconcileCase:
     _require(isinstance(raw_candidates, list) and raw_candidates, f"{case_id}: candidates must be a non-empty list")
     candidates: list[dict[str, Any]] = []
     related_by_candidate: dict[int, list[RelatedFact]] = {}
+    matched: dict[int, RelatedFact] = {}
     for index, raw_candidate in enumerate(raw_candidates):
         _require(isinstance(raw_candidate, dict), f"{case_id}: each candidate must be an object")
         fact_type = _require_text(raw_candidate.get("fact_type"), f"{case_id}: candidate {index} fact_type")
@@ -137,7 +145,16 @@ def _build_case(raw: Any) -> ReconcileCase:
         for label in nearby:
             _require(label in memories, f"{case_id}: candidate {index} nearby {label!r} is not a memory label")
         _require(len(set(nearby)) == len(nearby), f"{case_id}: candidate {index} nearby has duplicates")
-        related_by_candidate[index] = [memories[label] for label in nearby]
+        neighbors = [memories[label] for label in nearby]
+        bm25_label = raw_candidate.get("bm25_match")
+        if bm25_label is not None:
+            _require(bm25_label in memories, f"{case_id}: candidate {index} bm25_match {bm25_label!r} is not a memory label")
+            _require(
+                memories[bm25_label].status == "active",
+                f"{case_id}: candidate {index} bm25_match must be an active memory (other matches are never reconciled)",
+            )
+            matched[index] = memories[bm25_label]
+        related_by_candidate[index] = nearby_for_candidate(matched.get(index), neighbors)
 
     raw_expect = raw.get("expect")
     _require(isinstance(raw_expect, list), f"{case_id}: expect must be a list")
@@ -163,6 +180,7 @@ def _build_case(raw: Any) -> ReconcileCase:
         description=_require_text(raw.get("description"), f"{case_id}: description"),
         candidates=candidates,
         related_by_candidate=related_by_candidate,
+        matched=matched,
         response=_build_response(case_id, raw.get("response"), memories),
         expected=expected,
     )
