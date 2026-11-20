@@ -88,12 +88,3 @@ def find_bm25_duplicates(
             documents.append(candidate)
     return matches
 
-
-def filter_bm25_duplicates(
-    candidates: list[dict[str, Any]],
-    existing_documents: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    # 既存文書や同一バッチと類似重複する候補を除く。
-    """Drop candidates near-duplicating existing documents or the same batch."""
-    matches = find_bm25_duplicates(candidates, existing_documents)
-    return [candidate for candidate, match in zip(candidates, matches, strict=True) if match is None]
