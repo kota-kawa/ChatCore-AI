@@ -191,18 +191,21 @@ export async function updateContextFact(
 }
 
 // 置き換えで入った新しい記憶を無効化し（この内容は再び覚えない）、置き換えられた古い記憶を有効へ戻す。revision は新しい記憶のもの。
+// 画面が 409（置き換えが別の場所で先に変わった）で一覧を取り直せるよう、失敗は HTTP ステータスを持つエラーで返す。
 // Deprecate the memory that came in by replacement (that content is not remembered again) and make the older memory it replaced active again; revision is the new memory's.
+// A failure carries its HTTP status, so the screen can reload the list on a 409 (the replacement changed elsewhere first).
 export async function revertContextFactReplacement(factId: number, revision: number): Promise<ContextFactRevertResult> {
-  const { payload } = await memoFetchJsonOrThrow<Partial<ContextFactRevertResult> & { error?: string }>(
-    `/api/context-facts/${factId}/revert-replacement`,
-    {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ revision }),
-    },
-    { defaultMessage: "記憶を元に戻せませんでした。", hasApplicationError: (d) => !d.fact || !d.restored_fact },
-  );
+  const response = await resilientFetch(`/api/context-facts/${factId}/revert-replacement`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ revision }),
+  });
+  if (!response.ok) await throwContextResponseError(response, "記憶を元に戻せませんでした");
+  const payload = (await response.json().catch(() => ({}))) as Partial<ContextFactRevertResult>;
+  if (!payload.fact || !payload.restored_fact) {
+    throw createContextApiError("記憶を元に戻せませんでした。", response.status);
+  }
   return payload as ContextFactRevertResult;
 }
 

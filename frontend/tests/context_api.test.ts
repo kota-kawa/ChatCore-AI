@@ -148,7 +148,12 @@ test("revertContextFactReplacement POSTs the new memory's revision and returns b
 test("revertContextFactReplacement exposes a conflict and treats a body without both facts as a failure", async () => {
   globalThis.fetch = (async () => jsonResponse({ error: "この置き換えは元に戻せません。" }, 409)) as typeof fetch;
   try {
-    await assert.rejects(() => revertContextFactReplacement(4, 2), /この置き換えは元に戻せません。/);
+    // 画面が 409 を見分けて一覧を取り直せるよう、エラーは HTTP ステータスを持つ。
+    // The error carries its HTTP status so the screen can tell a 409 and reload the list.
+    await assert.rejects(
+      () => revertContextFactReplacement(4, 2),
+      (error: Error & { status?: number }) => /この置き換えは元に戻せません。/.test(error.message) && error.status === 409,
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

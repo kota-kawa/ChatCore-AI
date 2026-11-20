@@ -190,6 +190,37 @@ describe("MyContextPanel replacement history", () => {
     expect(screen.queryByText("新住所")).not.toBeInTheDocument();
   });
 
+  it("reloads the list and shows the error when the undo conflicts (409), so the stale card does not stay", async () => {
+    const replacing = fact({ id: 8, title: "新住所", revision: 3, replaces: { id: 7, title: "旧住所", content: "東京に住んでいる" } });
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(page([replacing]))
+      .mockResolvedValue(page([fact({ id: 8, title: "新住所", revision: 4 })]));
+    const revert = vi.fn().mockRejectedValue(Object.assign(new Error("この置き換えは元に戻せません。"), { status: 409 }));
+    renderPanel({ load, revert });
+
+    const card = (await screen.findByText("新住所")).closest("article") as HTMLElement;
+    fireEvent.click(within(card).getByRole("button", { name: "元に戻す" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("この置き換えは元に戻せません。");
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+    // 取り直した一覧では「以前の記憶」と「元に戻す」が消え、エラーの文言は残る。
+    // In the reloaded list "previous memory" and Undo are gone, while the error text stays.
+    await waitFor(() => expect(screen.queryByRole("button", { name: "元に戻す" })).not.toBeInTheDocument());
+    expect(screen.getByRole("alert")).toHaveTextContent("この置き換えは元に戻せません。");
+  });
+
+  it("does not reload for other undo failures", async () => {
+    const replacing = fact({ id: 8, title: "新住所", replaces: { id: 7, title: "旧住所", content: "古い" } });
+    const load = vi.fn().mockResolvedValue(page([replacing]));
+    const revert = vi.fn().mockRejectedValue(Object.assign(new Error("失敗"), { status: 500 }));
+    renderPanel({ load, revert });
+
+    fireEvent.click(await screen.findByRole("button", { name: "元に戻す" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("失敗");
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
   it("does not show Undo on a memory that replaced nothing, and reports a failed undo", async () => {
     const replacing = fact({ id: 8, title: "新住所", replaces: { id: 7, title: "旧", content: "古い" } });
     const revert = vi.fn().mockRejectedValue(new Error("この置き換えは元に戻せません。"));
@@ -228,7 +259,8 @@ describe("MyContextPanel search", () => {
       .fn()
       .mockResolvedValueOnce(page([fact()]))
       .mockResolvedValueOnce(page([fact()], 1, "cursor-1"))
-      .mockResolvedValueOnce(page([fact({ id: 2, title: "二ページ目" })]));
+      .mockResolvedValueOnce(page([fact({ id: 2, title: "二ページ目" })]))
+      .mockResolvedValue(page([]));
     renderPanel({ load });
     await screen.findByText("住所");
 
@@ -258,6 +290,48 @@ describe("MyContextPanel search", () => {
     expect(screen.getByRole("searchbox", { name: "記憶を検索" })).toHaveValue("");
     expect(await screen.findByText("住所")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "検索をクリア" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the previous results on screen while a changed query loads, and not the previous page's cursor", async () => {
+    // 検索語が変わるたびに一覧がスケルトンに差し替わってちらつかないよう、取り直している間は前の結果を見せる。
+    // The list must not flash to the skeleton on every query change, so the previous results stay while the new ones load.
+    let resolveSearch: (value: ReturnType<typeof page>) => void = () => {};
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(page([fact()], 1, "cursor-1"))
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveSearch = resolve)));
+    renderPanel({ load });
+    await screen.findByText("住所");
+    expect(screen.getByRole("button", { name: "さらに読み込む" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "記憶を検索" }), { target: { value: "東京" } });
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+
+    expect(screen.getByText("住所")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: /読み込み/ })).not.toBeInTheDocument();
+    // 前の結果の続きのカーソルは、いまの検索語では使えないので出さない。
+    // The previous result's cursor cannot be used with the new query, so it is not offered.
+    expect(screen.queryByRole("button", { name: "さらに読み込む" })).not.toBeInTheDocument();
+
+    await act(async () => resolveSearch(page([fact({ id: 2, title: "東京の記憶" })])));
+    expect(await screen.findByText("東京の記憶")).toBeInTheDocument();
+    expect(screen.queryByText("住所")).not.toBeInTheDocument();
+  });
+
+  it("shows the skeleton instead of the previous results when the status filter changes", async () => {
+    // 状態を切り替えたときに、前の状態の記憶が別の一覧として見えてしまわないようにする。
+    // Switching the status must not show the other status's memories as if they were this list.
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(page([fact()]))
+      .mockImplementationOnce(() => new Promise(() => {}));
+    renderPanel({ load });
+    await screen.findByText("住所");
+
+    fireEvent.click(screen.getByRole("button", { name: "無効化済み" }));
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("住所")).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: /読み込み/ })).toBeInTheDocument();
   });
 
   it("treats a punctuation-only query as no search: no re-fetch and no search-style empty message", async () => {
@@ -331,6 +405,44 @@ describe("MyContextPanel permanent delete", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "完全に削除" }));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("他の場所で先に更新されました。");
     expect(card).toBeInTheDocument();
+  });
+
+  it("keeps the modal's content while it fades out after a delete or a cancel", async () => {
+    // 閉じる 200ms のあいだに中身だけ先に消えて空の面が見えないよう、ModalShell が開いていたときの中身を保つ。
+    // ModalShell keeps the content shown while open, so no empty surface is seen during the 200ms close.
+    const load = vi.fn().mockResolvedValue(page([fact({ id: 3, title: "消す記憶", revision: 4 })]));
+    renderPanel({ load, deleteOne: vi.fn().mockResolvedValue(undefined) });
+
+    const card = (await screen.findByText("消す記憶")).closest("article") as HTMLElement;
+    fireEvent.click(within(card).getByRole("button", { name: "完全に削除" }));
+    const dialog = await screen.findByRole("dialog", { name: "この記憶を完全に削除しますか？" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "キャンセル" }));
+
+    const overlay = document.getElementById("context-delete-modal") as HTMLElement;
+    expect(overlay).toHaveClass("is-closing");
+    expect(overlay).toHaveTextContent("この記憶を完全に削除しますか？");
+    expect(overlay).toHaveTextContent("消す記憶");
+    await waitFor(() => expect(overlay).not.toHaveClass("is-closing"));
+  });
+
+  it("shows the reload error, besides the success notice, when the list cannot be reloaded after a successful delete", async () => {
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(page([fact({ id: 3, title: "消す記憶", revision: 4 })]))
+      .mockRejectedValue(new Error("一覧を取得できませんでした。"));
+    const deleteOne = vi.fn().mockResolvedValue(undefined);
+    renderPanel({ load, deleteOne });
+
+    const card = (await screen.findByText("消す記憶")).closest("article") as HTMLElement;
+    fireEvent.click(within(card).getByRole("button", { name: "完全に削除" }));
+    const dialog = await screen.findByRole("dialog", { name: "この記憶を完全に削除しますか？" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "完全に削除" }));
+
+    await waitFor(() => expect(deleteOne).toHaveBeenCalledWith(3, 4));
+    expect(await screen.findByRole("status")).toHaveTextContent("記憶を完全に削除しました。");
+    // 削除の成功は通知に出し、再取得の失敗は一覧の場所のエラーに出る（モーダルは閉じていても見える）。
+    // The delete's success is in the notice and the reload failure shows as the list's error, visible although the modal is closed.
+    expect(await screen.findByRole("alert")).toHaveTextContent("一覧を取得できませんでした。");
   });
 
   it("offers permanent delete on a deactivated memory too", async () => {

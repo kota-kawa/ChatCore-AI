@@ -26,6 +26,7 @@ import {
   type ContextFactStatus,
   type ContextFactType,
 } from "../../lib/memo/context_types";
+import type { HttpError } from "../../lib/memo/types";
 import { ContextDeleteAllModal } from "./ContextDeleteAllModal";
 import { CONTEXT_FACT_TYPE_MESSAGE_KEYS, ContextFactCard } from "./ContextFactCard";
 import { ContextFactDeleteModal } from "./ContextFactDeleteModal";
@@ -136,20 +137,30 @@ export function MyContextPanel({
   // Search is term matching only (no semantic search); the query, normalized to what the server uses (punctuation only means no search), is used for fetching once typing pauses.
   const searchQuery = useDebouncedValue(normalizeContextSearchQuery(searchInput), SEARCH_DEBOUNCE_MS);
 
-  // 絞り込み条件ごとの取得キー。未ログインのときは null にして取得しない。
-  // Fetch key per filter combination; null when logged out so nothing is fetched.
-  const swrKey = isLoggedIn ? `context-facts|${statusFilter}|${typeFilter}|${searchQuery}` : null;
+  // 絞り込み条件ごとの取得キー。未ログインのときは null にして取得しない。キーの前半は状態・種類、最後が検索語。
+  // Fetch key per filter combination; null when logged out so nothing is fetched. The prefix is status and type; the search query comes last.
+  const filterKeyPrefix = `context-facts|${statusFilter}|${typeFilter}|`;
+  const swrKey = isLoggedIn ? `${filterKeyPrefix}${searchQuery}` : null;
   activeFilterKeyRef.current = swrKey;
+  // 取得結果には、どのキーで取ったかを添える。検索語だけが変わったときに前の結果を残してよいか、続きのカーソルがいまの条件のものかを見分けるため。
+  // The result carries the key it was fetched with, to tell whether the previous result may stay while only the search query changes and whether its cursor belongs to the current filters.
   const { data, error, isLoading, mutate } = useSWR(
     swrKey,
-    () =>
-      load({
+    async () => ({
+      ...(await load({
         factType: typeFilter === "all" ? null : typeFilter,
         status: statusFilter,
         ...(searchQuery ? { query: searchQuery } : {}),
-      }),
-    { revalidateOnFocus: false },
+      })),
+      requestKey: `${filterKeyPrefix}${searchQuery}`,
+    }),
+    { revalidateOnFocus: false, keepPreviousData: true },
   );
+  // 検索語が変わって取り直している間は、状態・種類が同じ前の結果をそのまま見せる（スケルトンに差し替えない）。状態・種類が変わったとき、
+  // 前の結果が空だったときは、別の内容を見せないよう従来どおりスケルトンにする。
+  // While refetching after a search-query change, the previous result with the same status and type stays on screen (no skeleton swap). When the
+  // status or type changed, or the previous result was empty, the skeleton is shown so that no other content is displayed.
+  const keepsPreviousResult = data !== undefined && data.facts.length > 0 && data.requestKey.startsWith(filterKeyPrefix);
 
   // 削除の確認モーダルと実行。成功したら通知を出して一覧を取り直す。
   // The delete confirmation modals and their execution; on success the notice is shown and the list is reloaded.
@@ -165,7 +176,9 @@ export function MyContextPanel({
 
   useEffect(() => {
     setAdditionalFacts([]);
-    setNextCursor(data?.nextCursor ?? null);
+    // 前の結果を残している間は、その続きのカーソルをいまの検索語で使わない。
+    // While a previous result is kept, its cursor is not used with the current query.
+    setNextCursor(data?.requestKey === swrKey ? data.nextCursor : null);
     setLoadingMore(false);
     activeLoadMoreRef.current = null;
   }, [data, swrKey]);
@@ -287,6 +300,9 @@ export function MyContextPanel({
       await mutate();
     } catch (err) {
       setErrorText(err instanceof Error ? err.message : t("memo.revertFailed"));
+      // 409 は置き換えが別の場所で先に変わった印。表示が古いままだと同じ操作が同じ理由で失敗し続けるので、一覧を取り直す。
+      // A 409 means the replacement changed elsewhere first; a stale list would keep failing the same way, so reload it.
+      if ((err as HttpError).status === 409) await mutate();
     } finally {
       setBusyFactId(null);
     }
@@ -550,7 +566,7 @@ export function MyContextPanel({
         )}
       </ModalShell>
 
-      {isLoading ? (
+      {isLoading && !keepsPreviousResult ? (
         <MemoListSkeleton />
       ) : error ? (
         <div className="memo-context-empty" role="alert">
