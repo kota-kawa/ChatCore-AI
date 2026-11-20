@@ -37,6 +37,19 @@ BM25_B = 0.75
 # list's first place can push aside the other list's evidence.
 RRF_K = 60
 
+# 語の一致を「証拠」として数えるのに必要な、検索語の証拠のトークン（_query_terms）が記憶に現れた割合。日本語は 2 文字連続（bigram）で
+# 索引するので、文の形の検索語は多くのトークンを持ち、無関係な記憶でも 1 つはたまたま一致する（「フォーマット」と「コミットメッセージ」が
+# 「ット」を共有する、など）。1 つだけの一致を語の一致にすると、そうした記憶が結果に混ざる。30% なら、証拠のトークンが 1〜3 個の短い
+# 検索語は 1 個の一致で通り、7 個の「犬の名前を教えて」は 3 個（「犬の」「の名」「名前」のようなまとまった一致）が要り、「犬の」だけの
+# 記憶は語の一致から外れる。外れた記憶も、意味の近さがしきい値以内なら意味の一覧から入る。
+# The share of the query's evidence tokens (_query_terms) a memory must contain for its word match to count as evidence.
+# Japanese is indexed as character bigrams, so a sentence-shaped query has many tokens and an unrelated memory shares one by
+# chance (the "ット" shared by フォーマット and コミットメッセージ). Counting a single shared token would let such memories in.
+# At 30%, a short query of 1-3 evidence tokens passes on one match, the 7-token 犬の名前を教えて needs 3 (a coherent run such as
+# 犬の / の名 / 名前), and a memory sharing only 犬の drops out of the word list. A dropped memory can still enter through the
+# semantic list when its distance is within the threshold.
+WORD_MATCH_MIN_COVERAGE = 0.3
+
 # 加点の上限。RRF の 1 位と 2 位の差は 1/60 - 1/61 ≒ 0.00027、10 位前後の隣り合う順位の差は 0.0002 前後で、
 # 全部の加点が満点でも 0.0008（上位の順位で 3 つ分ほど）に収まるようにする。片方の一覧だけに出る記憶の 1 位は
 # 1/61 ≒ 0.0164 で、満点の加点を足しても 0.0172。両方の一覧で 20 位以内に入る記憶は 2/(60+20) = 0.025 以上なので、
@@ -130,6 +143,15 @@ def _bm25_scores(documents: Sequence[Sequence[str]], terms: Sequence[str]) -> li
     return scores
 
 
+def _covers_enough_terms(document: Sequence[str], terms: Sequence[str]) -> bool:
+    """記憶が、検索語の証拠のトークンを WORD_MATCH_MIN_COVERAGE 以上の割合で含むか。
+
+    Whether the memory contains at least WORD_MATCH_MIN_COVERAGE of the query's evidence tokens.
+    """
+    present = set(document)
+    return sum(1 for term in terms if term in present) / len(terms) >= WORD_MATCH_MIN_COVERAGE
+
+
 def _ranks(ordered_ids: Sequence[int]) -> dict[int, int]:
     return {fact_id: rank for rank, fact_id in enumerate(ordered_ids, start=1)}
 
@@ -160,15 +182,17 @@ def rank_memory_facts(
 
     各行は id、title、content、importance、last_confirmed_at、last_mentioned_at と、検索語の埋め込みとのコサイン距離 distance を持つ。
     distance が None の行は、ベクトルがまだ無い記憶、または埋め込みが使えなかったときの行で、語の一致だけで順位づける。
-    返す条件は、語の一致が 1 つ以上ある、または distance が max_distance（既定は意味検索のしきい値）以内であること。
+    返す条件は、語の一致がある（検索語の証拠のトークンの WORD_MATCH_MIN_COVERAGE 以上が記憶に現れる）、または distance が
+    max_distance（既定は意味検索のしきい値）以内であること。
     順位は、語の一致の一覧と意味の近さの一覧の RRF に小さな加点を足した点の降順で、同点は id の大きい順。
 
     Return at most `limit` memories relevant to the query, best fused rank first.
 
     Each row carries id, title, content, importance, last_confirmed_at, last_mentioned_at and `distance`, the
     cosine distance to the query embedding. A None distance means the memory has no vector yet or embeddings
-    were unavailable, so it is ranked by word match alone. A memory is returned when it shares at least one
-    word with the query or its distance is within max_distance (the semantic search threshold by default).
+    were unavailable, so it is ranked by word match alone. A memory is returned when it has a word match (at least
+    WORD_MATCH_MIN_COVERAGE of the query's evidence tokens appear in it) or its distance is within max_distance (the
+    semantic search threshold by default).
     Order is the RRF of the lexical and semantic lists plus the small boosts, descending, with ties broken by
     larger id.
     """
@@ -178,8 +202,13 @@ def rank_memory_facts(
     ceiling = get_semantic_max_distance() if max_distance is None else max_distance
     terms = _query_terms(str(query or ""))
 
-    lexical_scores = _bm25_scores([_document_tokens(fact) for fact in facts], terms)
-    lexical_matches = [(fact, score) for fact, score in zip(facts, lexical_scores, strict=True) if score > 0]
+    documents = [_document_tokens(fact) for fact in facts]
+    lexical_scores = _bm25_scores(documents, terms)
+    lexical_matches = [
+        (fact, score)
+        for fact, score, document in zip(facts, lexical_scores, documents, strict=True)
+        if score > 0 and _covers_enough_terms(document, terms)
+    ]
     # 同点は id の大きい順にして、同じ入力なら必ず同じ順位になるようにする。
     # Ties go to the larger id so the same input always gives the same order.
     lexical_order = [int(fact["id"]) for fact, _ in sorted(lexical_matches, key=lambda item: (-item[1], -int(item[0]["id"])))]

@@ -13,6 +13,7 @@ from services.memory_search_ranking import (
     IMPORTANCE_BOOST_MAX,
     MEMORY_SEARCH_RESULT_LIMIT,
     RECENCY_BOOST_MAX,
+    WORD_MATCH_MIN_COVERAGE,
     rank_memory_facts,
 )
 
@@ -124,7 +125,7 @@ class FloorTestCase(unittest.TestCase):
 
         self.assertEqual(_ids(rows, "犬の名前"), [4])
         self.assertNotIn(5, _ids(rows, "犬の名前"))
-        self.assertEqual(_ids(_rows(), "今日の食べ物は何がいい"), [2])
+        self.assertEqual(_ids(_rows(), "食べ物は何"), [2])
 
     def test_a_query_too_short_to_make_a_pair_still_matches_by_its_single_kanji(self):
         self.assertEqual(_ids(_rows(), "犬"), [4])
@@ -138,6 +139,96 @@ class FloorTestCase(unittest.TestCase):
     def test_an_empty_query_or_no_memory_gives_nothing(self):
         self.assertEqual(_ids(_rows(), ""), [])
         self.assertEqual(_ids([], "犬"), [])
+
+
+def _custom_rows(*memories, distances=None):
+    """(id, タイトル, 内容) の組から、固定データとは別の記憶の行を作る。Build rows from (id, title, content) apart from the fixed set."""
+    distances = distances or {}
+    return [
+        {
+            "id": fact_id,
+            "fact_type": "preference",
+            "title": title,
+            "content": content,
+            "importance": 50,
+            "source_kind": "chat",
+            "last_confirmed_at": None,
+            "last_mentioned_at": NOW - timedelta(days=400),
+            "distance": distances.get(fact_id),
+        }
+        for fact_id, title, content in memories
+    ]
+
+
+class WordMatchCoverageTestCase(unittest.TestCase):
+    """語の一致は、検索語の証拠のトークンの一定割合が記憶に現れたときだけ数える。A word match counts only at a minimum share of the query's evidence tokens."""
+
+    COMMIT = (1, "コミットメッセージ", "コミットメッセージは日本語と英語を併記する。")
+    REPORT = (2, "週報のフォーマット", "週報は箇条書きで、毎週金曜に出す。")
+
+    def test_the_threshold_is_the_documented_starting_point(self):
+        self.assertEqual(WORD_MATCH_MIN_COVERAGE, 0.3)
+
+    def test_a_single_shared_bigram_is_not_a_word_match(self):
+        # 「フォーマット」と「コミットメッセージ」が共有するのは「ット」だけ（証拠のトークン 5 個のうち 1 個）。
+        # フォーマット and コミットメッセージ share only "ット" (1 of 5 evidence tokens).
+        rows = _custom_rows(self.COMMIT, self.REPORT)
+
+        self.assertEqual(_ids(rows, "週報 フォーマット"), [2])
+        self.assertEqual(_ids(rows, "週報のフォーマット"), [2])
+
+    def test_a_memory_dropped_from_the_word_list_still_enters_by_meaning(self):
+        rows = _custom_rows(self.COMMIT, self.REPORT, distances={1: 0.4})
+
+        self.assertEqual(set(_ids(rows, "週報 フォーマット")), {1, 2})
+
+    def test_a_dropped_memory_does_not_defeat_the_untrusted_stop_of_auto_run(self):
+        # 語の一致から外れた記憶は結果に入らないので、本人由来でない記憶でも自動実行を止める理由にならない。
+        # A memory dropped from the word list is not in the result, so even a non-owner memory gives no reason to stop auto-run.
+        rows = _custom_rows(self.COMMIT)
+        rows[0]["source_kind"] = "mcp"
+
+        self.assertEqual(_ids(rows, "週報 フォーマット"), [])
+
+    def test_a_short_query_passes_on_one_match(self):
+        # 証拠のトークンが 1〜3 個なら 1 個の一致で通る。
+        # With 1-3 evidence tokens one match is enough.
+        rows = _custom_rows((1, "旅行計画", "来年の春に京都へ旅行する予定。"), (2, "飼い犬", "柴犬のハチを飼っている。"))
+
+        self.assertEqual(_ids(rows, "京都"), [1])
+        self.assertEqual(_ids(rows, "旅行 ハチ"), [1, 2])
+        self.assertEqual(_ids(rows, "project plan budget"), [])
+        english = _custom_rows((3, "Project", "The project is due Friday."))
+        self.assertEqual(_ids(english, "project plan budget"), [3])
+
+    def test_a_longer_keyword_query_needs_the_share(self):
+        rows = _custom_rows((1, "Project", "The project plan is due Friday."), (2, "Budget", "The budget is fixed."))
+
+        # 5 語のうち 1 語（20%）だけの記憶は外れ、2 語（40%）の記憶は通る。
+        # One word of five (20%) drops out; two of five (40%) passes.
+        self.assertEqual(_ids(rows, "project plan budget deadline owner"), [1])
+        self.assertEqual(_ids(rows, "project plan budget"), [1, 2])
+
+    def test_a_sentence_query_needs_a_coherent_run_not_one_bigram(self):
+        # 「犬の名前を教えて」の証拠のトークンは 7 個。「犬の」「の名」「名前」が揃う記憶は通り、「犬の」だけの記憶は外れる。
+        # 犬の名前を教えて has 7 evidence tokens: a memory with 犬の / の名 / 名前 passes, one with only 犬の drops out.
+        coherent = (1, "犬の名前", "飼い犬の名前はハチ。")
+        only_one = (2, "犬のおやつ", "犬のおやつはささみ。")
+        rows = _custom_rows(coherent, only_one)
+
+        self.assertEqual(_ids(rows, "犬の名前を教えて"), [1])
+
+    def test_a_single_kanji_query_is_unaffected(self):
+        rows = _custom_rows((1, "飼い犬", "柴犬のハチ。"), (2, "コーヒー", "ブラックを飲む。"))
+
+        self.assertEqual(_ids(rows, "犬"), [1])
+
+    def test_an_english_query_whose_function_words_match_still_enters_the_word_list(self):
+        # 既知の限界: 英語の機能語（is・the など）の一致も語の一致として数える。機能語の一覧は持たない（BM25 の idf が低く出るだけ）。
+        # Known limit: English function words (is, the) still count; no stop-word list is kept, only the low idf lowers them.
+        rows = _custom_rows((1, "Coffee", "This is the best coffee in town."))
+
+        self.assertEqual(_ids(rows, "what is the project plan"), [1])
 
 
 class MissingVectorTestCase(unittest.TestCase):
