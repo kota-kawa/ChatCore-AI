@@ -215,6 +215,7 @@ class ContextFactCandidateRepository:
         facts_result = await self.session.execute(
             select(
                 ContextFact.id,
+                ContextFact.revision,
                 ContextFact.fact_type,
                 ContextFact.title,
                 ContextFact.content,
@@ -242,6 +243,7 @@ class ContextFactCandidateRepository:
         existing_documents = [
             {
                 "fact_id": int(row.id),
+                "fact_revision": int(row.revision),
                 "fact_status": str(row.status),
                 "fact_type": str(row.fact_type),
                 "title": str(row.title or ""),
@@ -284,7 +286,14 @@ class ContextFactCandidateRepository:
                 # English: A duplicate of an active fact is a repeat mention, so only a source is added to it. Nothing is
                 # saved when the match is a same-batch candidate (no fact_id), a deprecated fact, or a pending/rejected candidate.
                 if match.get("fact_status") == "active":
-                    await self._record_source(user_id, int(match["fact_id"]), candidate, room_id, user_message_id)
+                    await self._record_source(
+                        user_id,
+                        int(match["fact_id"]),
+                        candidate,
+                        room_id,
+                        user_message_id,
+                        expected_revision=int(match["fact_revision"]),
+                    )
                 continue
             if len(saved_facts) >= free_fact_slots and queued_count >= free_queue_slots:
                 continue
@@ -307,7 +316,9 @@ class ContextFactCandidateRepository:
         return ExtractedStoreResult(saved_facts, queued_count)
 
     # 日本語: 候補の evidence を出典として事実へ残す。部屋か evidence が無いとき(旧形式の呼び出し)は何もしない。
+    # expected_revision は既存の事実へ足すときの、重複を判定した時点の revision（新しく作った事実では None）。
     # English: Keep the candidate's evidence as a source of the fact. Does nothing without a room or evidence (older callers).
+    # expected_revision is the revision read when the duplicate was judged, for an existing fact (None for a fact just created).
     async def _record_source(
         self,
         user_id: int,
@@ -315,6 +326,7 @@ class ContextFactCandidateRepository:
         candidate: dict[str, Any],
         room_id: str | None,
         user_message_id: int | None,
+        expected_revision: int | None = None,
     ) -> None:
         evidence = str(candidate.get("evidence") or "")
         if not room_id or not evidence:
@@ -325,6 +337,7 @@ class ContextFactCandidateRepository:
             chat_room_id=room_id,
             user_message_id=user_message_id,
             evidence=evidence,
+            expected_revision=expected_revision,
         )
 
     # 日本語: 抽出した内容を事実として挿入する。last_confirmed_at は書かず NULL(本人未確認)のまま、確信度は抽出時の値を残す。
