@@ -5,7 +5,7 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useHomePageRoomActions } from "../hooks/chat_page/use_home_page_room_actions";
-import type { ChatRoom } from "../lib/chat_page/types";
+import type { ChatHistoryLoadOutcome, ChatRoom } from "../lib/chat_page/types";
 
 vi.mock("../scripts/core/alert_modal", () => ({
   showConfirmModal: vi.fn(),
@@ -34,7 +34,7 @@ const openOverlaySidebar = vi.fn();
 const setPageViewState = vi.fn();
 const mutateChatRooms = vi.fn(async () => undefined);
 const stub = vi.fn();
-const asyncStub = vi.fn(async () => undefined);
+const loadChatHistory = vi.fn(async (): Promise<ChatHistoryLoadOutcome> => ({ status: "loaded", roomMode: "normal" }));
 
 const rooms: ChatRoom[] = [
   { id: "a", title: "A", mode: "normal", lastActivityAt: "2026-09-20T10:00:00" },
@@ -74,7 +74,7 @@ function useAccessChatHarness(chatRooms: ChatRoom[]) {
     setMessages: stub,
     persistCurrentRoomId: stub,
     loadLocalChatHistory: stub,
-    loadChatHistory: asyncStub,
+    loadChatHistory,
   } as unknown as RoomActionsParams);
 }
 

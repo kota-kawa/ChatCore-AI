@@ -6,7 +6,7 @@ import { useCallback, useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { useHomePageRoomActions } from "../hooks/chat_page/use_home_page_room_actions";
-import type { ChatRoom, ChatRoomMode } from "../lib/chat_page/types";
+import type { ChatHistoryLoadOutcome, ChatRoom, ChatRoomMode } from "../lib/chat_page/types";
 
 vi.mock("../scripts/core/alert_modal", () => ({
   showConfirmModal: vi.fn(),
@@ -27,6 +27,8 @@ vi.mock("../scripts/setup/setup_viewport", () => ({
 
 type RoomActionsParams = Parameters<typeof useHomePageRoomActions>[0];
 type PageViewState = RoomActionsParams["pageViewState"];
+
+const LOADED_HISTORY: ChatHistoryLoadOutcome = { status: "loaded", roomMode: "normal" };
 
 const makeRoom = (id: string): ChatRoom => ({
   id,
@@ -85,7 +87,7 @@ function useRoomScopedTogglesHarness(initialRooms: ChatRoom[]) {
     pendingProjectIdRef: { current: null },
     createNewChatRoom,
     generateResponse: vi.fn(async () => true),
-    loadChatHistory: vi.fn(async () => undefined),
+    loadChatHistory: vi.fn(async () => LOADED_HISTORY),
     loadLocalChatHistory: vi.fn(),
     removeStoredHistory: vi.fn(),
     clearPendingProject: vi.fn(),

@@ -26,6 +26,7 @@ import { setLoggedInState } from "../../scripts/core/app_state";
 import { releaseAuthBootAttribute } from "../../scripts/core/auth_state_cache";
 import { CurrentUserAuthError, readCurrentUserLoggedIn } from "../../lib/chat_page/auth_status";
 import { CHAT_ROOMS_PAGE_SIZE } from "../../lib/chat_page/constants";
+import { consumeRoomIdFromUrl } from "../../lib/chat_page/room_url";
 import {
   normalizeChatRoomsPayload,
 } from "../../lib/chat_page/api_contract";
@@ -44,6 +45,7 @@ import {
   readCachedAuthState,
   reconcileStoredUserScope,
   writeCachedAuthState,
+  writeStoredHomePageViewState,
 } from "../../lib/chat_page/storage";
 import {
   createGenerationGuard,
@@ -126,6 +128,18 @@ const fetchChatRoomsPage = async (url: string): Promise<ChatRoomsPage> => {
   }
 
   return payload;
+};
+
+// URL の room クエリの処理の段階。pending は未着手、awaiting_auth は認証キャッシュが無く認証確認の結果待ち、opening は読み込み中、done は処理済み。
+// How far the URL's room query has been handled: pending = not started, awaiting_auth = no auth cache so waiting for the auth check, opening = loading, done = handled.
+type UrlRoomRequest = {
+  roomId: string | null;
+  phase: "pending" | "awaiting_auth" | "opening" | "done";
+  // 認証待ちにした時点で開いていたルーム。待つ間に利用者が別のルームへ移っていたら、URL のルームは開かない。
+  // The room open when waiting for auth began; if the user moved to another room meanwhile, the URL's room is not opened.
+  // undefined は、まだ待機に入っていない（記録していない）ことを表す。
+  // undefined means waiting has not started yet (nothing recorded).
+  roomIdWhenDeferred: string | null | undefined;
 };
 
 // ホーム画面の全状態を組み立てて返す。UI 状態、タスク、チャット、共有などの hook を呼び出し、それらをつなぐ処理と副作用をここに置く
@@ -327,6 +341,9 @@ export function useHomePageController() {
   if (!generationGuardRef.current) {
     generationGuardRef.current = createGenerationGuard();
   }
+  // 開いたときに URL から読み取った room の指定とその処理の段階。URL は読むと消えるため、effect が再実行されても同じ指定を使い続ける
+  // The room requested by the URL when the page opened and how far it has been handled. Reading removes it from the URL, so the same request is kept across effect re-runs
+  const urlRoomRequestRef = useRef<UrlRoomRequest | null>(null);
   const {
     refreshTasks,
     toggleTaskOrderEditing,
@@ -912,18 +929,9 @@ export function useHomePageController() {
     releaseAuthBootAttribute();
   }, [setAuthHintApplied, setLoggedIn]);
 
-  // ログアウトを経由しないユーザー切り替え（別アカウントでの再ログインなど）を
-  // 認証確認の結果から検知し、前の利用者の永続状態を画面ごと消す最後の砦。
-  // 通常時（同一利用者の再訪問・初回訪問）は何もしない。
-  // Detects a user switch that skipped logout (re-login as a different
-  // account, etc.) from the auth check's result, and is the last line of
-  // defense that wipes the previous user's persisted state along with the
-  // screen. A no-op for the normal case (same user returning, or a first
-  // visit).
-  const applyResolvedUserScope = useCallback((userId: string | null) => {
-    const { changed } = reconcileStoredUserScope(userId);
-    if (!changed) return;
-
+  // 開いているルームと表示中の会話を捨て、セットアップ画面へ戻す。
+  // Drops the open room and the shown conversation, and returns to the setup view.
+  const resetHomeViewToSetup = useCallback(() => {
     setPageViewState("setup");
     setCurrentRoomId(null);
     currentRoomIdRef.current = null;
@@ -944,6 +952,21 @@ export function useHomePageController() {
     setMessages,
     setPageViewState,
   ]);
+
+  // ログアウトを経由しないユーザー切り替え（別アカウントでの再ログインなど）を
+  // 認証確認の結果から検知し、前の利用者の永続状態を画面ごと消す最後の砦。
+  // 通常時（同一利用者の再訪問・初回訪問）は何もしない。
+  // Detects a user switch that skipped logout (re-login as a different
+  // account, etc.) from the auth check's result, and is the last line of
+  // defense that wipes the previous user's persisted state along with the
+  // screen. A no-op for the normal case (same user returning, or a first
+  // visit).
+  const applyResolvedUserScope = useCallback((userId: string | null) => {
+    const { changed } = reconcileStoredUserScope(userId);
+    if (!changed) return;
+
+    resetHomeViewToSetup();
+  }, [resetHomeViewToSetup]);
 
   useEffect(() => {
     // /api/current_user でログイン状態を確定する。通信失敗など認証エラー以外では、新しいキャッシュがあればその状態を保つ
@@ -1132,6 +1155,61 @@ export function useHomePageController() {
     setPageViewState,
   ]);
 
+  // URL の room クエリで指定されたルームを開く。生成中のルームの復元を優先し、その場合は何もしない（false を返し、通常の復元に任せる）。
+  // 認証の判断は呼び出し側が行う。ルームの存在と所有者はサーバーの履歴 API が確かめるので、結果に従う:
+  // 読み込めたときだけ前回のルームとして保存し、失敗したら通知して通常の初期表示へ戻す。
+  // Opens the room named by the URL's room query. A generation being restored takes priority, in which case
+  // nothing happens (returns false and leaves it to the normal restore). The caller decides about auth.
+  // The server's history API verifies that the room exists and is the user's, so the result is followed as is:
+  // the room is saved as the last room only once it loads, and a failure notifies and returns to the normal initial view.
+  const openRoomFromUrl = useCallback((request: UrlRoomRequest): boolean => {
+    const roomId = request.roomId;
+    if (!roomId || readActiveStoredGenerationState()) {
+      request.phase = "done";
+      return false;
+    }
+    request.phase = "opening";
+
+    // ビューの保存値は setPageViewState が書き換えるので、失敗したときに戻せるよう先に控える。
+    // setPageViewState overwrites the stored view, so note it first to put it back on failure.
+    const previousViewState = readRestorableHomePageViewState();
+    currentRoomIdRef.current = roomId;
+    setCurrentRoomId(roomId);
+    setCurrentRoomMode("normal");
+    setPageViewState("chat");
+    setChatMessageListResetKey((previous) => previous + 1);
+
+    void loadChatHistory(roomId, true).then((outcome) => {
+      // 別のルームへ移っていたら、その画面を守って何もしない。
+      // If the view moved to another room, leave that screen alone.
+      if (outcome.status === "superseded" || currentRoomIdRef.current !== roomId) return;
+      request.phase = "done";
+      if (outcome.status === "loaded") {
+        persistCurrentRoomId(roomId, outcome.roomMode);
+        return;
+      }
+      showToast(
+        localize("指定された会話を開けませんでした。", "Couldn't open the conversation from the link."),
+        { variant: "error" },
+      );
+      resetHomeViewToSetup();
+      writeStoredHomePageViewState(previousViewState);
+      restoreHomeViewFromStorage();
+    });
+    return true;
+  }, [
+    currentRoomIdRef,
+    loadChatHistory,
+    localize,
+    persistCurrentRoomId,
+    resetHomeViewToSetup,
+    restoreHomeViewFromStorage,
+    setChatMessageListResetKey,
+    setCurrentRoomId,
+    setCurrentRoomMode,
+    setPageViewState,
+  ]);
+
   // 前回のビュー（チャット画面など）とアクティブルームの復元。最初のペイント前に
   // 反映しないとセットアップ画面が一瞬表示されてからチャット画面へ切り替わるため、
   // layout effect で同期的に復元する（ローカル履歴の読み込みも同じパスで行われ、
@@ -1141,8 +1219,52 @@ export function useHomePageController() {
   // the chat view — so restore synchronously in a layout effect (local history
   // loads on the same path, so the first paint already contains the messages).
   useIsomorphicLayoutEffect(() => {
+    // URL の room は最初の 1 回だけ読み（読むと URL から消える）、処理の段階を ref で持つ。開発時の Strict Mode や
+    // コールバックの変化で effect が再実行されても、開く処理を重ねて実行しない。
+    // Read the URL's room only once (reading removes it from the URL) and keep its stage in a ref, so a
+    // re-run of this effect (Strict Mode in development, or a callback changing) never starts opening it twice.
+    if (!urlRoomRequestRef.current) {
+      const roomId = consumeRoomIdFromUrl();
+      urlRoomRequestRef.current = { roomId, phase: roomId ? "pending" : "done", roomIdWhenDeferred: undefined };
+    }
+    const request = urlRoomRequestRef.current;
+    if (request.phase === "opening") return;
+
+    if (request.phase === "pending") {
+      // 認証確認は後から非同期で終わるので、ここではキャッシュ済みの状態で判断する。履歴 API は
+      // セッションで所有者を確かめるため、キャッシュが古くても他人のルームは開けない。
+      // キャッシュが無いときは、認証確認の結果を待つ（下の effect）。
+      // Auth resolves asynchronously later, so decide from the cached state here. The history API checks
+      // ownership by session, so a stale cache cannot open someone else's room.
+      // With no cache, wait for the auth check's result (the effect below).
+      const cachedAuth = readCachedAuthState();
+      if (cachedAuth === true) {
+        if (openRoomFromUrl(request)) return;
+      } else {
+        request.phase = cachedAuth === null ? "awaiting_auth" : "done";
+      }
+    }
+
     restoreHomeViewFromStorage();
-  }, [restoreHomeViewFromStorage]);
+    // 待機に入った最初の 1 回だけ記録する。再実行のたびに上書きすると、その間に利用者が移った先が基準になってしまう。
+    // Record only the first time waiting begins; overwriting on every re-run would make wherever the user moved to the baseline.
+    if (request.phase === "awaiting_auth" && request.roomIdWhenDeferred === undefined) {
+      request.roomIdWhenDeferred = currentRoomIdRef.current;
+    }
+  }, [currentRoomIdRef, openRoomFromUrl, restoreHomeViewFromStorage]);
+
+  useEffect(() => {
+    // 認証キャッシュが無くて待っていた URL のルームは、認証確認が終わってログイン中と分かったときだけ開く。ゲストなら捨てる。
+    // A URL room that waited because there was no auth cache opens only once the auth check shows a logged-in user; a guest drops it.
+    const request = urlRoomRequestRef.current;
+    if (!authResolved || request?.phase !== "awaiting_auth") return;
+
+    if (!loggedIn || currentRoomIdRef.current !== request.roomIdWhenDeferred) {
+      request.phase = "done";
+      return;
+    }
+    openRoomFromUrl(request);
+  }, [authResolved, currentRoomIdRef, loggedIn, openRoomFromUrl]);
 
   useEffect(() => {
     // bfcache からの復帰や戻る操作でホームに戻ったときも、同じ復元を行う
