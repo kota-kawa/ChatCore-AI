@@ -137,6 +137,7 @@ class ContextFactRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_update_fact_uses_optimistic_revision_and_returning(self):
         session = MagicMock()
         session.execute = AsyncMock(return_value=_result(mapping=_fact_row(revision=2)))
+        session.scalar = AsyncMock(return_value=True)
 
         fact = await ContextFactRepository(session).update_fact(
             7,
@@ -146,7 +147,7 @@ class ContextFactRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(fact["revision"], 2)
-        statement = session.execute.await_args.args[0]
+        statement = session.execute.await_args_list[0].args[0]
         compiled = statement.compile(dialect=dialect())
         self.assertIn("revision =", str(compiled))
         self.assertIn("RETURNING", str(compiled))
@@ -229,8 +230,13 @@ class ContextFactConfirmationTestCase(unittest.IsolatedAsyncioTestCase):
     async def _update(self, **kwargs):
         session = MagicMock()
         session.execute = AsyncMock(return_value=_result(mapping=_fact_row(revision=2)))
+        session.scalar = AsyncMock(return_value=True)
         await ContextFactRepository(session).update_fact(7, 10, expected_revision=1, **kwargs)
-        statement = session.execute.await_args.args[0]
+        statement = next(
+            call.args[0]
+            for call in session.execute.await_args_list
+            if str(call.args[0].compile(dialect=dialect())).startswith("UPDATE context_facts")
+        )
         return _sql(statement), statement.compile(dialect=dialect()).params
 
     async def test_owner_content_edit_confirms_now(self):
@@ -286,29 +292,61 @@ class ContextFactConfirmationTestCase(unittest.IsolatedAsyncioTestCase):
         )
         self.assertNotIn("last_confirmed_at", _sql(session.execute.await_args.args[0]))
 
-    # 日本語: 更新で実行された SQL を、更新文(最後)の前から順に返します。
-    # English: Return the SQL a content update executed, in order, with the UPDATE last.
-    async def _update_statements(self, **kwargs):
+    # 日本語: 更新で実行された文を、scalar と execute をまたいだ実行順で返します。
+    # English: Return the statements a content update ran, in execution order across scalar and execute.
+    async def _update_statements(self, *, content_changes=True, **kwargs):
+        order = []
         session = MagicMock()
-        session.execute = AsyncMock(return_value=_result(mapping=_fact_row(revision=2)))
-        await ContextFactRepository(session).update_fact(7, 10, expected_revision=1, **kwargs)
-        return [call.args[0] for call in session.execute.await_args_list]
 
-    async def test_content_edit_deletes_the_fact_sources_before_the_update(self):
+        async def execute(statement):
+            order.append(statement)
+            return _result(mapping=_fact_row(revision=2))
+
+        async def scalar(statement):
+            order.append(statement)
+            return content_changes
+
+        session.execute = AsyncMock(side_effect=execute)
+        session.scalar = AsyncMock(side_effect=scalar)
+        await ContextFactRepository(session).update_fact(7, 10, expected_revision=1, **kwargs)
+        return order
+
+    async def test_content_edit_locks_the_row_then_updates_then_deletes_the_fact_sources(self):
         for kwargs in ({"content": "New"}, {"title": "New"}, {"fact_type": "profile"}, {"content": "New", "confirmed_by_owner": True}):
             with self.subTest(kwargs=kwargs):
                 statements = await self._update_statements(**kwargs)
 
-                self.assertEqual(len(statements), 2)
-                delete_sql = _sql(statements[0])
-                self.assertTrue(delete_sql.startswith("DELETE FROM context_fact_sources WHERE"))
-                self.assertIn("context_fact_sources.fact_id =", delete_sql)
-                # 更新と同じ所有者・revision・「実際に変わった」条件のときだけ消す。
-                # Deleted only under the update's own owner, revision and "actually changed" condition.
-                self.assertIn("context_facts.user_id =", delete_sql)
-                self.assertIn("context_facts.revision =", delete_sql)
-                self.assertIn("IS DISTINCT FROM", delete_sql)
+                self.assertEqual(len(statements), 3)
+                lock_sql = _sql(statements[0])
+                # 事実の行を更新と同じ所有者・revision で FOR UPDATE ロックし、「実際に変わる」条件を SQL で判定する。
+                # The row is locked FOR UPDATE under the update's owner and revision, and "actually changes" is judged in SQL.
+                self.assertTrue(lock_sql.endswith("FOR UPDATE"))
+                self.assertIn("IS DISTINCT FROM", lock_sql)
+                self.assertIn("context_facts.user_id =", lock_sql)
+                self.assertIn("context_facts.revision =", lock_sql)
                 self.assertTrue(_sql(statements[1]).startswith("UPDATE context_facts"))
+                # 出典の削除は更新の後（行ロックを持ったまま）。
+                # The sources are deleted after the update, while the row lock is held.
+                self.assertTrue(_sql(statements[2]).startswith("DELETE FROM context_fact_sources WHERE"))
+                self.assertIn("context_fact_sources.fact_id =", _sql(statements[2]))
+
+    async def test_resending_unchanged_wording_keeps_the_fact_sources(self):
+        statements = await self._update_statements(content_changes=False, content="Context vault foundation")
+
+        self.assertEqual(len(statements), 2)
+        self.assertFalse(any("context_fact_sources" in _sql(statement) for statement in statements))
+
+    async def test_a_revision_conflict_deletes_no_sources(self):
+        session = MagicMock()
+        session.scalar = AsyncMock(side_effect=[None, 10])
+        session.execute = AsyncMock(return_value=_result(mapping=None))
+
+        with self.assertRaises(ApiServiceError):
+            await ContextFactRepository(session).update_fact(7, 10, expected_revision=1, content="New")
+
+        self.assertFalse(
+            any("context_fact_sources" in _sql(call.args[0]) for call in session.execute.await_args_list)
+        )
 
     async def test_edits_that_do_not_change_the_wording_keep_the_fact_sources(self):
         for kwargs in (
