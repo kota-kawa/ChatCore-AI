@@ -192,6 +192,23 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(unconfirmed.confidence)
         self.assertIsNone(unconfirmed.last_confirmed_at)
 
+    async def test_responses_report_the_reason_only_for_deprecated_facts(self):
+        # 旧バージョンのコードが復元した行には理由が残るので、有効な事実には返さない。理由が無い無効化済みの行は None。
+        # An older code color leaves the reason on restore, so an active fact never reports one; a deprecated row without one is None.
+        cases = (
+            ({"status": "deprecated", "deprecated_reason": "capacity"}, "capacity"),
+            ({"status": "deprecated", "deprecated_reason": "user"}, "user"),
+            ({"status": "deprecated", "deprecated_reason": None}, None),
+            ({"status": "deprecated"}, None),
+            ({"status": "active", "deprecated_reason": "capacity"}, None),
+        )
+        for row, expected in cases:
+            repo = _repo()
+            repo.get_fact.return_value = fact_row(**row)
+            with self.subTest(row=row), patch("services.context_vault_service._repository", return_value=repo):
+                result = await get_fact(7, 3, session=object())
+            self.assertEqual(result.deprecated_reason, expected)
+
     async def test_update_is_unconfirmed_unless_the_owner_edits(self):
         for owner, expected in ((None, False), (True, True)):
             repo = _repo()

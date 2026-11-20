@@ -302,6 +302,11 @@ class ContextFactResponse(ResponsePayloadModel):
     # 本人が最後に確かめた時刻。None は未確認（MCP・import 由来、または MCP が書き換えた後）。
     # When the owner last confirmed the fact; None means unconfirmed (MCP or import, or rewritten by MCP since).
     last_confirmed_at: str | None = None
+    # 無効化した理由（status が deprecated のときだけ入る）。capacity は上限での自動の入れ替え。None は本人が無効化した
+    # （この項目の追加前の記録を含む）か、有効な事実。
+    # Why a deprecated fact was deprecated (set only when status is deprecated). capacity is the automatic replacement at
+    # the cap. None means the owner deprecated it (including records from before this field), or the fact is active.
+    deprecated_reason: Literal["user", "superseded", "merged", "capacity"] | None = None
     created_at: str | None = None
     updated_at: str | None = None
 

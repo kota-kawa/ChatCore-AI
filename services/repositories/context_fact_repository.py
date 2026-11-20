@@ -68,6 +68,7 @@ _FACT_COLUMNS = (
     "embedding_status",
     "confidence",
     "last_confirmed_at",
+    "deprecated_reason",
     "created_at",
     "updated_at",
 )
@@ -113,6 +114,7 @@ def _serialize_record(record: dict[str, Any]) -> dict[str, Any]:
         "revision": max(int(record["revision"] or 1), 1),
         "confidence": float(record["confidence"]) if record["confidence"] is not None else None,
         "last_confirmed_at": serialize_datetime_iso(record["last_confirmed_at"]),
+        "deprecated_reason": str(record["deprecated_reason"]) if record["deprecated_reason"] is not None else None,
         "created_at": serialize_datetime_iso(record["created_at"]),
         "updated_at": serialize_datetime_iso(record["updated_at"]),
         "_updated_at_raw": record["updated_at"],
@@ -586,8 +588,13 @@ class ContextFactRepository:
                 ),
                 else_=ContextFact.last_confirmed_at,
             )
+        # 日本語: 利用者・MCP による無効化は理由 user、有効へ戻すときは NULL にする。上限での自動の入れ替え(capacity)は
+        # 抽出の保存側(context_fact_candidate_repository)だけが書く。
+        # English: Deprecating through the owner or MCP records reason user; restoring clears it. The automatic replacement at
+        # the cap (capacity) is written only by the extraction store (context_fact_candidate_repository).
         if status is not None:
             changes["status"] = status
+            changes["deprecated_reason"] = "user" if status == "deprecated" else None
         if importance is not None:
             changes["importance"] = importance
         changes["updated_at"] = func.current_timestamp()

@@ -38,6 +38,7 @@ def _fact_row(**overrides):
         "revision": 1,
         "confidence": None,
         "last_confirmed_at": None,
+        "deprecated_reason": None,
         "created_at": None,
         "updated_at": None,
     }
@@ -291,6 +292,22 @@ class ContextFactConfirmationTestCase(unittest.IsolatedAsyncioTestCase):
             7, 10, expected_revision=1, status="deprecated", confirmed_by_owner=True
         )
         self.assertNotIn("last_confirmed_at", _sql(session.execute.await_args.args[0]))
+
+    async def test_deprecating_records_the_user_reason_and_restoring_clears_it(self):
+        deprecate_sql, deprecate_params = await self._update(status="deprecated")
+        restore_sql, restore_params = await self._update(status="active")
+
+        self.assertIn("deprecated_reason=", deprecate_sql.replace(" ", ""))
+        self.assertEqual(deprecate_params["deprecated_reason"], "user")
+        self.assertIn("deprecated_reason=", restore_sql.replace(" ", ""))
+        self.assertIsNone(restore_params["deprecated_reason"])
+
+    async def test_updates_that_leave_the_status_alone_keep_the_reason(self):
+        for kwargs in ({"importance": 90}, {"title": "New title"}, {"content": "New", "confirmed_by_owner": True}):
+            with self.subTest(kwargs=kwargs):
+                sql, params = await self._update(**kwargs)
+                self.assertNotIn("deprecated_reason", sql)
+                self.assertNotIn("deprecated_reason", params)
 
     # 日本語: 更新で実行された文を、scalar と execute をまたいだ実行順で返します。
     # English: Return the statements a content update ran, in execution order across scalar and execute.

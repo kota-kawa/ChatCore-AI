@@ -97,17 +97,21 @@ async def _transaction(
 # English: Map a DB row to the API response, filling missing values with defaults and clamping importance to 0-100.
 def _to_response(fact: dict[str, Any]) -> ContextFactResponse:
     importance = fact.get("importance")
+    status = str(fact.get("status") or "active")
     return ContextFactResponse(
         id=int(fact["id"]),
         fact_type=str(fact["fact_type"]),
         title=str(fact.get("title") or ""),
         content=str(fact.get("content") or ""),
-        status=str(fact.get("status") or "active"),
+        status=status,
         revision=max(int(fact.get("revision") or 1), 1),
         source_kind=str(fact.get("source_kind") or "manual"),
         importance=max(0, min(int(importance if importance is not None else 50), 100)),
         confidence=fact.get("confidence"),
         last_confirmed_at=fact.get("last_confirmed_at"),
+        # 旧バージョンのコードが復元した行は理由が残るので、有効な事実には返さない。
+        # An older code color leaves the reason when it restores a fact, so an active fact never reports one.
+        deprecated_reason=fact.get("deprecated_reason") if status == "deprecated" else None,
         created_at=fact.get("created_at"),
         updated_at=fact.get("updated_at"),
     )
