@@ -191,8 +191,12 @@ class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(sql.startswith("DELETE FROM context_facts") for sql in _executed_sql(session)))
 
     async def test_store_extracted_only_replaces_auto_saved_facts_the_owner_never_touched(self):
-        # 対象は source_kind が chat で last_confirmed_at が NULL の有効な事実だけ。選ぶ側と更新する側の両方で条件を課す。
-        # Only active facts with source_kind chat and a NULL last_confirmed_at qualify, enforced both when choosing and when updating.
+        # 対象は source_kind が chat で last_confirmed_at が NULL、revision が初期値 1(一度も更新されていない)の有効な事実だけ。
+        # 復元や重要度の変更は last_confirmed_at を変えないが revision を進めるので、本人が手を入れた事実は外れる。
+        # 選ぶ側と更新する側の両方で条件を課す。
+        # Only active facts with source_kind chat, a NULL last_confirmed_at and the initial revision 1 (never updated) qualify.
+        # Restoring or changing importance leaves last_confirmed_at alone but advances the revision, so a fact the owner touched
+        # drops out. Enforced both when choosing and when updating.
         session = _store_session(active=MAX_ACTIVE_CONTEXT_FACTS, inserts=[_replaced(), _result(mapping=_fact(id=41))])
 
         await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()])
@@ -201,13 +205,16 @@ class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         sql = " ".join(str(update).split())
         self.assertEqual(sql.count("context_facts_1.source_kind ="), 1)
         self.assertEqual(sql.count("context_facts_1.last_confirmed_at IS NULL"), 1)
+        self.assertEqual(sql.count("context_facts_1.revision ="), 1)
         self.assertEqual(sql.count("context_facts_1.status ="), 1)
         self.assertEqual(sql.count("context_facts.source_kind ="), 1)
         self.assertEqual(sql.count("context_facts.last_confirmed_at IS NULL"), 1)
+        self.assertEqual(sql.count("context_facts.revision ="), 1)
         self.assertEqual(sql.count("context_facts.user_id ="), 1)
         params = update.params
         self.assertEqual({params["source_kind_1"], params["source_kind_2"]}, {"chat"})
         self.assertEqual({params["status_1"], params["status_2"]}, {"active"})
+        self.assertEqual({params["revision_2"], params["revision_3"]}, {1})
         self.assertEqual({params["user_id_1"], params["user_id_2"]}, {7})
 
     async def test_store_extracted_picks_the_longest_unmentioned_then_least_important_then_smallest_id(self):

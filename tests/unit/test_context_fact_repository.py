@@ -405,6 +405,23 @@ class ContextFactConfirmationTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertNotIn("last_confirmed_at", _sql(session.execute.await_args.args[0]))
 
+    async def test_owner_touches_advance_the_revision_and_embedding_storage_does_not(self):
+        # 上限での入れ替えは「revision が初期値 1 のまま」を手を入れていない印にする。復元・重要度の変更・無効化は
+        # last_confirmed_at を変えないが revision を進める。埋め込みの保存は進めない(進めると未編集の事実が対象から外れる)。
+        # The cap replacement treats "revision still at its initial 1" as untouched. Restoring, changing importance and
+        # deprecating leave last_confirmed_at alone but advance the revision; storing an embedding must not advance it.
+        for kwargs in ({"status": "active"}, {"status": "deprecated"}, {"importance": 90}):
+            with self.subTest(kwargs=kwargs):
+                sql, _ = await self._update(**kwargs)
+                self.assertIn("revision=(context_facts.revision+", sql.replace(" ", ""))
+                self.assertNotIn("last_confirmed_at", sql)
+
+        session = MagicMock()
+        session.execute = AsyncMock()
+        await ContextFactRepository(session).store_embedding(10, [0.1, 0.2], expected_revision=1)
+        set_clause = _sql(session.execute.await_args.args[0]).split("WHERE")[0]
+        self.assertNotIn("revision", set_clause)
+
     def test_serialization_exposes_confidence_and_confirmation(self):
         fact = ContextFactRepository._serialize_row(
             _fact_row(confidence=0.8, last_confirmed_at=datetime(2026, 9, 1, 12, 0))

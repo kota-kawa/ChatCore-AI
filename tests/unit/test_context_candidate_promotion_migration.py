@@ -82,6 +82,9 @@ class ContextCandidatePromotionMigrationTestCase(unittest.TestCase):
         insert = re.search(r"INSERT INTO context_facts \((.*?)\) SELECT (.*?) FROM selected", move)
         assert insert is not None
         columns = [column.strip() for column in insert.group(1).split(",")]
+        # revision は書かず列の初期値 1 のまま入る。上限での入れ替えは revision 1 を「手を入れていない」印にするので対象になる。
+        # revision is not written and keeps the column default 1; the cap replacement treats revision 1 as untouched, so these qualify.
+        self.assertNotIn("revision", columns)
         values = [value.strip() for value in insert.group(2).split(",")]
         self.assertEqual(
             dict(zip(columns, values, strict=True)),

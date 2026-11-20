@@ -340,7 +340,7 @@ export const enMessages = {
   "memo.sourceChat": "Chat", "memo.sourceImport": "Import", "memo.titleContentRequired": "Enter a title and content.",
   "memo.updateExtractionFailed": "Could not update automatic extraction.",
   "memo.extractionSettingTitle": "Remember from chats automatically",
-  "memo.extractionSettingDescription": "When enabled, things worth remembering from your chats are saved to your memory automatically. You can review, edit, and disable what was saved on this screen. When your memory reaches the limit (200 items), the memories that have not come up for the longest time are replaced automatically (ones you wrote or edited are never replaced, and replaced memories can be restored from Deactivated).",
+  "memo.extractionSettingDescription": "When enabled, things worth remembering from your chats are saved to your memory automatically. You can review, edit, and disable what was saved on this screen. When your memory reaches the limit (200 items), the auto-saved memories you have never touched that have not come up for the longest time are replaced automatically (ones you wrote, edited, restored, or changed the importance of are never replaced, and replaced memories can be restored from Deactivated).",
   "memo.autoExtraction": "Automatic saving from chats", "memo.disabled": "Disabled", "memo.source": "Source: {source}",
   "memo.deprecatedAtCapacity": "Deactivated automatically at the limit",
   "memo.type": "Type", "memo.content": "Content", "memo.importance": "Importance",

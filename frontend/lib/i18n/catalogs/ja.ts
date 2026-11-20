@@ -625,7 +625,7 @@ export const jaMessages = {
   "memo.titleContentRequired": "タイトルと内容を入力してください。",
   "memo.updateExtractionFailed": "自動抽出設定を更新できませんでした。",
   "memo.extractionSettingTitle": "チャットから自動で記憶する",
-  "memo.extractionSettingDescription": "有効にすると、チャットの内容から覚えておく価値のあるものを自動で記憶に保存します。保存した内容はこの画面で確認・編集・無効化できます。上限（200件）に達すると、長く話題に出ていない記憶から自動で入れ替わります（自分で書いたり編集した記憶は対象外で、入れ替わった記憶は「無効化済み」から戻せます）。",
+  "memo.extractionSettingDescription": "有効にすると、チャットの内容から覚えておく価値のあるものを自動で記憶に保存します。保存した内容はこの画面で確認・編集・無効化できます。上限（200件）に達すると、自動保存されたまま一度も手を入れていない記憶のうち、長く話題に出ていないものから自動で入れ替わります（自分で書いた記憶と、編集・復元・重要度の変更をした記憶は対象外で、入れ替わった記憶は「無効化済み」から戻せます）。",
   "memo.deprecatedAtCapacity": "上限のため自動で無効化",
   "memo.autoExtraction": "チャットからの自動保存",
   "memo.disabled": "無効",

@@ -272,7 +272,9 @@ class ContextFactCandidateRepository:
         return saved_facts
 
     # 日本語: 上限のとき、自動保存のまま本人が手を入れていない有効な事実を 1 件無効化して理由 capacity を記録し、入れたかを返す。
-    # 対象は source_kind が chat で last_confirmed_at が NULL の事実だけ(本人の手入力・編集・承認、MCP、インポートは外れない)。
+    # 対象は source_kind が chat で last_confirmed_at が NULL、かつ一度も更新されていない(revision が初期値の 1)事実だけ(本人の
+    # 手入力・編集・承認、MCP、インポートは外れない)。復元・重要度の変更・無効化は last_confirmed_at を変えない(ADR 0016)が
+    # revision を進めるので、本人が手を入れた事実はこの条件で外れる。埋め込みの保存は revision を進めない。
     # 最後に話題に出た時刻が最も古いものを選び、同じなら重要度が低いもの、それも同じなら id が小さいもの。
     # 時刻は出典(context_fact_sources.observed_at)の最大値で、出典が無い事実は created_at。observed_at は timestamptz、
     # created_at はタイムゾーン無しなので、created_at を timestamptz へ明示的に変換して比べる。created_at は CURRENT_TIMESTAMP を
@@ -281,8 +283,10 @@ class ContextFactCandidateRepository:
     # 選ぶ側は FOR UPDATE SKIP LOCKED で、別のトランザクションが編集中（未コミット）の行を飛ばして次の候補を選ぶ。飛ばさないと、
     # 編集の確定後に更新が 0 行になり、ほかに入れ替えられる事実があっても新しい内容を捨ててしまう。
     # English: At the cap, deprecate one active fact that was auto-saved and never touched by the owner, record reason capacity,
-    # and return whether one was replaced. Only facts with source_kind chat and a NULL last_confirmed_at qualify (the owner's
-    # manual, edited and approved facts, MCP and imports are never removed). The fact last mentioned longest ago goes first,
+    # and return whether one was replaced. Only facts with source_kind chat, a NULL last_confirmed_at and no update at all
+    # (revision still at its initial 1) qualify (the owner's manual, edited and approved facts, MCP and imports are never
+    # removed). Restoring, changing importance and deprecating leave last_confirmed_at alone (ADR 0016) but advance the
+    # revision, so a fact the owner touched drops out here; storing an embedding does not advance it. The fact last mentioned longest ago goes first,
     # then the lower importance, then the smaller id. Last mention is the newest context_fact_sources.observed_at, or created_at
     # when there is no source. observed_at is timestamptz while created_at is timezone-less, so created_at is cast to timestamptz
     # explicitly: it was stored as the session-timezone wall clock of CURRENT_TIMESTAMP, and the cast reads it back in the same
@@ -300,6 +304,7 @@ class ContextFactCandidateRepository:
                 model.status == "active",
                 model.source_kind == "chat",
                 model.last_confirmed_at.is_(None),
+                model.revision == 1,
             ]
             if protected_fact_ids:
                 conditions.append(model.id.not_in(sorted(protected_fact_ids)))
