@@ -128,6 +128,13 @@ class ContextFactCandidateRepository:
         user_id: int,
         candidates: list[dict[str, Any]],
     ) -> list[dict[str, Any] | None]:
+        return find_bm25_duplicates(candidates, await self._duplicate_corpus(user_id))
+
+    # 日本語: 重複判定の比較対象(BM25 にかける既存の文書)。有効な事実を優先(priority 0)し、本人が無効化した事実は 1、却下済みの候補は
+    # 最後(2)に回し、上限件数で切る。読み取りは事実と却下済みの候補の 2 回。
+    # English: The corpus of existing documents the duplicate check runs BM25 against. Active facts rank first (priority 0), facts
+    # the owner deprecated next (1) and rejected candidates last (2), cut at the cap. Two reads: facts and rejected candidates.
+    async def _duplicate_corpus(self, user_id: int) -> list[dict[str, Any]]:
         facts_result = await self.session.execute(
             select(
                 ContextFact.id,
@@ -158,11 +165,8 @@ class ContextFactCandidateRepository:
                 ContextFactCandidate.status == "rejected",
             )
         )
-        # 日本語: 既存の事実・却下済みの候補を重複判定の比較対象にする。有効な事実を優先(priority 0)し、本人が無効化した
-        # 事実は 1、却下済みは最後(2)に回して、上限件数で切ったときに有効な内容を残す。同順位では更新が新しいものが先。
-        # English: Existing facts and rejected candidates become the duplicate-check corpus. Active facts rank first (priority 0),
-        # facts the owner deprecated next (1) and rejected candidates last (2), so the cap drops the least relevant documents;
-        # newer updates win within a rank.
+        # 日本語: 上限件数で切ったときに有効な内容を残すため、優先度の順に並べる。同順位では更新が新しいものが先。
+        # English: Ordered by rank so the cap drops the least relevant documents; newer updates win within a rank.
         existing_documents = [
             {
                 "fact_id": int(row.id),
@@ -195,10 +199,7 @@ class ContextFactCandidateRepository:
                 ),
             )
         )
-        return find_bm25_duplicates(
-            candidates,
-            existing_documents[:MAX_CONTEXT_DEDUPLICATION_DOCUMENTS],
-        )
+        return existing_documents[:MAX_CONTEXT_DEDUPLICATION_DOCUMENTS]
 
     async def store_extracted(
         self,
@@ -255,7 +256,15 @@ class ContextFactCandidateRepository:
             )
         )
         free_fact_slots = max(MAX_ACTIVE_CONTEXT_FACTS - int(active_count or 0), 0)
-        matches = await self.find_duplicate_matches(user_id, candidates)
+        corpus = await self._duplicate_corpus(user_id)
+        matches = find_bm25_duplicates(candidates, corpus)
+        # 日本語: 本人が無効化した事実(priority 1)と却下済みの候補(priority 2)だけの比較対象。有効な事実に一致した候補が、
+        # 新しい事実として保存される前に、本人が消した内容や却下した内容と重複していないかを確かめる(BM25 は最良一致 1 件しか
+        # 返さない)。追加の読み取りはしない。
+        # English: The corpus of only facts the owner deprecated (priority 1) and rejected candidates (priority 2). A candidate that
+        # matched an active fact is checked against it before it can be saved as a new fact, so content the owner removed or rejected
+        # is not saved again (BM25 returns only the single best match). No extra read.
+        owner_removed_corpus = [document for document in corpus if int(document["priority"]) >= 1]
 
         saved_facts: list[dict[str, Any]] = []
         replaced_count = 0
@@ -281,7 +290,23 @@ class ContextFactCandidateRepository:
             # disagreement the earlier behavior applies: a duplicate of an active fact is a repeat mention (only a source is added),
             # and a unique candidate is saved as a new fact.
             plan = (plans or {}).get(index) or CandidatePlan()
-            resolution = resolve_candidate_action(plan, matched_fact_id, matched_revision)
+            # 日本語: 有効な事実に一致した候補は、新しい事実になる(add、置き換え、置き換えできず add に倒れる場合を含む)前に、本人が
+            # 無効化した事実・却下済みの候補とも重複していないかを確かめる(BM25 は最良一致 1 件しか返さないため)。重複していれば新しい事実は
+            # 作らず、照合の導入前と同じく最良一致の有効な事実への再言及になる(その事実が変わっていれば出典は足されない)。この規則は
+            # resolve_candidate_action が持つ。重複しなかった候補(最良一致なし)は定義上どちらとも重複しないので確かめない。置き換え
+            # (superseded)・上限(capacity)・統合(merged)で無効化した事実は比較対象に無く、この抑止は働かない。
+            # English: A candidate that matched an active fact is checked, before it can become a new fact (add, a replacement, or a
+            # replacement that falls back to an add), against facts the owner deprecated and rejected candidates, because BM25 returns
+            # only the single best match. On a match no new fact is made and, as before reconciliation existed, it becomes a
+            # re-mention of the best-matching active fact (no source is added if that fact changed). resolve_candidate_action owns
+            # the rule. A unique candidate (no best match) duplicates neither by definition, so it is not checked. Facts deprecated by
+            # replacement (superseded), the cap (capacity) or merging (merged) are not in the corpus, so this does not apply to them.
+            duplicates_owner_removed = (
+                matched_fact_id is not None and find_bm25_duplicates([candidate], owner_removed_corpus)[0] is not None
+            )
+            resolution = resolve_candidate_action(
+                plan, matched_fact_id, matched_revision, duplicates_owner_removed=duplicates_owner_removed
+            )
             # 日本語: 本人が却下した候補と同じ fingerprint の内容は、保存しない。重複しなかった候補は常に確かめ(従来どおり)、有効な事実に
             # 一致した候補は、新しい事実として保存する判定(add・supersede)のときだけ確かめる(再言及・何もしない判定には関係しない)。
             # English: Content whose fingerprint matches a candidate the owner rejected is not saved. A unique candidate is always

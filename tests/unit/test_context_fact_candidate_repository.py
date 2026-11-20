@@ -5,13 +5,20 @@ and the extraction setting).
 """
 
 import unittest
+import unittest.mock
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 from sqlalchemy.dialects.postgresql import dialect
 from sqlalchemy.exc import IntegrityError
 
-from services.context_vault_reconcile import CandidatePlan, ReconcileResolution
+from services.context_vault_bm25 import find_bm25_duplicates
+from services.context_vault_reconcile import (
+    CandidatePlan,
+    ReconcileResolution,
+    RelatedFact,
+    resolve_reconcile_decisions,
+)
 from services.repositories.context_fact_candidate_repository import (
     ContextFactCandidateRepository,
 )
@@ -894,6 +901,125 @@ class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(saved, [])
         self.assertEqual(session.execute.await_count, 3)
+
+    # 日本語: 有効な事実 A と、本人が無効化した事実 B（または却下済みの候補 R）の両方に BM25 で重複するが、最良一致は A になる内容。
+    # English: Content that BM25 calls a duplicate of both an active fact A and a fact the owner deactivated B (or a rejected
+    # candidate R), with A as the best match.
+    _A = ("Programming interests", "Likes Python scripting, Rust compiler building, and Go tooling")
+    _B = ("Rust compiler", "builds a Rust compiler")
+    _CANDIDATE = ("Programming interests", "Likes Python scripting and Rust compiler building and builds a Rust compiler")
+
+    @staticmethod
+    def _fact_row(fact_id, title_and_content, status, revision=3):
+        title, content = title_and_content
+        return SimpleNamespace(
+            id=fact_id, revision=revision, fact_type="profile", title=title, content=content, updated_at=None, status=status
+        )
+
+    @staticmethod
+    def _extracted_pair(title_and_content):
+        title, content = title_and_content
+        return _extracted(fact_type="profile", title=title, content=content, evidence="I like it", fingerprint="e" * 64)
+
+    def _removed_content_session(self, *, owner_removed, inserts):
+        facts = [self._fact_row(12, self._A, "active")]
+        rejected = []
+        if owner_removed == "deactivated":
+            facts.append(self._fact_row(13, self._B, "deprecated"))
+        elif owner_removed == "rejected":
+            rejected.append(
+                SimpleNamespace(fact_type="profile", title=self._B[0], content=self._B[1], updated_at=None, status="rejected")
+            )
+        return _store_session(active=3, facts=facts, candidates=rejected, fact_lock=12, inserts=inserts)
+
+    def test_the_reproduction_is_a_duplicate_of_a_alone_of_b_alone_and_a_wins_when_both_exist(self):
+        candidate = self._extracted_pair(self._CANDIDATE)
+        a = {"fact_id": 12, "fact_revision": 3, "fact_status": "active", "fact_type": "profile", "priority": 0}
+        b = {"fact_id": 13, "fact_revision": 3, "fact_status": "deprecated", "fact_type": "profile", "priority": 1}
+        a_doc = {**a, "title": self._A[0], "content": self._A[1]}
+        b_doc = {**b, "title": self._B[0], "content": self._B[1]}
+
+        self.assertEqual(find_bm25_duplicates([candidate], [a_doc])[0]["fact_id"], 12)
+        self.assertEqual(find_bm25_duplicates([candidate], [b_doc])[0]["fact_id"], 13)
+        self.assertEqual(find_bm25_duplicates([candidate], [a_doc, b_doc])[0]["fact_id"], 12)
+
+    async def test_an_active_match_that_also_duplicates_removed_content_is_never_saved_as_a_new_memory(self):
+        # LLM の判定が add・update・noop・失敗のどれでも、新しい記憶は作られず、最良一致の有効な記憶 A への再言及（出典だけ）になる。
+        # Whatever the LLM answers (add, update, noop, or fails), no new memory is made and it is a re-mention of the active best
+        # match A (only a source).
+        related = {0: [RelatedFact(12, 3, "profile", self._A[0], self._A[1], "active", None)]}
+        responses = {
+            "add": '{"decisions":[{"candidate":0,"action":"add","target_id":null}]}',
+            "update": '{"decisions":[{"candidate":0,"action":"update","target_id":12}]}',
+            "noop": '{"decisions":[{"candidate":0,"action":"noop","target_id":12}]}',
+            "failure": None,
+            "invalid": "no json",
+        }
+        for owner_removed in ("deactivated", "rejected"):
+            for label, response in responses.items():
+                with self.subTest(owner_removed=owner_removed, llm=label):
+                    session = self._removed_content_session(
+                        owner_removed=owner_removed, inserts=[_result(inserted_id=70), MagicMock()]
+                    )
+                    decided = resolve_reconcile_decisions(response, related)
+                    plans = {0: CandidatePlan(resolution=decided.get(0), matched_fact_id=12)}
+
+                    saved = await ContextFactCandidateRepository(session).store_extracted(
+                        7, [self._extracted_pair(self._CANDIDATE)], room_id="room-1", user_message_id=8, plans=plans
+                    )
+
+                    self.assertEqual(saved, [])
+                    statements = _executed_sql(session)
+                    self.assertFalse(any(sql.startswith(("INSERT INTO context_facts", "UPDATE context_facts")) for sql in statements))
+                    self.assertTrue(statements[3].startswith("INSERT INTO context_fact_sources"))
+                    lock = session.scalar.await_args_list[-1].args[0].compile(dialect=dialect())
+                    self.assertEqual({12, 7, 3, "active"}, set(lock.params.values()))
+                    # 読み取りは増えない（ロック・事実・却下済みの候補・出典）。
+                    # No extra reads (lock, facts, rejected candidates, then the source).
+                    self.assertEqual(len([sql for sql in statements if sql.startswith("SELECT")]), 3)
+
+    async def test_the_same_content_is_saved_when_no_removed_content_duplicates_it(self):
+        # 本人が無効化した記憶・却下済みの候補が無ければ、add の判定どおり新しい記憶として保存する。
+        # With no removed content to duplicate, an add decision saves the new memory.
+        session = self._removed_content_session(owner_removed=None, inserts=[_result(mapping=_fact(id=41))])
+        plans = {0: CandidatePlan(resolution=ReconcileResolution(), matched_fact_id=12)}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(
+            7, [self._extracted_pair(self._CANDIDATE)], plans=plans
+        )
+
+        self.assertEqual([fact["id"] for fact in saved], [41])
+
+    async def test_memory_deprecated_by_replacement_or_the_cap_does_not_block_saving(self):
+        # 置き換え(superseded)・上限(capacity)・統合(merged)で無効化した記憶は比較対象（事実の読み取り）に入らない。したがって
+        # 有効な記憶 A だけが見え、本人が元の内容へ戻した add は保存される。
+        # Memory deprecated by replacement, the cap or merging is not in the compared facts, so only active A is seen and an
+        # add that returns to the old content is saved.
+        for reason in ("superseded", "capacity", "merged"):
+            with self.subTest(reason=reason):
+                session = self._removed_content_session(owner_removed=None, inserts=[_result(mapping=_fact(id=41))])
+                plans = {0: CandidatePlan(resolution=ReconcileResolution(), matched_fact_id=12)}
+
+                saved = await ContextFactCandidateRepository(session).store_extracted(
+                    7, [self._extracted_pair(self._CANDIDATE)], plans=plans
+                )
+
+                self.assertEqual([fact["id"] for fact in saved], [41])
+                facts_query = _executed(session)[1]
+                self.assertNotIn(reason, facts_query.params.values())
+
+    async def test_a_unique_candidate_is_not_checked_a_second_time(self):
+        # 最良一致が無い候補は、定義上、本人が無効化した記憶・却下済みの候補とも重複しないので、追加の BM25 の確認をしない。
+        # A candidate with no best match duplicates neither by definition, so no second BM25 pass runs for it.
+        session = _store_session(active=3, inserts=[_result(mapping=_fact(id=41))])
+        plans = {0: CandidatePlan(resolution=ReconcileResolution())}
+
+        with unittest.mock.patch(
+            "services.repositories.context_fact_candidate_repository.find_bm25_duplicates", wraps=find_bm25_duplicates
+        ) as bm25:
+            await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual(bm25.call_count, 1)
 
     async def test_get_extraction_settings_is_disabled_when_the_user_row_cannot_be_read(self):
         # 列は NOT NULL。None は行が読めないときだけなので、有効扱いにせず抽出が走らない側へ倒す。

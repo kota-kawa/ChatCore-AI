@@ -172,27 +172,44 @@ def resolve_candidate_action(
     plan: CandidatePlan,
     matched_fact_id: int | None,
     matched_revision: int | None,
+    *,
+    duplicates_owner_removed: bool = False,
 ) -> ReconcileResolution:
     """保存の段（ロックの中）で、候補 1 件をどう保存するかを決める。matched_fact_id・matched_revision は、保存の段で見た BM25 の
-    最良一致が有効な記憶だったときのその記憶（そうでなければ None）。
+    最良一致が有効な記憶だったときのその記憶（そうでなければ None）。duplicates_owner_removed は、その候補が本人の無効化した記憶・
+    却下済みの候補とも BM25 で重複しているか（有効な記憶に一致した候補についてだけ意味を持つ）。
 
     事前の照合の結果（plan）は、事前の BM25 の一致と保存の段の一致が同じ記憶（どちらも無いを含む）のときだけ使う。食い違えば
     照合の結果は使わず、従来の挙動にする。判定が無い（None）ときも同じで、有効な記憶に一致していた候補は再言及（出典を足す）、
     そうでない候補は追加にする。つまり照合が何もしないときの挙動は、照合の導入前と同じ。
 
-    Decide, at the save stage (inside the lock), how one candidate is stored. matched_fact_id and matched_revision are the
-    active memory the BM25 best match was at the save stage (None otherwise).
+    有効な記憶に一致した候補が、新しい記憶になる結果（追加、置き換え。置き換えできず追加に倒れる場合を含む）で、かつ本人の
+    無効化した記憶・却下済みの候補とも重複しているときは、新しい記憶を作らず、最良一致の有効な記憶への再言及にする（BM25 は最良一致を
+    1 件しか返さないため、本人が消した内容が有効な記憶に隠れて再保存されるのを防ぐ）。noop・skip の判定は変えない。
+
+    Decide, at the save stage (inside the lock), how one candidate is stored. matched_fact_id and matched_revision are the active
+    memory the BM25 best match was at the save stage (None otherwise). duplicates_owner_removed says whether the candidate also
+    duplicates, by BM25, a memory the owner deactivated or a rejected candidate (meaningful only for a candidate that matched an
+    active memory).
 
     The earlier reconciliation result (plan) is used only when the BM25 match then and at the save stage are the same memory
     (both absent counts). Otherwise the result is ignored and the earlier behavior applies. The same holds when there is no
     decision (None): a candidate that matched an active memory becomes a re-mention (add a source), any other an add. So when
     reconciliation does nothing, behavior equals that before reconciliation existed.
+
+    A candidate that matched an active memory and would become a new memory (an add, or a replacement, including a replacement
+    that falls back to an add) while also duplicating a memory the owner deactivated or a rejected candidate does not create a
+    new memory: it becomes a re-mention of the best-matching active memory (BM25 returns only one best match, so this keeps
+    content the owner removed from being saved again behind an active memory). Noop and skip decisions are unchanged.
     """
+    resolution = ReconcileResolution()
     if plan.resolution is not None and plan.matched_fact_id == matched_fact_id:
-        return plan.resolution
-    if matched_fact_id is not None:
+        resolution = plan.resolution
+    elif matched_fact_id is not None:
         return ReconcileResolution("mention", matched_fact_id, matched_revision)
-    return ReconcileResolution()
+    if matched_fact_id is not None and duplicates_owner_removed and resolution.action in ("add", "supersede"):
+        return ReconcileResolution("mention", matched_fact_id, matched_revision)
+    return resolution
 
 
 def build_reconcile_messages(

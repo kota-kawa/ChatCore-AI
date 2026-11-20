@@ -21,6 +21,11 @@ from tests.helpers.llm_eval import EvalDatasetError
 
 
 class ContextReconcileDatasetTestCase(unittest.TestCase):
+    def test_dataset_identifier_is_the_frozen_generation(self):
+        # このデータセットはこの PR で新しく足したので、マージ時の内容を v1 として固定する（他のデータセットも v1 のまま）。
+        # The dataset is new in this PR, so its content at merge is frozen as v1 (the other datasets are all v1 as well).
+        self.assertEqual(json.loads(DATASET_PATH.read_text(encoding="utf-8"))["dataset_id"], "context-reconcile-v1")
+
     def test_dataset_loads_and_passes_validation(self):
         cases = load_reconcile_dataset()
 
@@ -60,6 +65,12 @@ class ContextReconcileDatasetTestCase(unittest.TestCase):
 
         self._assert_rejected(broken)
 
+    def test_dataset_validation_rejects_a_removed_duplicate_flag_without_a_bm25_match(self):
+        broken = json.loads(DATASET_PATH.read_text(encoding="utf-8"))
+        broken["cases"][0]["candidates"][0]["duplicates_owner_removed"] = True
+
+        self._assert_rejected(broken)
+
     def test_dataset_validation_rejects_a_response_target_that_is_not_a_memory(self):
         broken = json.loads(DATASET_PATH.read_text(encoding="utf-8"))
         broken["cases"][0]["response"]["decisions"][0]["target"] = "not_a_memory"
@@ -87,7 +98,12 @@ def _final_resolutions(case: ReconcileCase) -> dict[int, ReconcileResolution]:
             resolution=decided.get(index),
             matched_fact_id=matched.fact_id if matched else None,
         )
-        finals[index] = resolve_candidate_action(plan, matched.fact_id if matched else None, matched.revision if matched else None)
+        finals[index] = resolve_candidate_action(
+            plan,
+            matched.fact_id if matched else None,
+            matched.revision if matched else None,
+            duplicates_owner_removed=index in case.duplicates_owner_removed,
+        )
     return finals
 
 
@@ -127,6 +143,20 @@ class ContextReconcileEvalTestCase(unittest.TestCase):
                 superseded = {final.target_fact_id for final in finals if final.action == "supersede"}
                 mentioned = {final.target_fact_id for final in finals if final.action == "mention"}
                 self.assertFalse(superseded & mentioned)
+
+    def test_no_case_creates_a_new_memory_for_a_candidate_that_also_duplicates_removed_content(self):
+        for case in load_reconcile_dataset():
+            with self.subTest(case.case_id):
+                finals = _final_resolutions(case)
+
+                for index in case.duplicates_owner_removed:
+                    self.assertNotIn(finals[index].action, ("add", "supersede"))
+
+    def test_the_dataset_covers_candidates_that_duplicate_removed_content_under_every_decision(self):
+        cases = [case for case in load_reconcile_dataset() if case.duplicates_owner_removed]
+
+        self.assertGreaterEqual(len(cases), 5)
+        self.assertTrue(any(case.response is None for case in cases), "an LLM failure case is required")
 
     def test_the_dataset_covers_bm25_matched_candidates_with_every_outcome_and_the_failure_fallback(self):
         cases = [case for case in load_reconcile_dataset() if case.matched]

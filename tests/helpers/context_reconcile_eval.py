@@ -42,6 +42,10 @@ class ReconcileCase:
     # 候補の添字から、BM25 の最良一致だった有効な記憶（一致が無い候補は含まない）。
     # Candidate index to the active memory that was the BM25 best match (candidates without one are absent).
     matched: dict[int, RelatedFact]
+    # BM25 の最良一致が有効な記憶の候補のうち、本人の無効化した記憶・却下済みの候補とも BM25 で重複するものの添字。
+    # Indexes of candidates (that matched an active memory) which also duplicate, by BM25, a memory the owner
+    # deactivated or a rejected candidate.
+    duplicates_owner_removed: frozenset[int]
     # 固定した LLM の応答。None は LLM の呼び出しが失敗した（例外）ことを表す。
     # The frozen LLM response; None stands for a failed LLM call (an exception).
     response: str | None
@@ -129,6 +133,7 @@ def _build_case(raw: Any) -> ReconcileCase:
     candidates: list[dict[str, Any]] = []
     related_by_candidate: dict[int, list[RelatedFact]] = {}
     matched: dict[int, RelatedFact] = {}
+    duplicates_owner_removed: set[int] = set()
     for index, raw_candidate in enumerate(raw_candidates):
         _require(isinstance(raw_candidate, dict), f"{case_id}: each candidate must be an object")
         fact_type = _require_text(raw_candidate.get("fact_type"), f"{case_id}: candidate {index} fact_type")
@@ -154,6 +159,9 @@ def _build_case(raw: Any) -> ReconcileCase:
                 f"{case_id}: candidate {index} bm25_match must be an active memory (other matches are never reconciled)",
             )
             matched[index] = memories[bm25_label]
+        if raw_candidate.get("duplicates_owner_removed") is True:
+            _require(index in matched, f"{case_id}: candidate {index} duplicates_owner_removed needs a bm25_match")
+            duplicates_owner_removed.add(index)
         related_by_candidate[index] = nearby_for_candidate(matched.get(index), neighbors)
 
     raw_expect = raw.get("expect")
@@ -181,6 +189,7 @@ def _build_case(raw: Any) -> ReconcileCase:
         candidates=candidates,
         related_by_candidate=related_by_candidate,
         matched=matched,
+        duplicates_owner_removed=frozenset(duplicates_owner_removed),
         response=_build_response(case_id, raw.get("response"), memories),
         expected=expected,
     )

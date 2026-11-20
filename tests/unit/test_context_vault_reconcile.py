@@ -399,6 +399,38 @@ class ResolveCandidateActionTestCase(unittest.TestCase):
             with self.subTest(label):
                 self.assertEqual(resolve_candidate_action(plan, matched_id, revision), expected)
 
+    def test_a_candidate_that_also_duplicates_removed_content_never_becomes_a_new_memory(self):
+        # 有効な記憶に一致した候補が、本人の無効化した記憶・却下済みの候補とも重複するとき、add・置き換え・判定なしはすべて、
+        # 最良一致の有効な記憶への再言及（保存の段で見た revision）になる。
+        # A candidate that matched an active memory and also duplicates removed content becomes a re-mention at the revision seen at
+        # the save stage under an add, a replacement and no decision alike.
+        plans = (
+            ("add", CandidatePlan(resolution=ReconcileResolution(), matched_fact_id=12)),
+            ("supersede", CandidatePlan(resolution=ReconcileResolution("supersede", 12, 3), matched_fact_id=12)),
+            ("supersede another", CandidatePlan(resolution=ReconcileResolution("supersede", 99, 1), matched_fact_id=12)),
+            ("no decision", CandidatePlan(matched_fact_id=12)),
+            ("plan from before the match", CandidatePlan(resolution=ReconcileResolution())),
+        )
+        for label, plan in plans:
+            with self.subTest(label):
+                resolution = resolve_candidate_action(plan, 12, 9, duplicates_owner_removed=True)
+
+                self.assertEqual(resolution, ReconcileResolution("mention", 12, 9))
+
+    def test_removed_content_does_not_change_noop_or_skip_decisions(self):
+        for decision in (ReconcileResolution("mention", 13, 4), ReconcileResolution("skip", 14, 2)):
+            with self.subTest(decision.action):
+                plan = CandidatePlan(resolution=decision, matched_fact_id=12)
+
+                self.assertEqual(resolve_candidate_action(plan, 12, 9, duplicates_owner_removed=True), decision)
+
+    def test_the_removed_content_rule_only_applies_to_a_candidate_that_matched_an_active_memory(self):
+        self.assertEqual(
+            resolve_candidate_action(CandidatePlan(), None, None, duplicates_owner_removed=True), ReconcileResolution()
+        )
+        plan = CandidatePlan(resolution=ReconcileResolution("supersede", 12, 3), matched_fact_id=12)
+        self.assertEqual(resolve_candidate_action(plan, 12, 9, duplicates_owner_removed=False), plan.resolution)
+
 
 if __name__ == "__main__":
     unittest.main()
