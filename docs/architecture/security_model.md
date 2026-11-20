@@ -34,6 +34,8 @@
 | 書き込みや外部操作には明示された権限と確認条件を使う | スコープ、利用者 ID、型付き引数、版番号、レート制限、承認カードをサーバー側で検証する | `services/mcp_oauth.py`、`services/mcp_tools/`、`services/chat_workspace_tools/`、`services/chat_tool_approval_service.py` |
 | 記憶された事実は古い可能性があり、最新の本人発話と矛盾するときは最新の発話を優先する | 事実の出所・確信度・本人の最終確認を保存して検索結果に含める。未確認事実は回答から除外せず、無条件の自動書き込みだけを抑止する | `context_facts.confidence`、`context_facts.last_confirmed_at`、`services/personal_knowledge.py`、[ADR 0016](../decisions/0016-context-fact-confirmation.md)、[ADR 0023](../decisions/0023-auto-save-extracted-memory.md) |
 
+チャットから記憶を保存するとき、根拠にした本人発話の一節（逐語引用）を `context_fact_sources` に保存します。引用は秘密情報の検査（title・content と同じ正規表現）を通ったものだけで、1 件 1000 文字までです。API には返さず、事実・ルームの削除とアカウント削除（FK の CASCADE）で一緒に消えます。事実の文面が変わる更新では、引用が裏づけなくなるため削除します。
+
 MCP の書き込みスコープへの同意は、そのクライアントに保存操作を許可するもので、個々の事実を本人が読んで確認したことにはなりません。MCP/import 由来で `last_confirmed_at` が NULL の事実は、チャットの検索結果に未確認として出し、そのターンの「常に承認」を抑止します。利用者が Web UI から事実の内容を編集すると確認時刻を記録します。
 
 ## プロンプトインジェクションへの方針

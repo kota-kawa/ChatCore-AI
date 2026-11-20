@@ -11,7 +11,7 @@
 | タスク・prompt assist | `test_default_tasks.py`, `test_edit_default_task.py`, `test_task_*.py`, `test_prompt_assist*.py` | seed、localized task、並び順、重複制約、assist quota |
 | Prompt sharing | `test_prompt_share*.py`, `test_prompt_*_api.py`, `test_prompt_attachment_*.py`, `test_prompt_resource_repository.py` | 公開範囲、検索、like/comment、添付処理、resource |
 | Memo | `test_memo_*.py`, `test_embedding*.py`, `tests/integration/test_memo_trash.py` | CRUD、collection、archive/pin、share、embedding、ゴミ箱（全経路からの除外・復元・完全削除・保持期限） |
-| Context vault | `test_context_vault_*.py`, `test_context_fact_*.py`, `tests/integration/test_context_vault_endpoints.py` | 自動保存（未確認の事実・上限時の候補・取り消した内容の再保存防止）、承認、portability、pagination、API 境界。初期オンの migration は `test_context_auto_extract_default_on_migration.py` |
+| Context vault | `test_context_vault_*.py`, `test_context_fact_*.py`, `tests/integration/test_context_vault_endpoints.py` | 自動保存（未確認の事実・上限時の候補・取り消した内容の再保存防止）、承認、portability、pagination、API 境界。出典（`context_fact_sources`）の保存・刈り込み・更新時の削除、初期オンと出典の migration は `test_context_auto_extract_default_on_migration.py`・`test_context_fact_sources_migration.py` |
 | MCP | `test_mcp_*.py`, `test_mcp_oauth*.py` | OAuth、scope、tool authorization、machine session bypass |
 | DB／migration | `test_db_postgres.py`, `test_migration_sql_syntax.py`, migration 名に対応する `test_*_migration.py` | SQL、安全な retry、upgrade/downgrade、制約・index |
 
