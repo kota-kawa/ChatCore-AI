@@ -238,6 +238,7 @@ class StartGenerationJob(Protocol):
         explicit_ui_opt_out: bool = False,
         workspace_tools: ChatWorkspaceToolbox | None = None,
         generation_id: str | None = None,
+        user_memory: UserMemorySummary | None = None,
     ) -> ChatGenerationJob: ...
 
 

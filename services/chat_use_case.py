@@ -1022,6 +1022,10 @@ class ChatPostUseCase:
         # Only a turn with a toolbox passes it; other turns call the job exactly as before.
         workspace_tools = self._build_workspace_toolbox(turn)
         generation_kwargs: dict[str, Any] = {"workspace_tools": workspace_tools} if workspace_tools else {}
+        # 記憶のまとめを入れたターンだけ、その規模（件数・見積もりトークン）をジョブのテレメトリへ渡す。
+        # Only a turn that carried the memory summary hands its size (facts, estimated tokens) to the job's telemetry.
+        if turn.user_memory is not None:
+            generation_kwargs["user_memory"] = turn.user_memory
         try:
             job = deps.generation.start_generation_job(
                 turn.generation_key,

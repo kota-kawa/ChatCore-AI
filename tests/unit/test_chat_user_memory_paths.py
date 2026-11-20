@@ -92,6 +92,13 @@ class UserMemoryOnPostPathTestCase(unittest.TestCase):
         deps.get_room_summary.assert_called_once()
         self.assertEqual(len(_memory_messages(kwargs["conversation_messages"])), 1)
 
+    def test_the_job_is_given_the_summary_size_only_when_one_was_added(self):
+        helper, deps = self._deps()
+        self.assertEqual(self._run_stream(helper, deps)["user_memory"].fact_count, 1)
+
+        helper, deps = self._deps(user={"id": 42, "memory_use_enabled": False})
+        self.assertNotIn("user_memory", self._run_stream(helper, deps))
+
     def test_the_non_streaming_path_carries_the_summary(self):
         _, deps = self._deps(streaming=False)
 
@@ -196,6 +203,7 @@ class UserMemoryOnRegenerationPathTestCase(unittest.TestCase):
         self.assertIsInstance(outcome, ChatRegenerationStreamStarted)
         load.assert_awaited_once_with(42)
         self.assertEqual(len(_memory_messages(start.call_args.kwargs["conversation_messages"])), 1)
+        self.assertEqual(start.call_args.kwargs["user_memory"].fact_count, 1)
 
     def test_the_non_streaming_regeneration_carries_the_summary(self):
         _, _, load, deps = self._run(streaming=False)
@@ -214,6 +222,7 @@ class UserMemoryOnRegenerationPathTestCase(unittest.TestCase):
 
                 load.assert_not_called()
                 self.assertEqual(_memory_messages(start.call_args.kwargs["conversation_messages"]), [])
+                self.assertNotIn("user_memory", start.call_args.kwargs)
 
     def test_a_failed_read_does_not_stop_regeneration_and_logs_no_memory_text(self):
         load = AsyncMock(side_effect=RuntimeError(f"boom while reading {_SECRET_TEXT}"))

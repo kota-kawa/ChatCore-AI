@@ -19,7 +19,7 @@ import time
 import uuid
 from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import Future, TimeoutError
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from services.answer_trace import with_answer_trace_part
 from services.generative_ui import (
@@ -58,6 +58,9 @@ from .generative_ui_images import attach_web_search_images_to_artifacts
 from .selected_reference_context import SelectedReferenceLookupTrace
 from .web_search import WebSearchResult
 from .web_search_images import append_web_search_image_parts
+
+if TYPE_CHECKING:
+    from .user_memory import UserMemorySummary
 from .web_search_trace import TraceStep, build_answer_trace, settle_running_answer_trace
 
 logger = logging.getLogger(__name__)
@@ -136,6 +139,7 @@ class ChatGenerationJobBase:
         renew_active_job_lock_interval_seconds: float = 0.0,
         workspace_tools: ChatWorkspaceToolbox | None = None,
         generation_id: str | None = None,
+        user_memory: UserMemorySummary | None = None,
     ) -> None:
         self.generation_id = generation_id or uuid.uuid4().hex
         self._conversation_messages = [dict(message) for message in conversation_messages]
@@ -263,6 +267,11 @@ class ChatGenerationJobBase:
         # Per-turn telemetry so operations can separate under-generation from truncation on
         # long, many-step turns straight from the structured logs.
         self._telemetry = ChatGenerationTelemetry(model=model)
+        # 会話文脈へ入れた記憶のまとめの規模だけを記録する（本文は持たない）。
+        # Record only the size of the memory summary put into the conversation context, never its text.
+        if user_memory is not None:
+            self._telemetry.user_memory_fact_count = user_memory.fact_count
+            self._telemetry.user_memory_estimated_tokens = user_memory.estimated_tokens
         self.response = ""
         self.error_message: str | None = None
         self.started_at = time.monotonic()

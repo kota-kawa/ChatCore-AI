@@ -665,6 +665,9 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                 # ツールボックスがあるときだけ渡し、無いときの呼び出しは従来の形のままにする。
                 # Passed only when there is a toolbox; otherwise the call keeps its old shape.
                 **({"workspace_tools": workspace_tools} if workspace_tools else {}),
+                # 記憶のまとめを入れたターンだけ、その規模をジョブのテレメトリへ渡す。
+                # Only a turn that carried the memory summary hands its size to the job's telemetry.
+                **({"user_memory": user_memory} if user_memory else {}),
             )
         except ChatGenerationAlreadyRunningError:
             return ChatRegenerationRejected(
