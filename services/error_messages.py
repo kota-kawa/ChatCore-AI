@@ -155,8 +155,8 @@ ERROR_GUEST_PROMPT_TEXT_ONLY = (
 )
 ERROR_GUEST_PROMPT_URL_FORBIDDEN = "ゲスト投稿ではURLを含めることはできません。"
 ERROR_GUEST_PROMPT_LIMIT_REACHED = "ゲスト投稿は24時間に1件までです。"
-# 日本語: 個人コンテキスト（保存・インポート／エクスポート・抽出候補・抽出設定）関連のメッセージ。
-# English: Messages for the personal context vault (saving, import/export, extracted candidates, extraction settings).
+# 日本語: 個人コンテキスト（保存・インポート／エクスポート・抽出設定）関連のメッセージ。
+# English: Messages for the personal context vault (saving, import/export, extraction settings).
 ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT = (
     "同じ冪等キーが別のコンテキスト保存に使用されています。"
 )
@@ -213,20 +213,6 @@ ERROR_CONTEXT_VAULT_PORTABILITY_FAILED = (
 WARNING_CONTEXT_VAULT_IMPORT_ACTIVE_LIMIT = (
     "有効なコンテキストが200件を超えるため、この内容はインポートできません。"
 )
-ERROR_CONTEXT_FACT_CANDIDATE_NOT_FOUND = (
-    "該当するコンテキスト候補が見つかりません。"
-)
-ERROR_CONTEXT_FACT_CANDIDATE_REVISION_CONFLICT = (
-    "候補は他の場所で先に更新されました。最新の一覧を読み込み直してください。"
-)
-ERROR_CONTEXT_FACT_CANDIDATE_CURSOR_INVALID = (
-    "候補一覧のページングカーソルが不正です。"
-)
-ERROR_CONTEXT_FACT_CANDIDATE_STATUS_INVALID = "候補状態の指定が不正です。"
-ERROR_CONTEXT_FACT_CANDIDATE_APPROVE_PAYLOAD_INVALID = (
-    "revisionと有効な候補内容を指定してください。"
-)
-ERROR_CONTEXT_FACT_CANDIDATE_REJECT_PAYLOAD_INVALID = "revisionを指定してください。"
 ERROR_CONTEXT_EXTRACTION_SETTINGS_NOT_FOUND = "抽出設定の対象ユーザーが見つかりません。"
 ERROR_CONTEXT_EXTRACTION_SETTINGS_PAYLOAD_INVALID = (
     "enabledにはtrueまたはfalseを指定してください。"

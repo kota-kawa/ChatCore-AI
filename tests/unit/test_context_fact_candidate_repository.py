@@ -1,8 +1,7 @@
-"""ContextFactCandidateRepository（自動抽出の保存、候補の承認・却下）が発行する SQL と、
-リビジョンによる楽観的排他を検証するテスト。
+"""ContextFactCandidateRepository（自動抽出の保存と、上限での入れ替え、抽出の設定）が発行する SQL と実行順を検証するテスト。
 
-Tests the SQL emitted by ContextFactCandidateRepository (storing extractions,
-approving and rejecting candidates) and its optimistic revision checks.
+Tests the SQL and execution order of ContextFactCandidateRepository (storing extractions, replacement at the cap,
+and the extraction setting).
 """
 
 import unittest
@@ -12,40 +11,14 @@ from unittest.mock import AsyncMock, MagicMock
 from sqlalchemy.dialects.postgresql import dialect
 from sqlalchemy.exc import IntegrityError
 
-from services.api_errors import ApiServiceError
 from services.repositories.context_fact_candidate_repository import (
     ContextFactCandidateRepository,
 )
 from services.repositories.context_fact_repository import MAX_ACTIVE_CONTEXT_FACTS
 
 
-# 日本語: 候補テーブルの 1 行分の辞書を作ります。overrides で項目を差し替えます。
-# English: Build one candidate-table row dict; overrides replace individual fields.
-def _candidate(**overrides):
-    row = {
-        "id": 8,
-        "user_id": 7,
-        "fact_type": "project",
-        "title": "Chat-Core",
-        "content": "Phase 2 candidate",
-        "source_kind": "chat",
-        "source_ref": "room-123",
-        "source_client_id": None,
-        "importance": 80,
-        "confidence": 0.9,
-        "status": "pending",
-        "fingerprint": "a" * 64,
-        "promoted_fact_id": None,
-        "revision": 1,
-        "created_at": None,
-        "updated_at": None,
-    }
-    row.update(overrides)
-    return row
-
-
-# 日本語: 事実テーブルの 1 行分の辞書を作ります。
-# English: Build one fact-table row dict.
+# 日本語: 事実テーブルの 1 行分の辞書を作ります。overrides で項目を差し替えます。
+# English: Build one fact-table row dict; overrides replace individual fields.
 def _fact(**overrides):
     row = {
         "id": 31,
@@ -549,79 +522,6 @@ class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await repo.get_extraction_settings(7))
         self.assertFalse(await repo.get_extraction_settings(7))
         self.assertTrue(await repo.get_extraction_settings(7))
-
-    async def test_approve_candidate_promotes_fact_and_updates_revision_atomically(self):
-        session = MagicMock()
-        session.scalar = AsyncMock(side_effect=[_candidate(), 0])
-        session.execute = AsyncMock(
-            side_effect=[
-                MagicMock(),
-                _result(mapping=_fact()),
-                _result(mapping=_candidate(status="approved", revision=2, promoted_fact_id=31)),
-            ]
-        )
-
-        candidate, fact = await ContextFactCandidateRepository(session).approve_candidate(
-            7,
-            8,
-            expected_revision=1,
-        )
-
-        self.assertEqual(candidate["status"], "approved")
-        self.assertEqual(fact["id"], 31)
-        fact_sql = str(session.execute.await_args_list[1].args[0].compile(dialect=dialect()))
-        candidate_sql = str(session.execute.await_args_list[2].args[0].compile(dialect=dialect()))
-        self.assertIn("RETURNING", fact_sql)
-        self.assertIn("revision", candidate_sql)
-
-    async def test_approve_candidate_carries_confidence_and_confirms_now(self):
-        session = MagicMock()
-        session.scalar = AsyncMock(side_effect=[_candidate(confidence=0.72), 0])
-        session.execute = AsyncMock(
-            side_effect=[
-                MagicMock(),
-                _result(mapping=_fact(confidence=0.72)),
-                _result(mapping=_candidate(status="approved", revision=2, promoted_fact_id=31)),
-            ]
-        )
-
-        _, fact = await ContextFactCandidateRepository(session).approve_candidate(7, 8, expected_revision=1)
-
-        insert = session.execute.await_args_list[1].args[0]
-        compiled = insert.compile(dialect=dialect())
-        self.assertEqual(compiled.params["confidence"], 0.72)
-        self.assertIn("CURRENT_TIMESTAMP", " ".join(str(compiled).split()))
-        self.assertEqual(fact["confidence"], 0.72)
-
-    async def test_approve_candidate_rejects_stale_revision_before_insert(self):
-        session = MagicMock()
-        session.scalar = AsyncMock(return_value=_candidate(revision=2))
-        session.execute = AsyncMock(return_value=MagicMock())
-
-        with self.assertRaises(ApiServiceError):
-            await ContextFactCandidateRepository(session).approve_candidate(
-                7,
-                8,
-                expected_revision=1,
-            )
-        self.assertEqual(session.execute.await_count, 1)
-
-    async def test_reject_candidate_uses_optimistic_revision(self):
-        session = MagicMock()
-        session.execute = AsyncMock(
-            return_value=_result(mapping=_candidate(status="rejected", revision=2))
-        )
-
-        candidate = await ContextFactCandidateRepository(session).reject_candidate(
-            7,
-            8,
-            expected_revision=1,
-        )
-
-        self.assertEqual(candidate["status"], "rejected")
-        sql = str(session.execute.await_args.args[0].compile(dialect=dialect()))
-        self.assertIn("revision", sql)
-        self.assertIn("RETURNING", sql)
 
 
 if __name__ == "__main__":

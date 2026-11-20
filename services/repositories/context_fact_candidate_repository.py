@@ -1,33 +1,27 @@
-"""記憶(context_facts)の自動抽出の保存先を永続化する。抽出した内容は有効件数に空きがあれば事実として直接保存し、
-上限で入らない分だけ承認待ち候補(レビュー待ちキュー)に入れる。候補の一覧・承認・却下と、自動抽出の設定も扱う。
-承認すると候補が正式な context fact に昇格する。services/context_vault_candidate_service.py から使われる。
+"""記憶(context_facts)の自動抽出の保存を永続化する。抽出した内容は未確認の事実として保存し、有効件数が上限のときは、
+自動保存のまま本人が手を入れていない事実を無効化して入れ替える。重複判定には本人が却下した候補(context_fact_candidates)も読む。
+自動抽出の設定(users.context_auto_extract_enabled)も扱う。services/context_vault_candidate_service.py から使われる。
 
 Async SQLAlchemy persistence for automatically extracted memory.
-Extracted content is saved directly as facts while active slots remain; only what the cap rejects goes to the
-pending-candidate review queue. Also covers listing, approving and rejecting candidates and the extraction setting.
-Approving a candidate promotes it to a context fact; used by services/context_vault_candidate_service.py.
+Extracted content is saved as unconfirmed facts, and at the active-fact cap an auto-saved fact the owner never touched is
+deprecated to make room. Duplicate checks also read the candidates the owner rejected (context_fact_candidates).
+Also covers the extraction setting (users.context_auto_extract_enabled); used by services/context_vault_candidate_service.py.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, cast, func, or_, select, tuple_, update
+from sqlalchemy import DateTime, cast, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from services.api_errors import ApiServiceError, ResourceNotFoundError
+from services.api_errors import ResourceNotFoundError
 from services.context_vault_bm25 import find_bm25_duplicates
 from services.datetime_serialization import serialize_datetime_iso
-from services.error_messages import (
-    ERROR_CONTEXT_EXTRACTION_SETTINGS_NOT_FOUND,
-    ERROR_CONTEXT_FACT_CANDIDATE_NOT_FOUND,
-    ERROR_CONTEXT_FACT_CANDIDATE_REVISION_CONFLICT,
-    ERROR_CONTEXT_FACT_LIMIT_REACHED,
-)
+from services.error_messages import ERROR_CONTEXT_EXTRACTION_SETTINGS_NOT_FOUND
 from services.models import ContextFact, ContextFactCandidate, ContextFactSource, User
 from services.repositories.context_fact_repository import MAX_ACTIVE_CONTEXT_FACTS
 from services.repositories.context_fact_source_repository import ContextFactSourceRepository
@@ -38,29 +32,11 @@ logger = logging.getLogger(__name__)
 # English: The maximum number of existing documents used for BM25 duplicate detection.
 MAX_CONTEXT_DEDUPLICATION_DOCUMENTS = 500
 # 日本語: advisory lock の名前空間(第 1 キー)。context_fact_repository と同じ値で、第 2 キーに user_id を渡すため、
-# 同一ユーザーの候補と事実の更新が同じロックで直列化される。
+# 同一ユーザーの抽出の保存と事実の書き込みが同じロックで直列化される。
 # English: Advisory-lock namespace (first key), the same value as in context_fact_repository; with user_id as the second key,
-# candidate and fact writes of one user are serialized by the same lock.
+# extraction saves and fact writes of one user are serialized by the same lock.
 _CONTEXT_VAULT_LOCK_NAMESPACE = 1129601108  # ASCII "CTXT"
 
-_CANDIDATE_COLUMNS = (
-    "id",
-    "user_id",
-    "fact_type",
-    "title",
-    "content",
-    "source_kind",
-    "source_ref",
-    "source_client_id",
-    "importance",
-    "confidence",
-    "status",
-    "fingerprint",
-    "promoted_fact_id",
-    "revision",
-    "created_at",
-    "updated_at",
-)
 _FACT_COLUMNS = (
     "id",
     "user_id",
@@ -78,7 +54,6 @@ _FACT_COLUMNS = (
     "created_at",
     "updated_at",
 )
-_CANDIDATE_RETURNING = tuple(getattr(ContextFactCandidate, name) for name in _CANDIDATE_COLUMNS)
 _FACT_RETURNING = tuple(getattr(ContextFact, name) for name in _FACT_COLUMNS)
 
 
@@ -86,42 +61,12 @@ _FACT_RETURNING = tuple(getattr(ContextFact, name) for name in _FACT_COLUMNS)
 # を同じ関数でシリアライズするため)。
 # English: Normalizes an ORM model, Row or mapping into a dict of the given columns so RETURNING results and ORM rows share one serializer.
 def _record(row: Any, columns: tuple[str, ...]) -> dict[str, Any]:
-    if isinstance(row, (ContextFactCandidate, ContextFact, User)):
+    if isinstance(row, ContextFact):
         return {name: getattr(row, name) for name in columns}
     mapping = row if hasattr(row, "keys") else getattr(row, "_mapping", row)
     return {
         name: mapping[name] if name in mapping else getattr(mapping, name, None)
         for name in columns
-    }
-
-
-def _serialize_candidate(row: Any) -> dict[str, Any]:
-    record = _record(row, _CANDIDATE_COLUMNS)
-    return {
-        "id": int(record["id"]),
-        "user_id": int(record["user_id"]),
-        "fact_type": str(record["fact_type"]),
-        "title": str(record["title"] or ""),
-        "content": str(record["content"] or ""),
-        "source_kind": str(record["source_kind"] or "chat"),
-        "source_ref": str(record["source_ref"]) if record["source_ref"] is not None else None,
-        "source_client_id": (
-            str(record["source_client_id"])
-            if record["source_client_id"] is not None
-            else None
-        ),
-        "importance": int(record["importance"] if record["importance"] is not None else 50),
-        "confidence": float(record["confidence"] or 0),
-        "status": str(record["status"] or "pending"),
-        "fingerprint": str(record["fingerprint"]),
-        "promoted_fact_id": (
-            int(record["promoted_fact_id"])
-            if record["promoted_fact_id"] is not None
-            else None
-        ),
-        "revision": max(int(record["revision"] or 1), 1),
-        "created_at": serialize_datetime_iso(record["created_at"]),
-        "updated_at": serialize_datetime_iso(record["updated_at"]),
     }
 
 
@@ -151,9 +96,9 @@ def _serialize_fact(row: Any) -> dict[str, Any]:
 
 
 class ContextFactCandidateRepository:
-    """所有ユーザーで絞った候補の永続化。トランザクションは呼び出し側が持つ。
+    """所有ユーザーで絞った抽出の保存と設定の永続化。トランザクションは呼び出し側が持つ。
 
-    Owner-scoped candidate persistence; transaction ownership stays with the caller.
+    Owner-scoped persistence of extraction saves and the setting; transaction ownership stays with the caller.
     """
 
     def __init__(self, session: AsyncSession) -> None:
@@ -425,176 +370,6 @@ class ContextFactCandidateRepository:
         if row is None:  # pragma: no cover - PostgreSQL RETURNING invariant
             raise RuntimeError("Extracted context fact was not returned.")
         return _serialize_fact(row)
-
-    # 日本語: (created_at, id) の降順によるキーセットページング。before_* を渡すとそれより古い行だけを返す。
-    # English: Keyset pagination ordered by (created_at, id) descending; before_* restricts the result to older rows.
-    async def list_candidates(
-        self,
-        user_id: int,
-        *,
-        status: str = "pending",
-        limit: int = 21,
-        before_created_at: datetime | None = None,
-        before_id: int | None = None,
-    ) -> list[dict[str, Any]]:
-        conditions = [
-            ContextFactCandidate.user_id == user_id,
-            ContextFactCandidate.status == status,
-        ]
-        if before_created_at is not None and before_id is not None:
-            conditions.append(
-                tuple_(ContextFactCandidate.created_at, ContextFactCandidate.id)
-                < tuple_(before_created_at, before_id)
-            )
-        result = await self.session.execute(
-            select(ContextFactCandidate)
-            .where(*conditions)
-            .order_by(ContextFactCandidate.created_at.desc(), ContextFactCandidate.id.desc())
-            .limit(limit)
-        )
-        return [_serialize_candidate(row) for row in result.scalars().all()]
-
-    async def count_pending(self, user_id: int) -> int:
-        count = await self.session.scalar(
-            select(func.count(ContextFactCandidate.id)).where(
-                ContextFactCandidate.user_id == user_id,
-                ContextFactCandidate.status == "pending",
-            )
-        )
-        return int(count or 0)
-
-    async def approve_candidate(
-        self,
-        user_id: int,
-        candidate_id: int,
-        *,
-        expected_revision: int,
-        fact_type: str | None = None,
-        title: str | None = None,
-        content: str | None = None,
-        importance: int | None = None,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """承認待ちの候補を事実へ昇格させ、候補を承認済みにする(同一トランザクション)。
-
-        expected_revision が一致しないとき(他の操作で更新済み)は 409 で拒否する。
-
-        Promote a pending candidate and approve it atomically.
-        """
-        await self._lock_user(user_id)
-        candidate_model = await self.session.scalar(
-            select(ContextFactCandidate)
-            .where(
-                ContextFactCandidate.id == candidate_id,
-                ContextFactCandidate.user_id == user_id,
-            )
-            .with_for_update()
-        )
-        if candidate_model is None:
-            raise ResourceNotFoundError(ERROR_CONTEXT_FACT_CANDIDATE_NOT_FOUND)
-        candidate = _serialize_candidate(candidate_model)
-        if candidate["status"] != "pending" or candidate["revision"] != expected_revision:
-            raise ApiServiceError(
-                ERROR_CONTEXT_FACT_CANDIDATE_REVISION_CONFLICT,
-                409,
-                status="fail",
-            )
-
-        active_count = await self.session.scalar(
-            select(func.count(ContextFact.id)).where(
-                ContextFact.user_id == user_id,
-                ContextFact.status == "active",
-            )
-        )
-        if int(active_count or 0) >= MAX_ACTIVE_CONTEXT_FACTS:
-            raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
-
-        fact_statement = pg_insert(ContextFact).values(
-            user_id=user_id,
-            fact_type=fact_type if fact_type is not None else candidate["fact_type"],
-            title=title if title is not None else candidate["title"],
-            content=content if content is not None else candidate["content"],
-            source_kind=candidate["source_kind"],
-            source_ref=candidate["source_ref"],
-            source_client_id=candidate["source_client_id"],
-            importance=importance if importance is not None else candidate["importance"],
-            # 承認は本人が内容を見て確かめた行為。抽出時の確信度を残し、確認時刻は今にする。
-            # Approval is the owner reviewing the content: keep the extraction confidence and stamp now.
-            confidence=candidate["confidence"],
-            last_confirmed_at=func.current_timestamp(),
-        ).returning(*_FACT_RETURNING)
-        fact_row = (await self.session.execute(fact_statement)).mappings().first()
-        if fact_row is None:  # pragma: no cover - PostgreSQL RETURNING invariant
-            raise RuntimeError("Promoted context fact was not returned.")
-        fact = _serialize_fact(fact_row)
-
-        # 日本語: 状態と revision を条件に含めた UPDATE で楽観ロックし、取得後に変更されていたら 0 行になって競合として扱う。
-        # English: The UPDATE repeats the status and revision conditions as optimistic locking; zero rows means it changed meanwhile.
-        candidate_statement = (
-            update(ContextFactCandidate)
-            .where(
-                ContextFactCandidate.id == candidate_id,
-                ContextFactCandidate.user_id == user_id,
-                ContextFactCandidate.status == "pending",
-                ContextFactCandidate.revision == expected_revision,
-            )
-            .values(
-                status="approved",
-                promoted_fact_id=fact["id"],
-                revision=ContextFactCandidate.revision + 1,
-                updated_at=func.current_timestamp(),
-            )
-            .returning(*_CANDIDATE_RETURNING)
-        )
-        approved_row = (await self.session.execute(candidate_statement)).mappings().first()
-        if approved_row is None:
-            raise ApiServiceError(
-                ERROR_CONTEXT_FACT_CANDIDATE_REVISION_CONFLICT,
-                409,
-                status="fail",
-            )
-        return _serialize_candidate(approved_row), fact
-
-    # 日本語: 却下。更新できなかった場合は、候補が無い(404)のか revision/状態の不一致(409)なのかを再確認して区別する。
-    # English: Rejects a candidate. When the update matches nothing, a follow-up lookup tells "not found"
-    # (404) from a revision/status conflict (409).
-    async def reject_candidate(
-        self,
-        user_id: int,
-        candidate_id: int,
-        *,
-        expected_revision: int,
-    ) -> dict[str, Any]:
-        statement = (
-            update(ContextFactCandidate)
-            .where(
-                ContextFactCandidate.id == candidate_id,
-                ContextFactCandidate.user_id == user_id,
-                ContextFactCandidate.status == "pending",
-                ContextFactCandidate.revision == expected_revision,
-            )
-            .values(
-                status="rejected",
-                revision=ContextFactCandidate.revision + 1,
-                updated_at=func.current_timestamp(),
-            )
-            .returning(*_CANDIDATE_RETURNING)
-        )
-        row = (await self.session.execute(statement)).mappings().first()
-        if row is not None:
-            return _serialize_candidate(row)
-        exists_for_owner = await self.session.scalar(
-            select(ContextFactCandidate.id).where(
-                ContextFactCandidate.id == candidate_id,
-                ContextFactCandidate.user_id == user_id,
-            )
-        )
-        if exists_for_owner is None:
-            raise ResourceNotFoundError(ERROR_CONTEXT_FACT_CANDIDATE_NOT_FOUND)
-        raise ApiServiceError(
-            ERROR_CONTEXT_FACT_CANDIDATE_REVISION_CONFLICT,
-            409,
-            status="fail",
-        )
 
     # 日本語: 列は NOT NULL なので None はユーザー行が読めなかったときだけ。その場合は無効として扱い、
     # 読めない相手に抽出が走らないようにする。

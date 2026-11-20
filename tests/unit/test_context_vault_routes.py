@@ -11,21 +11,16 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from blueprints.context_vault.routes import (
-    api_approve_context_fact_candidate,
     api_create_context_fact,
     api_get_context_extraction_settings,
-    api_list_context_fact_candidates,
     api_list_context_facts,
-    api_reject_context_fact_candidate,
     api_update_context_extraction_settings,
     api_update_context_fact,
+    context_vault_bp,
 )
 from services.api_errors import ApiServiceError
 from services.response_models import (
     ContextExtractionSettingsResponse,
-    ContextFactCandidateApprovalResponse,
-    ContextFactCandidateListResponse,
-    ContextFactCandidateResponse,
     ContextFactListResponse,
     ContextFactResponse,
 )
@@ -49,27 +44,6 @@ def _fact(**overrides):
     }
     payload.update(overrides)
     return ContextFactResponse(**payload)
-
-
-# 日本語: 候補の ContextFactCandidateResponse を作ります。overrides で項目を差し替えます。
-# English: Build a ContextFactCandidateResponse for a candidate; overrides replace individual fields.
-def _candidate(**overrides):
-    payload = {
-        "id": 8,
-        "fact_type": "project",
-        "title": "Chat-Core",
-        "content": "Phase 2 candidate",
-        "source_kind": "chat",
-        "source_ref": "room-123",
-        "importance": 80,
-        "confidence": 0.9,
-        "status": "pending",
-        "revision": 1,
-        "created_at": None,
-        "updated_at": None,
-    }
-    payload.update(overrides)
-    return ContextFactCandidateResponse(**payload)
 
 
 # 日本語: サービス層をモックし、ルート関数を直接呼んで応答を確認します。
@@ -164,58 +138,28 @@ class ContextVaultRouteTestCase(unittest.TestCase):
             response = asyncio.run(api_update_context_fact(request, 3))
         self.assertEqual(response.status_code, 409)
 
-    def test_candidate_routes_await_list_approve_and_reject(self):
-        request = build_request(
-            method="GET",
-            path="/api/context-facts/candidates",
-            session={"user_id": 7},
-        )
-        listing = AsyncMock(
-            return_value=ContextFactCandidateListResponse(
-                candidates=[_candidate()], next_cursor=None, total_pending=1
-            )
-        )
-        with patch("blueprints.context_vault.routes.list_candidates", new=listing):
-            response = asyncio.run(api_list_context_fact_candidates(request, limit=20))
-        self.assertEqual(response.status_code, 200)
-        listing.assert_awaited_once_with(7, status="pending", limit=20, cursor=None)
+    def test_pending_candidate_routes_are_gone(self):
+        # 承認待ちの一覧・承認・却下は無くした。抽出の設定と事実の API だけが残る。
+        # The pending list, approve and reject endpoints are gone; only facts and the extraction setting remain.
+        paths = {route.path for route in context_vault_bp.routes}
+        self.assertFalse([path for path in paths if "candidates" in path])
+        self.assertIn("/api/context-facts/extraction-settings", paths)
 
-        approve_request = build_request(
-            method="PUT",
-            path="/api/context-facts/candidates/8/approve",
-            json_body={"revision": 1, "title": "Edited", "importance": 95},
-            session={"user_id": 7},
+    def test_deprecated_list_reports_why_each_fact_was_deprecated(self):
+        request = build_request(method="GET", path="/api/context-facts", session={"user_id": 7})
+        result = ContextFactListResponse(
+            facts=[
+                _fact(id=4, status="deprecated", deprecated_reason="capacity"),
+                _fact(id=3, status="deprecated"),
+            ],
+            total_active=1,
+            next_cursor=None,
         )
-        approval = AsyncMock(
-            return_value=ContextFactCandidateApprovalResponse(
-                candidate=_candidate(status="approved", revision=2),
-                fact=_fact(title="Edited", importance=95),
-            )
-        )
-        with patch("blueprints.context_vault.routes.approve_candidate", new=approval):
-            response = asyncio.run(api_approve_context_fact_candidate(approve_request, 8))
-        self.assertEqual(response.status_code, 200)
-        approval.assert_awaited_once_with(
-            7,
-            8,
-            expected_revision=1,
-            fact_type=None,
-            title="Edited",
-            content=None,
-            importance=95,
-        )
+        with patch("blueprints.context_vault.routes.list_facts", new=AsyncMock(return_value=result)):
+            response = asyncio.run(api_list_context_facts(request, status="deprecated"))
 
-        reject_request = build_request(
-            method="PUT",
-            path="/api/context-facts/candidates/8/reject",
-            json_body={"revision": 1},
-            session={"user_id": 7},
-        )
-        reject = AsyncMock(return_value=_candidate(status="rejected", revision=2))
-        with patch("blueprints.context_vault.routes.reject_candidate", new=reject):
-            response = asyncio.run(api_reject_context_fact_candidate(reject_request, 8))
-        self.assertEqual(response.status_code, 200)
-        reject.assert_awaited_once_with(7, 8, expected_revision=1)
+        facts = json.loads(response.body)["facts"]
+        self.assertEqual([fact["deprecated_reason"] for fact in facts], ["capacity", None])
 
     def test_extraction_settings_routes_await_service(self):
         request = build_request(

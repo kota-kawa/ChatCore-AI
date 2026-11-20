@@ -1,6 +1,6 @@
-"""記憶（パーソナル・コンテキスト金庫）の事実・承認待ち候補・インポート/エクスポートの HTTP API（/api/context-facts）。
+"""記憶（パーソナル・コンテキスト金庫）の事実・自動抽出の設定・インポート/エクスポートの HTTP API（/api/context-facts）。
 
-HTTP API for memory (the personal context vault): facts, pending candidates, and import/export (/api/context-facts).
+HTTP API for memory (the personal context vault): facts, the extraction setting, and import/export (/api/context-facts).
 """
 from __future__ import annotations
 
@@ -12,12 +12,7 @@ from starlette.responses import Response
 
 from services.api_errors import ApiServiceError
 from services.context_vault_candidate_service import (
-    DEFAULT_CONTEXT_CANDIDATE_LIST_LIMIT,
-    MAX_CONTEXT_CANDIDATE_LIST_LIMIT,
-    approve_candidate,
     get_extraction_settings,
-    list_candidates,
-    reject_candidate,
     update_extraction_settings,
 )
 from services.context_vault_portability import (
@@ -34,9 +29,6 @@ from services.context_vault_service import (
 from services.csrf import require_csrf
 from services.error_messages import (
     ERROR_CONTEXT_EXTRACTION_SETTINGS_PAYLOAD_INVALID,
-    ERROR_CONTEXT_FACT_CANDIDATE_APPROVE_PAYLOAD_INVALID,
-    ERROR_CONTEXT_FACT_CANDIDATE_REJECT_PAYLOAD_INVALID,
-    ERROR_CONTEXT_FACT_CANDIDATE_STATUS_INVALID,
     ERROR_CONTEXT_VAULT_EXPORT_FORMAT_INVALID,
     ERROR_CONTEXT_VAULT_IMPORT_PAYLOAD_INVALID,
     ERROR_CONTEXT_VAULT_IMPORT_REQUEST_TOO_LARGE,
@@ -46,8 +38,6 @@ from services.error_messages import (
 from services.repositories.memo_helpers import user_id_from_session
 from services.request_models import (
     ContextExtractionSettingsUpdateRequest,
-    ContextFactCandidateApproveRequest,
-    ContextFactCandidateRejectRequest,
     ContextFactCreateRequest,
     ContextFactUpdateRequest,
     ContextVaultImportConfirmRequest,
@@ -76,7 +66,6 @@ logger = logging.getLogger("blueprints.context_vault")
 # Allowed values for input validation, and the import body size cap (32 MiB).
 _VALID_FACT_TYPES = {"preference", "profile", "project", "decision", "reference"}
 _VALID_STATUSES = {"active", "deprecated"}
-_VALID_CANDIDATE_STATUSES = {"pending", "approved", "rejected"}
 _VALID_PORTABILITY_FORMATS = {"json", "markdown"}
 _MAX_CONTEXT_VAULT_IMPORT_REQUEST_BYTES = 32 * 1024 * 1024
 
@@ -261,114 +250,6 @@ async def api_import_context_vault(request: Request):
             ERROR_CONTEXT_VAULT_PORTABILITY_FAILED,
             status="fail",
         )
-
-
-@context_vault_bp.get("/candidates", name="context_vault.api_list_candidates")
-async def api_list_context_fact_candidates(
-    request: Request,
-    status: str = "pending",
-    limit: int = DEFAULT_CONTEXT_CANDIDATE_LIST_LIMIT,
-    cursor: str | None = None,
-):
-    # 承認待ちの抽出候補（有効な事実が上限に達して直接保存できなかったもの）をkeysetページングで取得する。
-    # List pending candidates (extractions that could not be saved directly because the active-fact cap was reached), using keyset paging.
-    """承認待ちの抽出候補（有効な事実が上限に達して直接保存できなかったもの）をkeysetページングで取得する。"""
-    user_id = user_id_from_session(request.session)
-    if user_id is None:
-        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
-    if status not in _VALID_CANDIDATE_STATUSES:
-        return jsonify(
-            {"status": "fail", "error": ERROR_CONTEXT_FACT_CANDIDATE_STATUS_INVALID},
-            status_code=400,
-        )
-
-    safe_limit = max(1, min(int(limit), MAX_CONTEXT_CANDIDATE_LIST_LIMIT))
-    try:
-        result = await list_candidates(
-            user_id,
-            status=status,
-            limit=safe_limit,
-            cursor=cursor,
-        )
-        return jsonify(result.model_dump())
-    except ApiServiceError as exc:
-        return jsonify_service_error(exc, status="fail")
-
-
-@context_vault_bp.put(
-    "/candidates/{candidate_id:int}/approve",
-    name="context_vault.api_approve_candidate",
-)
-async def api_approve_context_fact_candidate(request: Request, candidate_id: int):
-    # 候補を必要に応じて編集し、activeなコンテキスト事実へ昇格する。
-    # Promote a candidate to an active context fact, optionally with edits.
-    """候補を必要に応じて編集し、activeなコンテキスト事実へ昇格する。"""
-    user_id = user_id_from_session(request.session)
-    if user_id is None:
-        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
-    data, error_response = await require_json_dict(request, status="fail")
-    if error_response is not None:
-        return error_response
-    payload, validation_error = validate_payload_model(
-        data,
-        ContextFactCandidateApproveRequest,
-        error_message=ERROR_CONTEXT_FACT_CANDIDATE_APPROVE_PAYLOAD_INVALID,
-        status="fail",
-    )
-    if validation_error is not None:
-        return validation_error
-
-    try:
-        result = await approve_candidate(
-            user_id,
-            candidate_id,
-            expected_revision=payload.revision,
-            fact_type=payload.fact_type,
-            title=payload.title,
-            content=payload.content,
-            importance=payload.importance,
-        )
-        return jsonify({"status": "success", **result.model_dump()})
-    except ApiServiceError as exc:
-        return jsonify_service_error(exc, status="fail")
-    except Exception:
-        return log_and_internal_server_error(logger, CONTEXT_FACT_CREATE_ERROR, status="fail")
-
-
-@context_vault_bp.put(
-    "/candidates/{candidate_id:int}/reject",
-    name="context_vault.api_reject_candidate",
-)
-async def api_reject_context_fact_candidate(request: Request, candidate_id: int):
-    # 候補をrevision競合安全に却下する。
-    # Reject a candidate, guarded against revision conflicts.
-    """候補をrevision競合安全に却下する。"""
-    user_id = user_id_from_session(request.session)
-    if user_id is None:
-        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
-    data, error_response = await require_json_dict(request, status="fail")
-    if error_response is not None:
-        return error_response
-    payload, validation_error = validate_payload_model(
-        data,
-        ContextFactCandidateRejectRequest,
-        error_message=ERROR_CONTEXT_FACT_CANDIDATE_REJECT_PAYLOAD_INVALID,
-        status="fail",
-    )
-    if validation_error is not None:
-        return validation_error
-
-    try:
-        candidate = await reject_candidate(
-            user_id,
-            candidate_id,
-            expected_revision=payload.revision,
-        )
-        return jsonify({"status": "success", "candidate": candidate.model_dump()})
-    except ApiServiceError as exc:
-        return jsonify_service_error(exc, status="fail")
-    except Exception:
-        return log_and_internal_server_error(logger, CONTEXT_FACT_UPDATE_ERROR, status="fail")
 
 
 @context_vault_bp.get(
