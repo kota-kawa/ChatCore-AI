@@ -799,6 +799,9 @@ export function useHomePageGenerationActions({
         commitHistoryMessages(uiMessages);
         return { status: "loaded", roomMode: loadedHistory.roomMode };
       } catch (error) {
+        // 別のルームへ移った後の失敗は、いまの画面に関係しないので結果として扱わない。
+        // A failure after the view moved to another room is unrelated to the current screen, so it is not reported as one.
+        if (!isCurrentLoad()) return { status: "superseded" };
         console.error("履歴取得失敗:", error);
         return { status: "failed" };
       }

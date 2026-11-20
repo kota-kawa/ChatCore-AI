@@ -10,7 +10,7 @@ import { LocaleProvider } from "../contexts/locale_context";
 import { createGenerationGuard } from "../lib/chat_page/generation_guard";
 import { readStoredGenerationState, readStoredHistory, writeStoredGenerationState, writeStoredHistory } from "../lib/chat_page/storage";
 import { clearStructuredUiMetrics, readStructuredUiMetrics, recordStructuredUiMetric } from "../lib/chat_page/structured_ui_metrics";
-import type { ChatRoom, UiChatMessage } from "../lib/chat_page/types";
+import type { ChatHistoryLoadOutcome, ChatRoom, UiChatMessage } from "../lib/chat_page/types";
 import { resilientFetch } from "../scripts/core/resilient_fetch";
 
 vi.mock("../scripts/core/toast", () => ({
@@ -289,7 +289,7 @@ describe("generation identity", () => {
       return createJsonResponse(500, {});
     });
     const { result } = renderHook(() => useGenerationHarness());
-    let history!: Promise<unknown>;
+    let history!: Promise<ChatHistoryLoadOutcome>;
     act(() => { history = result.current.actions.loadChatHistory("room-1"); });
     await waitFor(() => expect(statusRequested).toBe(true));
     let turn!: Promise<boolean>;

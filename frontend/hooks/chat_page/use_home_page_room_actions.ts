@@ -19,7 +19,7 @@ import {
   updateChatRoomTitle,
 } from "../../lib/chat_page/home_page_controller_utils";
 import { moveFocusOutOfHiddenRegion } from "../../lib/chat_page/focus_management";
-import type { AttachedFile, ChatRoom, ChatRoomMode, ChatRoomsPage, NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
+import type { AttachedFile, ChatHistoryLoadOutcome, ChatRoom, ChatRoomMode, ChatRoomsPage, NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
 import { showConfirmModal, showPromptModal } from "../../scripts/core/alert_modal";
 import { showToast } from "../../scripts/core/toast";
 import {
@@ -77,7 +77,7 @@ type UseHomePageRoomActionsParams = {
   switchBranch: (messageId: number, roomId: string) => Promise<void>;
   isGenerating: boolean;
   isTaskOrderEditing: boolean;
-  loadChatHistory: (roomId: string, shouldCheckGeneration?: boolean) => Promise<unknown>;
+  loadChatHistory: (roomId: string, shouldCheckGeneration?: boolean) => Promise<ChatHistoryLoadOutcome>;
   loadLocalChatHistory: (roomId: string) => void;
   loggedIn: boolean;
   mutateChatRooms: KeyedMutator<ChatRoomsPage>;

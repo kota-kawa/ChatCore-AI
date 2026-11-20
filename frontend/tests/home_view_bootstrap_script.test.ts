@@ -51,6 +51,9 @@ test("home bootstrap ignores the room query for guests, unknown auth, empty valu
   assert.equal(runBootstrap({ search: "?room=abc", stored: { [STORAGE_KEYS.authStateCache]: "0" } }), null);
   assert.equal(runBootstrap({ search: "?room=abc" }), null);
   assert.equal(runBootstrap({ search: "?room=", stored: LOGGED_IN }), null);
+  assert.equal(runBootstrap({ search: "?room=%20%20&a=1", stored: LOGGED_IN }), null);
+  assert.equal(runBootstrap({ search: "?room=+", stored: LOGGED_IN }), null);
+  assert.equal(runBootstrap({ search: "?room=%20x", stored: LOGGED_IN }), "chat");
   assert.equal(runBootstrap({ search: "?chatroom=abc", stored: LOGGED_IN }), null);
 });
 

@@ -5,6 +5,7 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useHomePageRoomActions } from "../hooks/chat_page/use_home_page_room_actions";
+import type { ChatHistoryLoadOutcome } from "../lib/chat_page/types";
 
 vi.mock("../scripts/core/alert_modal", () => ({
   showConfirmModal: vi.fn(),
@@ -30,7 +31,7 @@ type PageViewState = RoomActionsParams["pageViewState"];
 // 再レンダーで別物にならないよう、モックはハーネスの外で1度だけ作る。
 // Create the mocks once, outside the harness, so re-renders keep the same references.
 const setPageViewState = vi.fn();
-const loadChatHistory = vi.fn(async () => undefined);
+const loadChatHistory = vi.fn(async (): Promise<ChatHistoryLoadOutcome> => ({ status: "loaded", roomMode: "normal" }));
 const loadLocalChatHistory = vi.fn();
 const stub = vi.fn();
 const currentRoomIdRef = { current: null as string | null };
