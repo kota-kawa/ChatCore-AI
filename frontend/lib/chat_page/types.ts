@@ -304,6 +304,13 @@ export type ChatHistoryPagination = {
   nextBeforeId: number | null;
 };
 
+// 履歴の読み込み結果。superseded は別のルームへ切り替わるなどして、この読み込みの結果を画面へ反映しなかったことを表す。
+// Outcome of loading history. "superseded" means the result was not applied because the view moved on (for example to another room).
+export type ChatHistoryLoadOutcome =
+  | { status: "loaded"; roomMode: ChatRoomMode }
+  | { status: "failed" }
+  | { status: "superseded" };
+
 export type GenerationStatusPayload = {
   error?: string;
   is_generating?: boolean;

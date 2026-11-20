@@ -45,6 +45,7 @@ import {
 } from "../../lib/chat_page/storage";
 import type {
   AttachedFile,
+  ChatHistoryLoadOutcome,
   ChatHistoryMessagePayload,
   ChatHistoryPagination,
   ChatResponsePayload,
@@ -709,13 +710,13 @@ export function useHomePageGenerationActions({
   // サーバーから履歴を読み込んで表示する。shouldCheckGeneration のときは生成の状態も確認し、最新の発言が回答済みなら保存状態を片づけ、生成中または再生可能ならストリームへ接続する
   // Load history from the server and render it; with shouldCheckGeneration it also checks generation status: if the latest turn is answered it clears stored progress, and if a generation is running or replayable it connects to the stream
   const loadChatHistory = useCallback(
-    async (roomId: string, shouldCheckGeneration = true) => {
+    async (roomId: string, shouldCheckGeneration = true): Promise<ChatHistoryLoadOutcome> => {
       const revision = generationGuardRef.current?.revision();
       const expectedGenerationId = readStoredGenerationState(roomId)?.generationId;
       const isCurrentLoad = () => currentRoomIdRef.current === roomId && generationGuardRef.current?.revision() === revision;
       try {
         let loadedHistory = await fetchChatHistoryPage(roomId);
-        if (!isCurrentLoad()) return;
+        if (!isCurrentLoad()) return { status: "superseded" };
 
         const toUiMessages = (historyMessages: typeof loadedHistory.messages): UiChatMessage[] =>
           historyMessages.map((entry) => ({
@@ -747,7 +748,7 @@ export function useHomePageGenerationActions({
 
         if (!shouldCheckGeneration) {
           commitHistoryMessages(uiMessages);
-          return;
+          return { status: "loaded", roomMode: loadedHistory.roomMode };
         }
 
         let generationStatus = normalizeGenerationStatusPayload({});
@@ -761,12 +762,12 @@ export function useHomePageGenerationActions({
           generationStatus = normalizeGenerationStatusPayload({});
         }
 
-        if (!isCurrentLoad()) return;
+        if (!isCurrentLoad()) return { status: "superseded" };
 
         if (generationStatus.is_generating && isLatestChatTurnAnswered(uiMessages)) {
           try {
             loadedHistory = await fetchChatHistoryPage(roomId);
-            if (!isCurrentLoad()) return;
+            if (!isCurrentLoad()) return { status: "superseded" };
             uiMessages = toUiMessages(loadedHistory.messages);
             syncLoadedHistoryState();
           } catch {
@@ -779,25 +780,27 @@ export function useHomePageGenerationActions({
           streamLastEventIdByRoomRef.current.delete(roomId);
           clearStoredGenerationState(roomId, { generationId: expectedGenerationId });
           commitHistoryMessages(uiMessages);
-          return;
+          return { status: "loaded", roomMode: loadedHistory.roomMode };
         }
 
         if (generationStatus.is_generating) {
           commitHistoryMessages(uiMessages);
           void connectToGenerationStream(roomId, loadedHistory.roomMode, generationStatus.generation_id);
-          return;
+          return { status: "loaded", roomMode: loadedHistory.roomMode };
         }
 
         if (generationStatus.has_replayable_job) {
           commitHistoryMessages(uiMessages);
           void connectToGenerationStream(roomId, loadedHistory.roomMode, generationStatus.generation_id);
-          return;
+          return { status: "loaded", roomMode: loadedHistory.roomMode };
         }
 
         clearStoredGenerationState(roomId, { generationId: expectedGenerationId });
         commitHistoryMessages(uiMessages);
+        return { status: "loaded", roomMode: loadedHistory.roomMode };
       } catch (error) {
         console.error("履歴取得失敗:", error);
+        return { status: "failed" };
       }
     },
     [connectToGenerationStream, currentRoomIdRef, fetchChatHistoryPage, generationGuardRef, saveUiMessagesToLocalStorage, requestScrollToBottom],

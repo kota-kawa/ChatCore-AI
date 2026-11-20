@@ -1,0 +1,242 @@
+// URL の room クエリでルームを開く挙動（優先順、失敗時の通常表示への復帰、ゲスト・不正値の無視）を検証する。
+// Tests opening a room from the URL's room query: priority, falling back to the normal view on failure, and ignoring guests and unusable values.
+
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { useHomePageController } from "../hooks/chat_page/use_home_page_controller";
+import { buildHomeRoomUrl } from "../lib/chat_page/room_url";
+import {
+  readStoredActiveChatRoom,
+  writeStoredActiveChatRoom,
+  writeStoredGenerationState,
+  writeStoredHomePageViewState,
+} from "../lib/chat_page/storage";
+import { resilientFetch } from "../scripts/core/resilient_fetch";
+import { showToast } from "../scripts/core/toast";
+
+vi.mock("../scripts/core/toast", () => ({ showToast: vi.fn() }));
+vi.mock("../scripts/components/prompt_assist", () => ({ initPromptAssist: vi.fn(() => ({ destroy: vi.fn() })) }));
+vi.mock("../scripts/core/resilient_fetch", () => ({ resilientFetch: vi.fn() }));
+
+const fetchMock = vi.mocked(resilientFetch);
+const showToastMock = vi.mocked(showToast);
+
+function jsonResponse(payload: unknown, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: (name: string) => (name.toLowerCase() === "content-type" ? "application/json" : null) },
+    json: async () => payload,
+    text: async () => JSON.stringify(payload),
+    clone() {
+      return jsonResponse(payload, status);
+    },
+  } as unknown as Response;
+}
+
+function installMatchMediaStub() {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      onchange: null,
+      dispatchEvent: () => false,
+    }),
+  });
+}
+
+// ルーム ID ごとの履歴 API の応答。登録の無いルームは存在しない扱い（404）にする。
+// History API responses by room id; a room that is not registered behaves as nonexistent (404).
+let historyByRoom: Record<string, { status?: number; messages: Array<{ sender: string; message: string }> }> = {};
+
+function historyRequests() {
+  return fetchMock.mock.calls
+    .map((call) => String(call[0]))
+    .filter((url) => url.includes("get_chat_history"))
+    .map((url) => new URL(url, "http://localhost").searchParams.get("room_id"));
+}
+
+function currentUrl() {
+  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+}
+
+function seedLoggedIn() {
+  localStorage.setItem("chatcore.chat.userScope", "user:1");
+  localStorage.setItem("chatcore.auth.loggedIn", "1");
+  localStorage.setItem("chatcore.auth.cachedAt", String(Date.now()));
+}
+
+describe("useHomePageController opening a room from the URL", () => {
+  beforeEach(() => {
+    installMatchMediaStub();
+    localStorage.clear();
+    window.history.replaceState(null, "", "/");
+    historyByRoom = {};
+    fetchMock.mockImplementation(async (url: unknown) => {
+      const requestedUrl = String(url);
+      if (requestedUrl.includes("current_user")) return jsonResponse({ logged_in: true, user: { id: 1 } });
+      if (requestedUrl.includes("get_chat_history")) {
+        const roomId = new URL(requestedUrl, "http://localhost").searchParams.get("room_id") ?? "";
+        const history = historyByRoom[roomId];
+        if (!history) return jsonResponse({ error: "not found" }, 404);
+        return jsonResponse({ messages: history.messages, pagination: { has_more: false, next_before_id: null }, room_mode: "normal" });
+      }
+      return jsonResponse({});
+    });
+  });
+
+  it("opens the requested room like a sidebar selection, strips only room from the URL and saves it as the last room", async () => {
+    seedLoggedIn();
+    historyByRoom["1700000000000"] = { messages: [{ sender: "user", message: "元の会話" }] };
+    window.history.replaceState(null, "", `${buildHomeRoomUrl("1700000000000")}&keep=1#top`);
+
+    const { result } = renderHook(() => useHomePageController());
+
+    // 最初の描画前に反映される（セットアップ画面を挟まない）。
+    // Applied before the first paint (no setup view in between).
+    expect(result.current.pageViewState).toBe("chat");
+    expect(result.current.currentRoomId).toBe("1700000000000");
+    expect(currentUrl()).toBe("/?keep=1#top");
+
+    await waitFor(() => expect(result.current.messages.map((message) => message.text)).toEqual(["元の会話"]));
+    expect(readStoredActiveChatRoom()).toEqual({ roomId: "1700000000000", roomMode: "normal" });
+    expect(historyRequests()).toEqual(["1700000000000"]);
+    expect(showToastMock).not.toHaveBeenCalled();
+  });
+
+  it("takes the URL room over the stored last room and does not fetch the stored room", async () => {
+    seedLoggedIn();
+    writeStoredActiveChatRoom("stored-room", "normal");
+    writeStoredHomePageViewState("chat");
+    historyByRoom["url-room"] = { messages: [{ sender: "user", message: "URL の会話" }] };
+    window.history.replaceState(null, "", buildHomeRoomUrl("url-room"));
+
+    const { result } = renderHook(() => useHomePageController());
+
+    await waitFor(() => expect(result.current.messages.map((message) => message.text)).toEqual(["URL の会話"]));
+    expect(result.current.currentRoomId).toBe("url-room");
+    expect(readStoredActiveChatRoom()?.roomId).toBe("url-room");
+    expect(historyRequests()).toEqual(["url-room"]);
+  });
+
+  it("restores the room of a generation in progress instead, and still strips the query", async () => {
+    seedLoggedIn();
+    writeStoredGenerationState({
+      roomId: "generating-room",
+      roomMode: "normal",
+      generationId: "a".repeat(32),
+      lastEventId: 0,
+      streamedText: "途中",
+      updatedAt: Date.now(),
+    });
+    historyByRoom["generating-room"] = { messages: [{ sender: "user", message: "生成中の会話" }] };
+    historyByRoom["url-room"] = { messages: [{ sender: "user", message: "URL の会話" }] };
+    window.history.replaceState(null, "", buildHomeRoomUrl("url-room"));
+
+    const { result } = renderHook(() => useHomePageController());
+
+    expect(result.current.currentRoomId).toBe("generating-room");
+    expect(currentUrl()).toBe("/");
+    await waitFor(() => expect(historyRequests()).toContain("generating-room"));
+    expect(historyRequests()).not.toContain("url-room");
+  });
+
+  it("returns to the normal initial view with a notice when the room cannot be loaded and nothing was stored", async () => {
+    seedLoggedIn();
+    window.history.replaceState(null, "", buildHomeRoomUrl("someone-elses-room"));
+
+    const { result } = renderHook(() => useHomePageController());
+    expect(result.current.pageViewState).toBe("chat");
+
+    await waitFor(() => expect(result.current.pageViewState).toBe("setup"));
+    expect(result.current.currentRoomId).toBeNull();
+    expect(readStoredActiveChatRoom()).toBeNull();
+    expect(showToastMock).toHaveBeenCalledTimes(1);
+    expect(showToastMock.mock.calls[0]?.[1]).toMatchObject({ variant: "error" });
+    expect(historyRequests()).toEqual(["someone-elses-room"]);
+  });
+
+  it("falls back to the stored last room, untouched, when the requested room cannot be loaded", async () => {
+    seedLoggedIn();
+    writeStoredActiveChatRoom("stored-room", "normal");
+    writeStoredHomePageViewState("chat");
+    historyByRoom["stored-room"] = { messages: [{ sender: "user", message: "前回の会話" }] };
+    window.history.replaceState(null, "", buildHomeRoomUrl("missing-room"));
+
+    const { result } = renderHook(() => useHomePageController());
+
+    await waitFor(() => expect(result.current.messages.map((message) => message.text)).toEqual(["前回の会話"]));
+    expect(result.current.pageViewState).toBe("chat");
+    expect(result.current.currentRoomId).toBe("stored-room");
+    expect(readStoredActiveChatRoom()?.roomId).toBe("stored-room");
+    expect(localStorage.getItem("chatcore.home.viewState")).toBe("chat");
+    expect(showToastMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the setup view and the stored last room when the requested room fails and the last view was setup", async () => {
+    seedLoggedIn();
+    writeStoredActiveChatRoom("stored-room", "normal");
+    writeStoredHomePageViewState("setup");
+    window.history.replaceState(null, "", buildHomeRoomUrl("missing-room"));
+
+    const { result } = renderHook(() => useHomePageController());
+    await waitFor(() => expect(showToastMock).toHaveBeenCalledTimes(1));
+
+    await waitFor(() => expect(result.current.pageViewState).toBe("setup"));
+    expect(localStorage.getItem("chatcore.home.viewState")).toBe("setup");
+    expect(readStoredActiveChatRoom()?.roomId).toBe("stored-room");
+    expect(historyRequests()).toEqual(["missing-room"]);
+  });
+
+  it("ignores the room query for a guest and only strips it", async () => {
+    localStorage.setItem("chatcore.auth.loggedIn", "0");
+    localStorage.setItem("chatcore.auth.cachedAt", String(Date.now()));
+    historyByRoom["url-room"] = { messages: [] };
+    window.history.replaceState(null, "", `${buildHomeRoomUrl("url-room")}&keep=1`);
+
+    const { result } = renderHook(() => useHomePageController());
+    await act(async () => {});
+
+    expect(currentUrl()).toBe("/?keep=1");
+    expect(result.current.pageViewState).toBe("setup");
+    expect(result.current.currentRoomId).toBeNull();
+    expect(historyRequests()).toEqual([]);
+    expect(showToastMock).not.toHaveBeenCalledWith(expect.stringContaining("開けません"), expect.anything());
+  });
+
+  it("ignores unusable values, keeping the stored restore as it was", async () => {
+    seedLoggedIn();
+    writeStoredActiveChatRoom("stored-room", "normal");
+    writeStoredHomePageViewState("chat");
+    historyByRoom["stored-room"] = { messages: [{ sender: "user", message: "前回の会話" }] };
+    window.history.replaceState(null, "", `/?room=${"a".repeat(129)}`);
+
+    const { result } = renderHook(() => useHomePageController());
+
+    await waitFor(() => expect(result.current.messages.map((message) => message.text)).toEqual(["前回の会話"]));
+    expect(result.current.currentRoomId).toBe("stored-room");
+    expect(currentUrl()).toBe("/");
+    expect(historyRequests()).toEqual(["stored-room"]);
+    expect(showToastMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the existing restore when there is no room query", async () => {
+    seedLoggedIn();
+    writeStoredActiveChatRoom("stored-room", "normal");
+    writeStoredHomePageViewState("chat");
+    historyByRoom["stored-room"] = { messages: [{ sender: "user", message: "前回の会話" }] };
+
+    const { result } = renderHook(() => useHomePageController());
+
+    expect(result.current.currentRoomId).toBe("stored-room");
+    await waitFor(() => expect(result.current.messages.map((message) => message.text)).toEqual(["前回の会話"]));
+    expect(historyRequests()).toEqual(["stored-room"]);
+    expect(showToastMock).not.toHaveBeenCalled();
+  });
+});

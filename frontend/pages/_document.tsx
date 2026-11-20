@@ -12,13 +12,15 @@ const themeBootstrapScript = `(function(){try{var k='chatcore-theme';var v=local
 
 // トップページ再読込時、直前がチャット画面ならハイドレーション前に <html> へ
 // フラグを立て、CSS でセットアップ画面の一瞬の表示（フラッシュ）を防ぐ。
+// ログイン済みのキャッシュがあり URL に room クエリがあるときも、そのルームを開く前提で同じフラグを立てる。
 // フラグはビュー復元完了後に use_home_page_controller が解除する。
-// キーは frontend/scripts/core/constants.ts の STORAGE_KEYS.homePageViewState と同一。
+// キーは frontend/scripts/core/constants.ts の STORAGE_KEYS.homePageViewState・authStateCache と同一。
 // On home-page reloads, when the last view was the chat view, set a flag on
 // <html> before hydration so CSS can prevent the setup view from flashing.
+// The same flag is set when a logged-in cache exists and the URL has a room query, since that room is about to open.
 // The flag is cleared by use_home_page_controller once the view is restored.
-// The key must match STORAGE_KEYS.homePageViewState in frontend/scripts/core/constants.ts.
-const homeViewBootstrapScript = `(function(){try{if(location.pathname!=='/'&&location.pathname!=='/en'&&location.pathname!=='/en/')return;var shouldBootChat=localStorage.getItem('chatcore.home.viewState')==='chat';if(!shouldBootChat){try{var raw=localStorage.getItem('chatcore.chat.activeGeneration');var parsed=raw?JSON.parse(raw):null;var updatedAt=Number(parsed&&parsed.updatedAt);shouldBootChat=!!(parsed&&typeof parsed.roomId==='string'&&parsed.roomId.trim()&&isFinite(updatedAt)&&Date.now()-updatedAt<=1800000);}catch(_){}}if(shouldBootChat){document.documentElement.setAttribute('data-cc-home-boot-view','chat');}}catch(e){}})();`;
+// The keys must match STORAGE_KEYS.homePageViewState and authStateCache in frontend/scripts/core/constants.ts.
+export const homeViewBootstrapScript = `(function(){try{if(location.pathname!=='/'&&location.pathname!=='/en'&&location.pathname!=='/en/')return;var shouldBootChat=localStorage.getItem('chatcore.home.viewState')==='chat';if(!shouldBootChat){try{var raw=localStorage.getItem('chatcore.chat.activeGeneration');var parsed=raw?JSON.parse(raw):null;var updatedAt=Number(parsed&&parsed.updatedAt);shouldBootChat=!!(parsed&&typeof parsed.roomId==='string'&&parsed.roomId.trim()&&isFinite(updatedAt)&&Date.now()-updatedAt<=1800000);}catch(_){}}if(!shouldBootChat&&localStorage.getItem('chatcore.auth.loggedIn')==='1'&&/[?&]room=[^&]/.test(location.search)){shouldBootChat=true;}if(shouldBootChat){document.documentElement.setAttribute('data-cc-home-boot-view','chat');}}catch(e){}})();`;
 
 // 直近の認証状態をハイドレーション前に <html> へ反映し、ログイン済みでも
 // 一瞬だけ未ログイン向けUIが描画される問題を防ぐ。CSS 側でゲスト専用要素を

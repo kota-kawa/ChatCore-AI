@@ -77,7 +77,7 @@ type UseHomePageRoomActionsParams = {
   switchBranch: (messageId: number, roomId: string) => Promise<void>;
   isGenerating: boolean;
   isTaskOrderEditing: boolean;
-  loadChatHistory: (roomId: string, shouldCheckGeneration?: boolean) => Promise<void>;
+  loadChatHistory: (roomId: string, shouldCheckGeneration?: boolean) => Promise<unknown>;
   loadLocalChatHistory: (roomId: string) => void;
   loggedIn: boolean;
   mutateChatRooms: KeyedMutator<ChatRoomsPage>;

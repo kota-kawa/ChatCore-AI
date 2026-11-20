@@ -289,7 +289,7 @@ describe("generation identity", () => {
       return createJsonResponse(500, {});
     });
     const { result } = renderHook(() => useGenerationHarness());
-    let history!: Promise<void>;
+    let history!: Promise<unknown>;
     act(() => { history = result.current.actions.loadChatHistory("room-1"); });
     await waitFor(() => expect(statusRequested).toBe(true));
     let turn!: Promise<boolean>;
