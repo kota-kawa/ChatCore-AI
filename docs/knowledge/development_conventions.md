@@ -57,6 +57,7 @@
 - FastAPI ルートのリクエスト/レスポンスの動作に焦点を当て、外部サービスや DB 接続はモック化してください。
 - チャット出力の回帰データセットは `tests/fixtures/llm_eval/chat_output_cases.json` に固定し、`tests/unit/test_llm_output_eval.py` が実行します。期待値はデータ側に書くため、`tests/helpers/llm_eval.py` が読み込み時に形式・参照・ID 重複を検証し、壊れたデータはテスト失敗にします。
 - このデータセットで判定するのは、実行ごとに揺れない観点（引用先が入力に存在する、不正な根拠IDが本文に残らない、生成 UI の状態と品質ゲートの判定）だけです。文章の良し悪しは判定しません。ケースを足すときは根拠IDを手書きせず、出典は `label` で参照し `{{cite:label}}` を本文に書きます。
+- 記憶の照合（`services/context_vault_reconcile.py`）の回帰データセットは `tests/fixtures/llm_eval/context_reconcile_cases_v1.json` に固定し、`tests/unit/test_context_reconcile_eval.py` が実行します。固定した LLM 応答に対して、応答の検証・対象 id の実在・状態による読み替え・同じ対象への複数の更新だけを判定します。読み込みの検証は `tests/helpers/context_reconcile_eval.py` が行います。
 - ケースを足したら、そのケースが守っている規則を実装側で一時的に壊し、テストが落ちることを確認してから固定します。落ちないケースは回帰を検出できていないため、期待値の粒度（どの指摘が出るか、本文がどう残るか）を上げます。
 
 ## UI 実装規約
