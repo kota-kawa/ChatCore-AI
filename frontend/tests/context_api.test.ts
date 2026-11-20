@@ -67,13 +67,17 @@ test("loadContextFacts sends the trimmed search query as q and omits an empty on
     await loadContextFacts({ status: "active", query: "   " });
     await loadContextFacts({ status: "active", query: null });
     await loadContextFacts({ status: "deprecated", factType: "profile", cursor: "c1", query: "住所" });
+    await loadContextFacts({ status: "active", query: " 、。 ,; " });
 
-    const [searched, blank, none, combined] = requestedUrls.map((url) => new URL(url, "https://example.com").searchParams);
+    const [searched, blank, none, combined, punctuationOnly] = requestedUrls.map((url) => new URL(url, "https://example.com").searchParams);
     // 記号は URL エンコードされて 1 つの値として届く（クエリの区切りや LIKE の記号をここで加工しない）。
     // Symbols are URL-encoded into one value (the client does not touch query separators or LIKE symbols).
     assert.equal(searched?.get("q"), "東京 100%_");
     assert.equal(blank?.has("q"), false);
     assert.equal(none?.has("q"), false);
+    // 語が 1 つも残らない検索語はサーバーが「検索なし」として扱うので、送らない。
+    // A query that leaves no term is "no search" to the server, so it is not sent.
+    assert.equal(punctuationOnly?.has("q"), false);
     assert.deepEqual(
       [combined?.get("q"), combined?.get("status"), combined?.get("fact_type"), combined?.get("cursor")],
       ["住所", "deprecated", "profile", "c1"],

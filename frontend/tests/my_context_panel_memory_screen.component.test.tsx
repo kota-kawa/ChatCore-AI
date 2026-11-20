@@ -256,6 +256,22 @@ describe("MyContextPanel search", () => {
     expect(screen.queryByRole("button", { name: "検索をクリア" })).not.toBeInTheDocument();
   });
 
+  it("treats a punctuation-only query as no search: no re-fetch and no search-style empty message", async () => {
+    // サーバーは語が 0 個の検索語を「検索なし」として全件を返す。画面も同じ取得・同じ表示にする。
+    // The server treats a query with no terms as "no search" and returns everything; the screen fetches and shows the same.
+    const load = vi.fn().mockResolvedValue(page([]));
+    renderPanel({ load });
+    await screen.findByText("まだ記憶がありません。「記憶を追加」から保存してみましょう。");
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "記憶を検索" }), { target: { value: " ,、 " } });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    });
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("まだ記憶がありません。「記憶を追加」から保存してみましょう。")).toBeInTheDocument();
+    expect(screen.queryByText(/に一致する記憶はありません/)).not.toBeInTheDocument();
+  });
+
   it("does not re-fetch for a query that only changes by whitespace", async () => {
     const load = vi.fn().mockResolvedValue(page([fact()]));
     renderPanel({ load });

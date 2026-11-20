@@ -7,6 +7,7 @@ import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { setLoggedInState } from "../../scripts/core/app_state";
 import { writeCachedAuthState } from "../../scripts/core/auth_state_cache";
 import { memoFetchJsonOrThrow } from "./api";
+import { splitSearchTerms } from "./search_highlight";
 import type { HttpError } from "./types";
 import type {
   ContextExtractionSettings,
@@ -111,8 +112,18 @@ function normalizeContextFact(fact: ContextFact): ContextFact {
   };
 }
 
-// 記憶の一覧を種類・状態・検索語で絞り込んで取得する。検索語は前後の空白を除き、空なら送らない。
-// Load the Memory list, filtered by fact type / status / search query; the query is trimmed and omitted when empty.
+// 検索語を、サーバーが実際に使う形にそろえる。前後の空白を除き、語に分けて 1 つも残らない（空・空白・句読点だけ）なら空文字にする。
+// サーバーは語が 0 個の検索語を「検索なし」として全件を返すので、画面も同じく検索なしとして扱い、取得の条件と表示が食い違わないようにする。
+// Normalizes a search query to what the server actually uses: trimmed, and an empty string when no term is left after splitting
+// (empty, whitespace or punctuation only). The server treats a query with no terms as "no search" and returns everything, so the
+// screen treats it as no search too, keeping what is fetched and what is shown in step.
+export function normalizeContextSearchQuery(query: string | null | undefined): string {
+  const trimmed = (query ?? "").trim();
+  return splitSearchTerms(trimmed).length > 0 ? trimmed : "";
+}
+
+// 記憶の一覧を種類・状態・検索語で絞り込んで取得する。検索語は normalizeContextSearchQuery で整え、検索なしなら送らない。
+// Load the Memory list, filtered by fact type / status / search query; the query is normalized by normalizeContextSearchQuery and omitted when it means no search.
 export async function loadContextFacts(params: {
   factType?: ContextFactType | null;
   status?: ContextFactStatus;
@@ -123,7 +134,7 @@ export async function loadContextFacts(params: {
   if (params.factType) query.set("fact_type", params.factType);
   query.set("status", params.status ?? "active");
   if (params.cursor) query.set("cursor", params.cursor);
-  const searchText = params.query?.trim();
+  const searchText = normalizeContextSearchQuery(params.query);
   if (searchText) query.set("q", searchText);
 
   const res = await resilientFetch(`/api/context-facts?${query.toString()}`, {

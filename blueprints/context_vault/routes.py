@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import unicodedata
 
 from fastapi import APIRouter, Depends, Request
 from starlette.responses import Response
@@ -36,6 +37,7 @@ from services.error_messages import (
     ERROR_CONTEXT_EXTRACTION_SETTINGS_PAYLOAD_INVALID,
     ERROR_CONTEXT_FACT_DELETE_ALL_CONFIRMATION_REQUIRED,
     ERROR_CONTEXT_FACT_REVISION_REQUIRED,
+    ERROR_CONTEXT_FACT_SEARCH_QUERY_INVALID,
     ERROR_CONTEXT_FACT_SEARCH_QUERY_TOO_LONG,
     ERROR_CONTEXT_MEMORY_USE_SETTINGS_PAYLOAD_INVALID,
     ERROR_CONTEXT_VAULT_EXPORT_FORMAT_INVALID,
@@ -66,6 +68,7 @@ from services.web import (
 from .constants import (
     CONTEXT_FACT_CREATE_ERROR,
     CONTEXT_FACT_DELETE_ERROR,
+    CONTEXT_FACT_LIST_ERROR,
     CONTEXT_FACT_UPDATE_ERROR,
     DEFAULT_CONTEXT_LIST_LIMIT,
     DELETE_ALL_CONFIRMATION,
@@ -95,6 +98,14 @@ def _internal_error_without_parameters(context: str, exc: Exception, message: st
         extra={"error_type": type(exc).__name__, "sqlstate": getattr(getattr(exc, "orig", None), "sqlstate", None)},
     )
     return jsonify({"status": "fail", "error": message, "code": "internal_error"}, status_code=500)
+
+
+# 日本語: 検索語に、空白として語を区切る以外の制御文字(NUL など)が入っているか。PostgreSQL は text に NUL を入れられず、そのまま検索へ
+# 渡すと失敗するため、メールアドレスの検証と同じく入力の段階で弾く。
+# English: Whether a search query holds a control character other than the whitespace that separates terms (NUL and the like).
+# PostgreSQL cannot hold NUL in text, so passing it on would fail the search; it is rejected at input, as email validation does.
+def _has_non_whitespace_control_character(value: str) -> bool:
+    return any(unicodedata.category(char) == "Cc" and not char.isspace() for char in value)
 
 
 async def _require_bounded_import_json(request: Request):
@@ -166,6 +177,8 @@ async def api_list_context_facts(
     query = q.strip() if q is not None else None
     if query is not None and len(query) > MAX_CONTEXT_SEARCH_QUERY_LENGTH:
         return jsonify({"status": "fail", "error": ERROR_CONTEXT_FACT_SEARCH_QUERY_TOO_LONG}, status_code=400)
+    if query is not None and _has_non_whitespace_control_character(query):
+        return jsonify({"status": "fail", "error": ERROR_CONTEXT_FACT_SEARCH_QUERY_INVALID}, status_code=400)
 
     safe_limit = max(1, min(int(limit), MAX_CONTEXT_LIST_LIMIT))
     try:
@@ -180,6 +193,8 @@ async def api_list_context_facts(
         return jsonify(result.model_dump())
     except ApiServiceError as exc:
         return jsonify_service_error(exc, status="fail")
+    except Exception as exc:
+        return _internal_error_without_parameters("Failed to list memories.", exc, CONTEXT_FACT_LIST_ERROR)
 
 
 @context_vault_bp.get("/export", name="context_vault.api_export")

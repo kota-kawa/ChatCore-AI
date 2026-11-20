@@ -190,6 +190,11 @@ _ENGLISH_BY_JAPANESE_TEXT: dict[str, str] = {
     "revisionを1以上の整数で指定してください。": "Specify revision as an integer of 1 or more.",
     "すべての記憶を削除するには、確認の値を指定してください。": "Provide the confirmation value to delete all memories.",
     "検索語が長すぎます。": "The search query is too long.",
+    "検索語に使用できない文字が含まれています。": "The search query contains characters that cannot be used.",
+    "コンテキストを取得できませんでした。": "Could not load the context.",
+    "コンテキストを保存できませんでした。": "Could not save the context.",
+    "コンテキストを更新できませんでした。": "Could not update the context.",
+    "コンテキストを削除できませんでした。": "Could not delete the context.",
     "インポート形式が不正です。": "The import format is invalid.",
     "エクスポート形式が不正です。": "The export format is invalid.",
 }

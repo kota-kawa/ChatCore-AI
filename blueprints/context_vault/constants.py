@@ -12,6 +12,7 @@ DEFAULT_CONTEXT_LIST_LIMIT = 50
 CONTEXT_FACT_CREATE_ERROR = "コンテキストを保存できませんでした。"
 CONTEXT_FACT_UPDATE_ERROR = "コンテキストを更新できませんでした。"
 CONTEXT_FACT_DELETE_ERROR = "コンテキストを削除できませんでした。"
+CONTEXT_FACT_LIST_ERROR = "コンテキストを取得できませんでした。"
 
 # 一覧の検索語の最大文字数。
 # The longest search query the list accepts.

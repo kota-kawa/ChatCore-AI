@@ -2,12 +2,17 @@
 ほかの絞り込みとの受け渡し)を検証するテスト。
 
 Tests how the memory list route (GET /api/context-facts) handles the search query q: trimming, treating a blank as no search,
-rejecting an overlong query, and passing it along with the other filters.
+rejecting an overlong query or one with control characters, passing it along with the other filters, and logging an unexpected
+failure without the query.
 """
 
 import asyncio
+import json
+import logging
 import unittest
 from unittest.mock import AsyncMock, patch
+
+from sqlalchemy.exc import DBAPIError
 
 from blueprints.context_vault.constants import MAX_CONTEXT_SEARCH_QUERY_LENGTH
 from blueprints.context_vault.routes import api_list_context_facts
@@ -41,6 +46,39 @@ class ListSearchRouteTestCase(unittest.TestCase):
         response, service = self._list(q="a" * (MAX_CONTEXT_SEARCH_QUERY_LENGTH + 1))
         self.assertEqual(response.status_code, 400)
         service.assert_not_awaited()
+
+    def test_query_with_a_control_character_is_400_without_reaching_the_service(self):
+        # NUL は PostgreSQL の text に入れられず、そのまま渡すと 500 になる。他の制御文字も検索語としては意味がない。
+        # NUL cannot be held in PostgreSQL text and would end in a 500; other control characters mean nothing in a search either.
+        for query in ("a\x00b", "\x00", "東京\x07", "a\x1bb", "a\x7fb"):
+            with self.subTest(query=query):
+                response, service = self._list(q=query)
+                self.assertEqual(response.status_code, 400)
+                service.assert_not_awaited()
+
+    def test_whitespace_between_terms_is_not_a_control_character_error(self):
+        for query in ("東京\t住所", "東京\n住所", "東京\u3000住所"):
+            with self.subTest(query=query):
+                response, service = self._list(q=query)
+                self.assertEqual(response.status_code, 200)
+                service.assert_awaited_once()
+
+    def test_unexpected_failure_is_logged_without_the_query_or_a_traceback(self):
+        # SQLAlchemy の例外は SQL のパラメータ（検索語）を文面に含む。ログにも応答にも検索語を出さない。
+        # A SQLAlchemy exception carries the SQL parameters (the query) in its text; neither the log nor the response may show it.
+        secret = "秘密の検索語"
+        boom = DBAPIError("SELECT ...", {"q": secret}, Exception("boom"))
+        request = build_request(method="GET", path="/api/context-facts", session={"user_id": 7})
+        with (
+            patch("blueprints.context_vault.routes.list_facts", new=AsyncMock(side_effect=boom)),
+            self.assertLogs("blueprints.context_vault", level=logging.ERROR) as logs,
+        ):
+            response = asyncio.run(api_list_context_facts(request, q=secret))
+        self.assertEqual(response.status_code, 500)
+        self.assertNotIn(secret, response.body.decode())
+        self.assertEqual(json.loads(response.body)["code"], "internal_error")
+        self.assertIsNone(logs.records[0].exc_info)
+        self.assertNotIn(secret, str(logs.records[0].__dict__))
 
 
 if __name__ == "__main__":

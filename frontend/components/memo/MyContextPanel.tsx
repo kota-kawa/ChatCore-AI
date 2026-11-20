@@ -13,6 +13,7 @@ import {
   deleteAllContextFacts as defaultDeleteAll,
   deleteContextFact as defaultDeleteOne,
   loadContextFacts as defaultLoad,
+  normalizeContextSearchQuery,
   revertContextFactReplacement as defaultRevert,
   updateContextFact as defaultUpdate,
 } from "../../lib/memo/context_api";
@@ -131,9 +132,9 @@ export function MyContextPanel({
   const activeFilterKeyRef = useRef<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
 
-  // 検索は語の一致だけ（意味検索は使わない）。前後の空白を除いた語を、入力が止まってから取得に使う。
-  // Search is term matching only (no semantic search); the trimmed query is used for fetching once typing pauses.
-  const searchQuery = useDebouncedValue(searchInput.trim(), SEARCH_DEBOUNCE_MS);
+  // 検索は語の一致だけ（意味検索は使わない）。サーバーが使う形にそろえた語（句読点だけなら検索なし）を、入力が止まってから取得に使う。
+  // Search is term matching only (no semantic search); the query, normalized to what the server uses (punctuation only means no search), is used for fetching once typing pauses.
+  const searchQuery = useDebouncedValue(normalizeContextSearchQuery(searchInput), SEARCH_DEBOUNCE_MS);
 
   // 絞り込み条件ごとの取得キー。未ログインのときは null にして取得しない。
   // Fetch key per filter combination; null when logged out so nothing is fetched.
