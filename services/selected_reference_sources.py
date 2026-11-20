@@ -21,7 +21,7 @@ from functools import partial
 from typing import Any
 
 from services.personal_knowledge import build_personal_overview
-from services.selected_reference_context import PERSONAL_KNOWLEDGE_SOURCE
+from services.selected_reference_context import PERSONAL_KNOWLEDGE_SOURCE, lookup_query_key
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +52,6 @@ class DeduplicatedLookup:
         self._lock = threading.Lock()
         self._searched: set[str] = set()
 
-    # 空白の連続と大文字小文字の差を無視して同一クエリとみなすための正規化キー。
-    # Normalized key so queries differing only in whitespace runs or letter case count as the same query.
-    @staticmethod
-    def _key(query: str) -> str:
-        return " ".join(str(query or "").split()).casefold()
-
     # 実行済みのクエリなら検索せず already_searched を返し、未実行なら検索して成功時だけ記録する。
     # 空クエリ（key が空）は重複判定の対象にせず、毎回そのまま検索へ渡す。
     # 検索が非同期（DB 検索）のときは、結果が出てから記録する awaitable を返す。呼び出し側は同期の値と awaitable の両方を受け取る。
@@ -66,7 +60,7 @@ class DeduplicatedLookup:
     # With an async search (a database lookup) an awaitable is returned that records the query once the result is in; callers accept
     # both a plain value and an awaitable.
     def __call__(self, query: str) -> Any:
-        key = self._key(query)
+        key = lookup_query_key(query)
         if key:
             with self._lock:
                 if key in self._searched:

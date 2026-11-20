@@ -20,7 +20,9 @@ from services.selected_reference_context import (
     CandidateQueryPlan,
     augment_messages_with_selected_references,
     augment_messages_with_selected_references_async,
+    lookup_query_key,
 )
+from services.selected_reference_sources import DeduplicatedLookup
 
 
 # 日本語: 選択された参照元を検索し、その結果をメッセージへ組み込む処理全体を検証するテストクラス。
@@ -625,6 +627,141 @@ class CandidateQueryPlanTestCase(unittest.TestCase):
         )
 
         self.assertEqual(list(plan), ["それを詳しく", "沖縄旅行 予算 詳細"])
+
+
+# 日本語: 事前検索の言い換えが、DeduplicatedLookup の already_searched に打ち切られないことを検証するテストクラス。
+# English: Test class that rephrased prefetch retries are not cut short by DeduplicatedLookup's already_searched.
+class RephrasingAfterAlreadySearchedTestCase(unittest.IsolatedAsyncioTestCase):
+    query = "Project Plan"
+
+    def setUp(self):
+        # 2 つ目は大文字小文字と空白だけが違い（DeduplicatedLookup の同一キー）、3 つ目は別の語。
+        # The second differs only in case and whitespace (the same DeduplicatedLookup key); the third is a different query.
+        patcher = patch(
+            "services.selected_reference_context.rewrite_reference_query",
+            return_value=["project  plan", "週次 計画"],
+        )
+        self.rewrite = patcher.start()
+        self.addCleanup(patcher.stop)
+        self.messages = [{"role": "user", "content": self.query}]
+
+    def _searches(self, results):
+        calls: list[str] = []
+
+        async def raw(query):
+            calls.append(query)
+            return results.get(query, {"status": "no_results", "query": query})
+
+        return calls, DeduplicatedLookup(raw, source_label="memo")
+
+    # 日本語: 空白・大文字小文字だけ違う言い換えは試行に数えず、次の言い換えを試し、0 件なら棚卸しが入ります。
+    async def test_memo_rephrasing_skips_case_and_whitespace_variants_and_hands_over_the_inventory(self):
+        calls, search = self._searches({})
+        overview = AsyncMock(return_value={"recent_memos": [{"id": 1, "title": "8月の目標"}]})
+
+        augmented = await augment_messages_with_selected_references_async(
+            self.messages, query=self.query, personal_knowledge_search=search, personal_overview=overview
+        )
+
+        self.assertEqual(calls, ["Project Plan", "週次 計画"])
+        context = augmented[0]["content"]
+        self.assertIn('"status":"no_results"', context)
+        self.assertNotIn("already_searched", context)
+        self.assertIn('"attempted_queries":["Project Plan","週次 計画"]', context)
+        overview.assert_awaited_once()
+        self.assertIn(PERSONAL_OVERVIEW_TAG, context)
+
+    # 日本語: 後続の言い換えで見つかれば、その結果が最終の結果になります。
+    async def test_memo_rephrasing_reaches_a_later_hit(self):
+        hit = {"status": "ok", "memo_count": 1, "memos": [{"title": "週次計画"}]}
+        calls, search = self._searches({"週次 計画": hit})
+
+        augmented = await augment_messages_with_selected_references_async(
+            self.messages, query=self.query, personal_knowledge_search=search
+        )
+
+        self.assertEqual(calls, ["Project Plan", "週次 計画"])
+        self.assertIn("週次計画", augmented[0]["content"])
+
+    # 日本語: 共有プロンプトの検索（同じ DeduplicatedLookup）でも同じです。
+    async def test_shared_prompt_rephrasing_tries_the_next_rewrite(self):
+        calls, search = self._searches({})
+
+        augmented = await augment_messages_with_selected_references_async(
+            self.messages, query=self.query, shared_prompt_search=search
+        )
+
+        self.assertEqual(calls, ["Project Plan", "週次 計画"])
+        context = augmented[0]["content"]
+        self.assertIn('"status":"no_results"', context)
+        self.assertNotIn("already_searched", context)
+
+    # 日本語: 候補の重複除去を通っても already_searched が返った語は「試し済み」として次へ進み、直前の 0 件を保ちます（非同期）。
+    async def test_already_searched_candidate_moves_on_and_keeps_the_previous_result_async(self):
+        calls: list[str] = []
+
+        async def search(query):
+            calls.append(query)
+            if query == "旧 計画":
+                return {"status": "already_searched", "query": query}
+            return {"status": "no_results", "query": query}
+
+        with patch(
+            "services.selected_reference_context.rewrite_reference_query", return_value=["旧 計画", "週次 計画"]
+        ):
+            overview = AsyncMock(return_value={"recent_memos": [{"id": 1, "title": "x"}]})
+            augmented = await augment_messages_with_selected_references_async(
+                self.messages, query=self.query, personal_knowledge_search=search, personal_overview=overview
+            )
+
+        self.assertEqual(calls, ["Project Plan", "旧 計画", "週次 計画"])
+        self.assertNotIn("already_searched", augmented[0]["content"])
+        overview.assert_awaited_once()
+
+    # 日本語: 同期版も同じです。残りの言い換えがすべて試し済みでも、最終の結果は直前の 0 件です。
+    def test_already_searched_candidates_keep_the_previous_result_sync(self):
+        calls: list[str] = []
+
+        def search(query):
+            calls.append(query)
+            if query == "Project Plan":
+                return {"status": "no_results", "query": query}
+            return {"status": "already_searched", "query": query}
+
+        overview = Mock(return_value={"recent_memos": [{"id": 1, "title": "x"}]})
+        with patch(
+            "services.selected_reference_context.rewrite_reference_query", return_value=["旧 計画", "別 計画"]
+        ):
+            augmented = augment_messages_with_selected_references(
+                self.messages, query=self.query, personal_knowledge_search=search, personal_overview=overview
+            )
+
+        self.assertEqual(calls, ["Project Plan", "旧 計画", "別 計画"])
+        context = augmented[0]["content"]
+        self.assertIn('"status":"no_results"', context)
+        self.assertNotIn("already_searched", context)
+        overview.assert_called_once_with()
+
+    # 日本語: 事前検索済みの語をモデルがツールで同じ語（空白・大文字小文字違いを含む）で呼ぶと already_searched を返します。
+    async def test_tool_call_with_a_prefetched_query_is_still_already_searched(self):
+        calls, search = self._searches({})
+
+        await augment_messages_with_selected_references_async(
+            self.messages, query=self.query, personal_knowledge_search=search
+        )
+        repeated = search("PROJECT   plan")
+
+        self.assertEqual(repeated["status"], "already_searched")
+        self.assertEqual(calls, ["Project Plan", "週次 計画"])
+
+
+class LookupQueryKeyTestCase(unittest.TestCase):
+    # 日本語: 検索語の重複除去は DeduplicatedLookup と同じキー（空白の連続と大文字小文字を無視）を使います。
+    def test_candidate_plan_dedups_by_the_lookup_key(self):
+        self.assertEqual(lookup_query_key("Project  Plan "), lookup_query_key("project plan"))
+        plan = CandidateQueryPlan("Project Plan", rewrite=lambda *_a, **_k: ["project  plan", "PROJECT PLAN", "週次 計画"])
+
+        self.assertEqual(list(plan), ["Project Plan", "週次 計画"])
 
 
 if __name__ == "__main__":

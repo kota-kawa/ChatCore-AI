@@ -118,6 +118,19 @@ def previous_user_message(messages: Sequence[dict[str, Any]]) -> str:
     return _normalize_query(user_contents[-2], MAX_PREVIOUS_TURN_QUERY_CHARS)
 
 
+def lookup_query_key(query: str) -> str:
+    """検索語の同一性を測るキー。空白の連続と大文字小文字の差を無視する。
+
+    言い換えの候補の重複除去（CandidateQueryPlan）と、同じ検索語の再実行を止める DeduplicatedLookup が同じ規則を使う。
+    別々の規則だと、候補としては別の語が already_searched で返り、後続の言い換えが試されなくなる。
+
+    The identity key of a search query: whitespace runs and letter case are ignored. The candidate dedup (CandidateQueryPlan)
+    and DeduplicatedLookup share this one rule; with two rules a candidate that counts as new would come back already_searched
+    and the later rephrasings would never be tried.
+    """
+    return " ".join(str(query or "").split()).casefold()
+
+
 class CandidateQueryPlan:
     """元の発話に続けて、LLM が作った言い換えの検索語を順に出す候補列。
 
@@ -164,8 +177,9 @@ class CandidateQueryPlan:
                 self._rewritten = rewritten if isinstance(rewritten, list) else []
             return self._rewritten
 
-    # 日本語: 元の発話 → 言い換えの順に、重複と空を除いて最大 MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS 件まで出す。
-    # English: Yield the original turn, then the rewrites, skipping blanks and duplicates, up to MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS.
+    # 日本語: 元の発話 → 言い換えの順に、空と重複（lookup_query_key が同じもの）を除いて最大 MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS 件まで出す。
+    # English: Yield the original turn, then the rewrites, skipping blanks and duplicates (same lookup_query_key), up to
+    # MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS.
     def __iter__(self) -> Iterator[str]:
         seen: set[str] = set()
         emitted = 0
@@ -177,9 +191,10 @@ class CandidateQueryPlan:
             # The rewrite is only produced once the first candidate has missed.
             candidates = cast(Iterable[str], group() if callable(group) else group)
             for candidate in candidates:
-                if not candidate or candidate in seen:
+                key = lookup_query_key(candidate)
+                if not key or key in seen:
                     continue
-                seen.add(candidate)
+                seen.add(key)
                 emitted += 1
                 yield candidate
                 if emitted >= MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS:
@@ -238,6 +253,7 @@ def _run_lookup(
     payload: dict[str, Any] = {}
     for candidate in candidates:
         attempted_queries.append(candidate)
+        previous = payload
         payload = _run_lookup_once(search, candidate, source_label=source_label)
         for _ in range(MAX_SELECTED_REFERENCE_FAILURE_RETRIES):
             if payload.get("status") != "failed":
@@ -245,6 +261,12 @@ def _run_lookup(
             logger.info("Retrying the selected %s lookup once after a failure.", source_label)
             payload = _run_lookup_once(search, candidate, source_label=source_label)
         status = payload.get("status")
+        if status == "already_searched":
+            # 試し済みの語だった。結果は無いので、直前の有意な結果（0 件など）を保って次の候補へ進む。
+            # The query was already tried. It carries no result, so keep the previous meaningful result (such as zero hits)
+            # and move on to the next candidate.
+            payload = previous or payload
+            continue
         if status == "failed":
             # 参照元自体が落ちている状態は言い換えでは直らないため、残りの試行は使わない。
             # Rephrasing cannot fix a source that is down, so do not spend the remaining attempts.
@@ -357,6 +379,7 @@ async def _run_lookup_async(
         if candidate is None:
             break
         attempted_queries.append(candidate)
+        previous = payload
         payload = await _run_lookup_once_async(search, candidate, source_label=source_label)
         for _ in range(MAX_SELECTED_REFERENCE_FAILURE_RETRIES):
             if payload.get("status") != "failed":
@@ -364,6 +387,12 @@ async def _run_lookup_async(
             logger.info("Retrying the selected %s lookup once after a failure.", source_label)
             payload = await _run_lookup_once_async(search, candidate, source_label=source_label)
         status = payload.get("status")
+        if status == "already_searched":
+            # 試し済みの語だった。結果は無いので、直前の有意な結果（0 件など）を保って次の候補へ進む。
+            # The query was already tried. It carries no result, so keep the previous meaningful result (such as zero hits)
+            # and move on to the next candidate.
+            payload = previous or payload
+            continue
         if status == "failed":
             break
         if status != "no_results":
