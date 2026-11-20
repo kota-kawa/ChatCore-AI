@@ -29,6 +29,7 @@
 - [0022: 宣言的UIとsandbox Artifactを併用する](0022-native-and-sandbox-generated-ui.md)
 - [0023: チャットから抽出した記憶は承認を待たず、未確認の事実として自動保存する](0023-auto-save-extracted-memory.md)
 - [0024: 回答の実行記録を本文から分け、回答パーツとして構造化する](0024-structured-answer-trace.md)
+- [0025: 記憶を出典つきで保存し、毎ターン使い、発言に合わせて更新する](0025-always-on-memory-with-provenance.md)
 
 ## 追加・更新の基準
 
