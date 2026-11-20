@@ -4286,7 +4286,6 @@ class ChatStreamingTestCase(unittest.TestCase):
             patch("blueprints.chat.messages._fetch_chat_history", side_effect=fetch_history),
             patch("blueprints.chat.messages.get_user_by_id", return_value={}),
             patch("blueprints.chat.messages.get_room_summary", return_value={}),
-            patch("blueprints.chat.messages.list_room_memory_facts", return_value=[]),
             patch("blueprints.chat.messages.rebuild_room_summary"),
             patch("services.chat_use_case.generate_chat_room_title", return_value=None),
             patch(
@@ -4383,7 +4382,6 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
             patch("blueprints.chat.messages.get_user_by_id", new=AsyncMock(return_value={})),
             patch("blueprints.chat.messages.get_room_summary", new=AsyncMock(return_value={})),
-            patch("blueprints.chat.messages.list_room_memory_facts", new=AsyncMock(return_value=[])),
             patch(
                 "blueprints.chat.messages.get_room_web_search_contexts",
                 new=AsyncMock(return_value=[]),
@@ -4461,7 +4459,6 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
             patch("blueprints.chat.messages.get_user_by_id", new=AsyncMock(return_value={})),
             patch("blueprints.chat.messages.get_room_summary", new=AsyncMock(return_value={})),
-            patch("blueprints.chat.messages.list_room_memory_facts", new=AsyncMock(return_value=[])),
             patch(
                 "blueprints.chat.messages.get_room_web_search_contexts",
                 new=AsyncMock(return_value=[]),
@@ -4544,7 +4541,6 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
             patch("blueprints.chat.messages.get_user_by_id", new=AsyncMock(return_value={})),
             patch("blueprints.chat.messages.get_room_summary", new=AsyncMock(return_value={})),
-            patch("blueprints.chat.messages.list_room_memory_facts", new=AsyncMock(return_value=[])),
             patch(
                 "blueprints.chat.messages.get_room_web_search_contexts",
                 new=AsyncMock(return_value=[]),
@@ -4705,9 +4701,6 @@ class ChatStreamingTestCase(unittest.TestCase):
             stack.enter_context(patch("blueprints.chat.messages.get_user_by_id", new=AsyncMock(return_value={})))
             stack.enter_context(patch("blueprints.chat.messages.get_room_summary", new=AsyncMock(return_value={})))
             stack.enter_context(
-                patch("blueprints.chat.messages.list_room_memory_facts", new=AsyncMock(return_value=[]))
-            )
-            stack.enter_context(
                 patch(
                     "blueprints.chat.messages.get_room_web_search_contexts",
                     new=AsyncMock(return_value=[]),
@@ -4771,7 +4764,6 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
             patch("blueprints.chat.messages.get_user_by_id", new=AsyncMock(return_value={})),
             patch("blueprints.chat.messages.get_room_summary", new=AsyncMock(return_value={})),
-            patch("blueprints.chat.messages.list_room_memory_facts", new=AsyncMock(return_value=[])),
             patch(
                 "blueprints.chat.messages.get_room_web_search_contexts",
                 new=AsyncMock(return_value=[]),
@@ -4832,7 +4824,6 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
             patch("blueprints.chat.messages.get_user_by_id", new=AsyncMock(return_value={})),
             patch("blueprints.chat.messages.get_room_summary", new=AsyncMock(return_value={})),
-            patch("blueprints.chat.messages.list_room_memory_facts", new=AsyncMock(return_value=[])),
             patch(
                 "blueprints.chat.messages.get_room_web_search_contexts",
                 new=AsyncMock(return_value=[]),
@@ -4898,7 +4889,6 @@ class ChatStreamingTestCase(unittest.TestCase):
             ),
             patch("blueprints.chat.messages.get_user_by_id", new=AsyncMock(return_value={})),
             patch("blueprints.chat.messages.get_room_summary", new=AsyncMock(return_value={})),
-            patch("blueprints.chat.messages.list_room_memory_facts", new=AsyncMock(return_value=[])),
             patch(
                 "blueprints.chat.messages.get_room_web_search_contexts",
                 new=AsyncMock(return_value=[]),
@@ -4995,6 +4985,35 @@ class ChatStreamingTestCase(unittest.TestCase):
         payload = json.loads(history_response.body.decode("utf-8"))
         self.assertEqual(payload["pagination"]["limit"], CHAT_HISTORY_PAGE_SIZE_DEFAULT)
         fetch_history.assert_called_once_with("room-7", CHAT_HISTORY_PAGE_SIZE_DEFAULT, None)
+
+    # 日本語: 履歴の応答は、ルーム内記憶（廃止済み）の項目を持たず、通常・一時・ゲストのどれでも同じ形で返すことを検証します。
+    # English: The history payload carries no room-memory field (retired) and has the same keys for a normal, a temporary and a guest room.
+    def test_get_chat_history_payload_has_no_room_memory_field(self):
+        expected_keys = {"messages", "pagination", "room_mode", "summary"}
+        page = {"messages": [], "pagination": {"limit": 25, "has_more": False, "next_before_id": None}}
+
+        def history_payload(session, room_target):
+            request = build_request(
+                method="GET", path="/api/get_chat_history", session=session, query_string=b"room_id=room-7"
+            )
+            with (
+                patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
+                patch("blueprints.chat.messages._resolve_authenticated_room_target", return_value=room_target),
+                patch("blueprints.chat.messages._fetch_chat_history", return_value=dict(page)),
+                patch("blueprints.chat.messages._validate_guest_room_access", return_value=("sid-1", None)),
+                patch("blueprints.chat.messages.ephemeral_store.get_messages", return_value=[]),
+            ):
+                return json.loads(asyncio.run(get_chat_history(request)).body.decode("utf-8"))
+
+        for label, session, room_target in (
+            ("normal", {"user_id": 24}, ("normal", "sid-1", None)),
+            ("temporary", {"user_id": 24}, ("temporary", "sid-1", None)),
+            ("guest", {"guest_room_ids": ["room-7"]}, None),
+        ):
+            with self.subTest(label):
+                payload = history_payload(session, room_target)
+                self.assertEqual(set(payload), expected_keys)
+                self.assertEqual(payload["summary"], "")
 
     # 日本語: セッションに登録されていないゲストルームの履歴取得要求に対して、404エラーを返すことを検証します。
     # English: Verify that requesting history for a guest room not registered in the session returns a 404 error.

@@ -103,8 +103,6 @@ class ChatUseCaseUrlContextTestCase(unittest.TestCase):
             get_user_by_id=Mock(return_value={}),
             build_user_profile_prompt=Mock(return_value=None),
             get_room_summary=Mock(return_value={"summary": ""}),
-            list_room_memory_facts=Mock(return_value=[]),
-            remember_facts_from_message=Mock(return_value=[]),
             rename_chat_room_if_current_title_in=Mock(return_value=False),
             load_project_context=Mock(return_value=None),
             build_context_messages=build_context_messages,

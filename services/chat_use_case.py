@@ -211,7 +211,6 @@ class _ChatPostTurn:
     prompt_tools_enabled: bool = False
     project_instructions: str | None = None
     room_summary: str = ""
-    memory_facts: list[str] = field(default_factory=list)
     conversation_messages: list[dict[str, Any]] = field(default_factory=list)
     # 日本語: 通常ルームでは、発話保存と同じルームツリー読み出しから得た過去ターンの
     #         検索結果。改めて DB を読まないための引き渡し先。
@@ -708,11 +707,11 @@ class ChatPostUseCase:
     # フェーズ5: プロンプト文脈の読み込み / Phase 5: loading prompt context
     # ------------------------------------------------------------------
     async def _load_prompt_context(self, turn: _ChatPostTurn) -> None:
-        """タスク定義・スキル・プロジェクト・記憶をまとめて読み込みます / Load task definitions, skills, project context and memory."""
+        """タスク定義・スキル・プロジェクト・要約をまとめて読み込みます / Load task, skills, project context and the room summary."""
         await self._load_task_prompt(turn)
         await self._load_user_skills_and_profile(turn)
         await self._load_project_instructions(turn)
-        await self._load_room_memory(turn)
+        await self._load_room_summary(turn)
 
     async def _load_task_prompt(self, turn: _ChatPostTurn) -> None:
         """最新のタスク起動リクエストと定義プロンプトの読み込み / Load the latest task launch request and corresponding task definitions."""
@@ -785,60 +784,20 @@ class ChatPostUseCase:
         except Exception:
             deps.logger.warning("Failed to load project context; proceeding without it.")
 
-    async def _load_room_memory(self, turn: _ChatPostTurn) -> None:
+    async def _load_room_summary(self, turn: _ChatPostTurn) -> None:
         """
-        通常のユーザーセッションの場合、要約とパーソナル記憶情報の読み込みと抽出
-        For normal user sessions, load summaries and extract/load personal memory facts.
+        通常のユーザーセッションの場合、ルームの要約を読み込む（最初のターンには要約が無いので読まない）
+        For normal user sessions, load the room summary (a first turn has none, so it is not read).
         """
         deps = self.deps
 
-        if not turn.targets_normal_room():
+        if not turn.targets_normal_room() or turn.should_auto_title_room:
             return
-        if not turn.should_auto_title_room:
-            try:
-                summary_payload = await _maybe_await(deps.persistence.get_room_summary(turn.chat_room_id))
-                turn.room_summary = str((summary_payload or {}).get("summary") or "")
-            except Exception:
-                deps.logger.warning("Failed to load room summary; proceeding without it.")
-            try:
-                turn.memory_facts = await _maybe_await(
-                    deps.persistence.list_room_memory_facts(turn.chat_room_id)
-                )
-            except Exception:
-                deps.logger.warning("Failed to load memory facts; proceeding without them.")
-        if turn.saved_user_message_id is not None:
-            self._defer_memory_fact_update(turn)
-
-    def _defer_memory_fact_update(self, turn: _ChatPostTurn) -> None:
-        """記憶抽出を応答経路の外へ回します / Move memory extraction off the response path."""
-        deps = self.deps
-        chat_room_id = turn.chat_room_id
-        user_id = turn.user_id
-        user_message = turn.user_message
-        saved_user_message_id = turn.saved_user_message_id
-
-        # 記憶抽出は元メッセージIDと結びつけて保存する。抽出自体がLLM呼び出しに
-        # なったため応答経路から外す。今ターンの発話は履歴としてそのまま文脈に
-        # 入っているので、抽出結果が要るのは次ターン以降であり遅延は問題ない。
-        # Memory extraction is tied to the source message id. It now costs an
-        # LLM call, so it runs off the response path: this turn already carries
-        # the user's message verbatim, and the extracted facts are only needed
-        # from the next turn onward.
         try:
-            deps.background.submit_background_task(
-                _run_async_callback,
-                lambda: deps.persistence.remember_facts_from_message(
-                    chat_room_id,
-                    user_id,
-                    user_message,
-                    source_message_id=saved_user_message_id,
-                ),
-            )
+            summary_payload = await _maybe_await(deps.persistence.get_room_summary(turn.chat_room_id))
+            turn.room_summary = str((summary_payload or {}).get("summary") or "")
         except Exception:
-            deps.logger.warning(
-                "Failed to schedule memory fact update for chat room %s.",
-                chat_room_id,
-            )
+            deps.logger.warning("Failed to load room summary; proceeding without it.")
 
     # ------------------------------------------------------------------
     # フェーズ6: 会話メッセージの構築 / Phase 6: assembling conversation messages
@@ -852,7 +811,6 @@ class ChatPostUseCase:
             user_profile_prompt=turn.user_profile_prompt,
             task_prompt=turn.task_prompt,
             room_summary=turn.room_summary,
-            memory_facts=turn.memory_facts,
             recent_messages=turn.normalized_all_messages,
             project_instructions=turn.project_instructions,
             user_skills_prompt=turn.user_skills_prompt,

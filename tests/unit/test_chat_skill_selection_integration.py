@@ -90,7 +90,7 @@ class ChatSkillSelectionIntegrationTests(unittest.TestCase):
             load_project_context_for_room=AsyncMock(return_value="Project guidance"),
             list_enabled_user_skills=AsyncMock(return_value=[]),
             get_user_by_id=AsyncMock(return_value=user if user is not None else {"id": 42}),
-            get_room_summary=AsyncMock(return_value={}), list_room_memory_facts=AsyncMock(return_value=[]),
+            get_room_summary=AsyncMock(return_value={}),
             get_room_web_search_contexts=AsyncMock(return_value=[]),
             consume_llm_daily_quota=Mock(return_value=(True, 1, 300)), check_usage_limit=AsyncMock(return_value=None),
             is_streaming_model=Mock(return_value=streaming),
@@ -100,7 +100,7 @@ class ChatSkillSelectionIntegrationTests(unittest.TestCase):
             cleanup_unanswered_user_messages=AsyncMock(),
         )
         return ChatRegenerationInput(
-            dependencies=deps, log_messages=ChatRegenerationLogMessages("profile", "summary", "memory", "rebuild"),
+            dependencies=deps, log_messages=ChatRegenerationLogMessages("profile", "summary", "rebuild"),
             chat_room_id="room-1", model="test-model", user_id=42, sid="sid-1", room_mode=room_mode,
             all_messages=[{"role": "user", "content": "それを保存して"}],
             assistant_parent_id=1, use_personal_knowledge=False, use_shared_prompts=False, locale="ja",

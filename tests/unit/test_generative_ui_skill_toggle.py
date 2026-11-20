@@ -24,7 +24,6 @@ def _assembled_prompt(user):
         user_profile_prompt=None,
         task_prompt=None,
         room_summary="",
-        memory_facts=[],
         recent_messages=[{"role": "user", "content": "グラフで見せて"}],
         user_skills_prompt=skills_context.prompt,
         generative_ui_enabled=skills_context.generative_ui_enabled,

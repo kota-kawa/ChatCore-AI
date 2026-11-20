@@ -137,8 +137,6 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             get_user_by_id=Mock(return_value={}),
             build_user_profile_prompt=Mock(return_value=None),
             get_room_summary=Mock(return_value={"summary": "should not load"}),
-            list_room_memory_facts=Mock(return_value=["should not load"]),
-            remember_facts_from_message=AsyncMock(return_value=["remembered fact"]),
             rename_chat_room_if_current_title_in=Mock(return_value=False),
             load_project_context=Mock(return_value=None),
             build_context_messages=build_context_messages,
@@ -201,27 +199,14 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
         # turn's history plus the persisted reply instead of another read.
         self.assertEqual(room_tree_reads, [0])
         deps.get_room_summary.assert_not_called()
-        deps.list_room_memory_facts.assert_not_called()
-        deps.remember_facts_from_message.assert_called_once_with(
-            "room-1",
-            42,
-            user_message,
-            source_message_id=1,
-        )
         self.assertEqual(
             captured_context["recent_messages"],
             [{"role": "user", "content": user_message}],
         )
-        # 記憶抽出はLLM呼び出しのため応答経路から外れており、今ターンの文脈には
-        # 反映されない。今ターンの発話自体は recent_messages に入っている。
-        # Memory extraction costs an LLM call and now runs off the response path,
-        # so it does not feed this turn's context; the message itself is already
-        # present in recent_messages.
-        self.assertEqual(captured_context["memory_facts"], [])
         deps.should_extract_context.assert_called_once_with(42)
-        # 記憶抽出と文脈候補抽出の2件がバックグラウンドへ回されること
-        # Both memory extraction and context-candidate extraction are backgrounded
-        self.assertEqual(submitted_context_checks.call_count, 2)
+        # 文脈候補の抽出だけがバックグラウンドへ回される（ルーム内記憶の抽出は無い）
+        # Only the context-candidate extraction is backgrounded; there is no room-memory extraction any more
+        self.assertEqual(submitted_context_checks.call_count, 1)
         self.assertEqual(
             submitted_context_checks.call_args_list[0].args[0].__name__,
             "_run_async_callback",

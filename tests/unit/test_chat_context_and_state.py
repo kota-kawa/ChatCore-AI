@@ -40,13 +40,12 @@ class ChatContextAndStateTestCase(unittest.TestCase):
 
     # 日本語: build_context_messages が、すべてのシステム文脈と最新メッセージを正しい順序で組み立てることを検証します。
     # English: Verify that build_context_messages assembles every system context and recent message in order.
-    def test_build_context_messages_includes_summary_memory_and_recent_messages(self):
+    def test_build_context_messages_includes_summary_and_recent_messages(self):
         context_messages = build_context_messages(
             base_system_prompt="base",
             user_profile_prompt="profile",
             task_prompt="task",
             room_summary="summary text",
-            memory_facts=["ユーザー名: Kota", "回答スタイルの希望: 箇条書き"],
             recent_messages=[
                 {"role": "user", "content": "first"},
                 {"role": "assistant", "content": "second"},
@@ -62,7 +61,6 @@ class ChatContextAndStateTestCase(unittest.TestCase):
         self.assertIn("project", context_messages[2]["content"])
         self.assertEqual(context_messages[3]["content"], "task")
         self.assertIn("summary text", context_messages[4]["content"])
-        self.assertIn("Kota", context_messages[5]["content"])
         contract_index = next(
             index for index, message in enumerate(context_messages)
             if message["content"] == GENERATIVE_UI_EXECUTION_CONTRACT
@@ -80,7 +78,6 @@ class ChatContextAndStateTestCase(unittest.TestCase):
             user_profile_prompt=None,
             task_prompt=None,
             room_summary="",
-            memory_facts=[],
             recent_messages=[{"role": "user", "content": "question"}],
             generative_ui_enabled=False,
         )
@@ -95,7 +92,7 @@ class ChatContextAndStateTestCase(unittest.TestCase):
     def test_selected_skills_and_ui_contract_follow_cached_history(self):
         kwargs = {
             "base_system_prompt": "base", "user_profile_prompt": "profile", "task_prompt": "task",
-            "room_summary": "", "memory_facts": [],
+            "room_summary": "",
             "recent_messages": [
                 {"role": "user", "content": "first"},
                 {"role": "assistant", "content": "previous answer"},
@@ -127,7 +124,6 @@ class ChatContextAndStateTestCase(unittest.TestCase):
             user_profile_prompt="profile",
             task_prompt=None,
             room_summary="",
-            memory_facts=[],
             recent_messages=[
                 {"role": "user", "content": "earlier question"},
                 {"role": "assistant", "content": "earlier answer"},
@@ -148,7 +144,6 @@ class ChatContextAndStateTestCase(unittest.TestCase):
             user_profile_prompt=None,
             task_prompt=None,
             room_summary="",
-            memory_facts=[],
             recent_messages=[
                 {"role": "user", "content": "案を二つください"},
                 {"role": "assistant", "content": "案1、案2"},
@@ -161,7 +156,6 @@ class ChatContextAndStateTestCase(unittest.TestCase):
             user_profile_prompt=None,
             task_prompt=None,
             room_summary="",
-            memory_facts=[],
             recent_messages=[{"role": "user", "content": "案を二つください"}],
             generative_ui_enabled=False,
         )
@@ -315,7 +309,6 @@ class ChatContextAndStateTestCase(unittest.TestCase):
             user_profile_prompt=None,
             task_prompt=None,
             room_summary="",
-            memory_facts=[],
             recent_messages=[
                 {"role": "user", "content": previous_user},
                 {"role": "assistant", "content": previous_assistant},
@@ -340,7 +333,6 @@ class ChatContextAndStateTestCase(unittest.TestCase):
             user_profile_prompt="profile " * 3000,
             task_prompt="task " * 3000,
             room_summary="summary " * 3000,
-            memory_facts=["memory " * 1000],
             project_instructions="project " * 3000,
             recent_messages=messages,
         )

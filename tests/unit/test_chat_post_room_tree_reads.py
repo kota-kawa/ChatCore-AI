@@ -30,7 +30,7 @@ from unittest.mock import AsyncMock, Mock
 from starlette.responses import JSONResponse
 
 from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
-from services.models import ChatHistory, ChatRoom, MemoryFact
+from services.models import ChatHistory, ChatRoom
 from services.repositories.chat_repository import ChatRepository
 from tests.helpers.request_helpers import build_request
 
@@ -78,8 +78,6 @@ class _RecordingSession:
         self.room = room
         self.history = list(history)
         self.chat_history_selects: list[list[str]] = []
-        self.memory_fact_selects: list[str] = []
-        self.memory_facts: list[MemoryFact] = []
         self._pending: list = []
 
     async def execute(self, statement):
@@ -96,11 +94,6 @@ class _RecordingSession:
             return _FakeResult(rows)
         if sql.lstrip().startswith("SELECT") and "FROM chat_rooms" in sql:
             return _FakeResult([self.room])
-        if sql.lstrip().startswith("SELECT") and "FROM memory_facts" in sql:
-            self.memory_fact_selects.append(sql)
-            return _FakeResult(
-                [(row, str(row.fact).lower()) for row in self.memory_facts]
-            )
         return _FakeResult([])
 
     async def scalar(self, _statement):
@@ -111,9 +104,6 @@ class _RecordingSession:
 
     async def flush(self):
         for record in self._pending:
-            if isinstance(record, MemoryFact):
-                self.memory_facts.append(record)
-                continue
             if record.id is None:
                 record.id = max((row.id for row in self.history), default=0) + 1
             self.history.append(record)
@@ -192,8 +182,6 @@ def _build_use_case(session: _RecordingSession, tree_reads: list[str]):
         get_user_by_id=Mock(return_value={}),
         build_user_profile_prompt=Mock(return_value=None),
         get_room_summary=Mock(return_value={"summary": ""}),
-        list_room_memory_facts=Mock(return_value=[]),
-        remember_facts_from_message=AsyncMock(return_value=[]),
         rename_chat_room_if_current_title_in=Mock(return_value=False),
         load_project_context=Mock(return_value=None),
         build_context_messages=lambda **kwargs: kwargs["recent_messages"],
@@ -307,43 +295,6 @@ class ChatPostRoomTreeReadTestCase(unittest.TestCase):
         # get_active_leaf_id は ID しか使わないため、JSONB 列を一切読まない。
         # get_active_leaf_id only needs ids, so it never reads a JSONB column.
         self.assertEqual(session.chat_history_selects, [["id", "parent_id", "active_child_id"]])
-
-# 日本語: 抽出した事実の保存が、事実ごとではなくバッチ 1 本のクエリで既存行を探すことを検証する。
-# English: Storing extracted facts looks up existing rows with one query per batch, not one per fact.
-class MemoryFactLookupTestCase(unittest.TestCase):
-    def test_a_batch_of_facts_is_looked_up_in_one_query(self):
-        session = _seeded_session()
-        session.memory_facts.append(
-            MemoryFact(id=1, user_id=USER_ID, chat_room_id=ROOM_ID, scope="room", fact="Aは青が好き")
-        )
-        repository = ChatRepository(session)  # type: ignore[arg-type]
-
-        asyncio.run(
-            repository.remember_facts(
-                ROOM_ID,
-                USER_ID,
-                ["aは青が好き", "Bは名古屋在住", "Cは月曜が休み"],
-                source_message_id=2,
-            )
-        )
-
-        # fact ごとに SELECT ... FOR UPDATE を撃っていた箇所を1本にまとめた。
-        # The per-fact SELECT ... FOR UPDATE is now a single lookup for the whole batch.
-        self.assertEqual(len(session.memory_fact_selects), 1)
-        self.assertIn("FOR UPDATE", session.memory_fact_selects[0])
-        # 既存行は更新され、残り2件だけが新規行になる。
-        # The existing row is updated in place and only the two new facts are inserted.
-        self.assertEqual(len(session.memory_facts), 3)
-        self.assertEqual(session.memory_facts[0].fact, "aは青が好き")
-        self.assertEqual(session.memory_facts[0].source_message_id, 2)
-
-    def test_duplicate_facts_in_one_batch_collapse_to_one_row(self):
-        session = _seeded_session()
-        repository = ChatRepository(session)  # type: ignore[arg-type]
-
-        asyncio.run(repository.remember_facts(ROOM_ID, USER_ID, ["同じ事実", "同じ事実"]))
-
-        self.assertEqual(len(session.memory_facts), 1)
 
 
 if __name__ == "__main__":

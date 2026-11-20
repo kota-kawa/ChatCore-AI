@@ -145,17 +145,6 @@ class SaveAssistantMessageWithApprovals(Protocol):
     ) -> MaybeAwaitable[int | None]: ...
 
 
-class RememberFactsFromMessage(Protocol):
-    def __call__(
-        self,
-        chat_room_id: str,
-        user_id: int,
-        message: str,
-        *,
-        source_message_id: int | None = None,
-    ) -> Awaitable[list[str]]: ...
-
-
 class RenameChatRoomIfCurrentTitleIn(Protocol):
     def __call__(
         self,
@@ -176,7 +165,6 @@ class BuildContextMessages(Protocol):
         user_profile_prompt: str | None,
         task_prompt: str | None,
         room_summary: str,
-        memory_facts: list[str],
         recent_messages: list[dict[str, Any]],
         project_instructions: str | None = None,
         user_skills_prompt: str | None = None,
@@ -321,7 +309,7 @@ class ChatPostRoomDependencies:
 
 @dataclass(frozen=True)
 class ChatPostPersistenceDependencies:
-    """メッセージ・要約・記憶のDB境界 / DB boundaries for messages, summaries and memory."""
+    """メッセージ・要約のDB境界 / DB boundaries for messages and summaries."""
 
     save_message_to_db: SaveMessageToDb
     # 日本語: 発話の保存と、そのターンに要る文脈（履歴・過去の検索結果）の読み出しは
@@ -333,8 +321,6 @@ class ChatPostPersistenceDependencies:
     #          get_room_web_search_contexts boundaries each re-read the same tree.
     store_user_message_and_load_turn_context: StoreUserMessageAndLoadTurnContext
     get_room_summary: Callable[[str], MaybeAwaitable[dict[str, Any] | None]]
-    list_room_memory_facts: Callable[[str], MaybeAwaitable[list[str]]]
-    remember_facts_from_message: RememberFactsFromMessage
     rename_chat_room_if_current_title_in: RenameChatRoomIfCurrentTitleIn
     rebuild_room_summary: RebuildRoomSummary
     cleanup_unanswered_user_messages: CleanupUnansweredUserMessages

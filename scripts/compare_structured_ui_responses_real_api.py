@@ -206,7 +206,6 @@ def _build_generation_messages(
                 user_profile_prompt=None,
                 task_prompt=None,
                 room_summary="",
-                memory_facts=[],
                 recent_messages=recent_messages,
                 project_instructions=None,
                 user_skills_prompt=context.prompt,
