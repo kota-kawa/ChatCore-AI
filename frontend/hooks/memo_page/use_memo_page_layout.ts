@@ -7,8 +7,8 @@ import type { MemoView } from "../../lib/memo/types";
 // メモ画面のレイアウト系 UI 状態（表示切替・グリッド/リスト・フィルタ開閉・サイドバー折りたたみ）
 // Layout-level UI state for the memo page (view switch, grid/list, filter section, sidebar collapse)
 export function useMemoPageLayout() {
-  // Notebook 画面内の表示切替。"memos" は従来のメモ、"context" はマイコンテキスト金庫。
-  // View switch inside the notebook: "memos" is the classic memo list, "context" is the vault.
+  // Notebook 画面内の表示切替。"memos" は従来のメモ、"context" は記憶（パーソナル・コンテキスト）。
+  // View switch inside the notebook: "memos" is the classic memo list, "context" is Memory (the personal context).
   const [activeView, setActiveView] = useState<MemoView>("memos");
 
   // Keep 風ボードの表示状態（グリッド/リスト）。

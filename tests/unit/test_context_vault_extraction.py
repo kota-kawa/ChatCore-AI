@@ -306,7 +306,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                 assistant_response="Understood.",
                 locale="en",
                 extractor=extractor,
-                store_candidates=store,
+                store_facts=store,
             )
 
         self.assertEqual(len(submitted), 1)
@@ -339,7 +339,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                 user_message="message",
                 assistant_response="response",
                 extractor=Mock(side_effect=RuntimeError("provider down")),
-                store_candidates=Mock(),
+                store_facts=Mock(),
             )
             submitted[0]()
 
@@ -361,7 +361,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                 user_message="message",
                 assistant_response="response",
                 extractor=Mock(),
-                store_candidates=Mock(),
+                store_facts=Mock(),
             )
 
         logger.warning.assert_called_once()

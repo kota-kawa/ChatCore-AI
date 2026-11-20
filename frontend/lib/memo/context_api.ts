@@ -169,8 +169,8 @@ export async function updateContextFact(
   return payload.fact as ContextFact;
 }
 
-// AIが抽出した保存候補を状態・カーソルで取得する。
-// Load AI-extracted candidates by status and opaque cursor.
+// 承認待ちなどの抽出候補（有効な記憶が上限で自動保存できなかったもの）を状態・カーソルで取得する。
+// Load extraction candidates (those that could not be auto-saved at the active-memory cap) by status and opaque cursor.
 export async function loadContextCandidates(params: {
   status?: ContextCandidateStatus;
   limit?: number;
@@ -233,8 +233,8 @@ export async function rejectContextCandidate(
   );
 }
 
-// 会話からの候補抽出opt-in設定を取得する。
-// Load the opt-in setting for candidate extraction from chats.
+// 会話からの記憶の自動保存の設定（初期値は有効）を取得する。
+// Load the setting for automatic memory saving from chats (on by default).
 export async function loadContextExtractionSettings(): Promise<ContextExtractionSettings> {
   const res = await resilientFetch("/api/context-facts/extraction-settings", {
     credentials: "same-origin",
@@ -249,8 +249,8 @@ export async function loadContextExtractionSettings(): Promise<ContextExtraction
   return { enabled: data.enabled === true };
 }
 
-// 会話からの候補抽出を明示的に有効化・無効化する。
-// Explicitly enable or disable candidate extraction from chats.
+// 会話からの記憶の自動保存を明示的に有効化・無効化する。
+// Explicitly enable or disable automatic memory saving from chats.
 export async function updateContextExtractionSettings(
   input: ContextExtractionSettingsUpdateInput,
 ): Promise<ContextExtractionSettings> {

@@ -25,7 +25,7 @@ ChatCore-AI grew out of the friction of retyping the same prompts. Tasks provide
 | Tasks and Skills | Save instructions and import useful public prompts |
 | Chat | Streaming replies, history, temporary conversations, sharing, document attachments, and private image input |
 | Search and generated UI | Cited answers with native comparison cards, charts, calculators and diagrams, plus 2D/3D sandbox Artifacts |
-| Personal knowledge | Editable memos, collections, sharing/export, and typed Memory facts |
+| Personal knowledge | Editable memos, collections, sharing/export, and typed Memory facts (chat can save them automatically; review, edit, and disable them on the Memory screen) |
 | External AI integration | Read and write authorized data through MCP, and reuse it across clients |
 
 Selectable chat models are GPT-OSS 120B, GPT-6 Luna, Qwen 3.8 27B, and Claude Haiku 5.5. Image input is limited to GPT-6 Luna. Chat images are stored privately and can only be retrieved by their owner.
@@ -171,7 +171,7 @@ Implementation: [Chat endpoints](blueprints/chat/messages.py) · [Generation lif
 | Memos | List/search/read/create/update/append | The authenticated owner's memos; modifying shared content requires additional permission |
 | Memory (personal context) | Get a typed digest, keyword/semantic search, save/update/deprecate facts | The authenticated owner's facts |
 
-Context facts record preferences, profile details, projects, decisions, and references, along with provenance, revision, and owner-confirmation state. A second authorized client can retrieve the same account's facts. This is tool-based data access, rather than automatic synchronization of entire external chat histories. MCP-created facts begin unconfirmed and can suppress automatic chat writes when retrieved.
+Context facts record preferences, profile details, projects, decisions, and references, along with provenance, revision, and owner-confirmation state. A second authorized client can retrieve the same account's facts. This is tool-based data access, rather than automatic synchronization of entire external chat histories. MCP-created facts and facts saved automatically from chat begin unconfirmed and can suppress automatic chat writes when retrieved.
 
 Implementation: [MCP server](services/mcp_server.py) · [Memo tools](services/mcp_tools/memos.py) · [Context tools](services/mcp_tools/context_vault.py) · [Fact storage/search](services/context_vault_service.py)
 
@@ -291,7 +291,7 @@ Copyright (c) 2026 Kota Kawagoe. Licensed under [Apache License 2.0](LICENSE).
 | タスク・Skill | 自分用の指示を登録し、少ない入力で会話を開始。公開プロンプトからも取り込める |
 | AI チャット | 複数モデルを選択し、SSE で応答を逐次表示。履歴・一時チャット・共有・文書添付・画像入力に対応 |
 | Web 検索・生成 UI | 出典付きの回答に、比較カード・表・操作できる試算・図解を組み合わせ、2D／3D Artifactも表示 |
-| メモ・記憶 | メモを編集・整理・共有・エクスポートし、好みやプロジェクト情報などの個人の事実を保存・検索 |
+| メモ・記憶 | メモを編集・整理・共有・エクスポートし、好みやプロジェクト情報などの個人の事実を保存・検索。チャットで話した内容は自動で記憶に保存し、記憶の画面で確認・編集・無効化できる |
 | MCP 連携 | 外部 AI から公開プロンプトを扱い、本人のメモ・記憶を読み書き。クライアントを変えても知識を再利用 |
 
 会話モデルは **GPT-OSS 120B / GPT-6 Luna / Qwen 3.8 27B / Claude Haiku 5.5**。画像を読めるモデルは GPT-6 Luna に限定し、チャットに添付した画像は持ち主だけが取得できる保存先で管理します。
@@ -441,7 +441,7 @@ Redis はロック・再接続用の履歴・ワーカー間の配信と停止�
 | メモ | 一覧・検索・取得・作成・更新・追記 | 認証した本人のメモ。共有中のメモの変更には追加の許可が必要 |
 | 記憶（パーソナル・コンテキスト） | 種類別の概要取得、キーワード／意味検索、事実の保存・更新・無効化 | 認証した本人の事実 |
 
-記憶は、**好み・プロフィール・プロジェクト・意思決定・参考情報**の種類を持つ小さな事実として保存します。保存元のクライアント・版番号・本人の確認状態も管理します。MCP で保存した事実は本人が確認済みとは扱わず、チャットで参照した際の自動書き込みを抑止する判断にも使います。
+記憶は、**好み・プロフィール・プロジェクト・意思決定・参考情報**の種類を持つ小さな事実として保存します。保存元のクライアント・版番号・本人の確認状態も管理します。MCP で保存した事実と、チャットから自動保存した事実（承認を待たず保存し、記憶の画面で確認・編集・無効化できる）は本人が確認済みとは扱わず、チャットで参照した際の自動書き込みを抑止する判断にも使います。
 
 外部クライアントへは必要なデータをツールの結果として返します。クライアントの会話履歴全体を ChatCore のチャット履歴へ自動同期する方式ではありません。
 

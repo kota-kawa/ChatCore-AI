@@ -1,10 +1,11 @@
-"""完了した 1 回のチャットターンから、ユーザーが後で承認できる個人コンテキスト候補を LLM で抽出する。
+"""完了した 1 回のチャットターンから、記憶（個人コンテキストの事実）にする内容を LLM で抽出する。
 厳格なプロンプトと検証（信頼度・重要度・発話根拠・秘密情報の除外）を通ったものだけを返し、
-バックグラウンドで候補キューへ保存する。
+バックグラウンドで保存する（有効な事実に空きがあれば未確認の事実として直接、上限で入らない分は承認待ち候補へ）。
 
-Extract reviewable personal-context candidates from one completed chat turn.
+Extract content worth remembering (personal-context facts) from one completed chat turn.
 Only candidates that pass the strict prompt and validation (confidence, importance, verbatim evidence,
-no secrets) are returned, and they are queued for review in the background.
+no secrets) are returned, and they are stored in the background (saved directly as unconfirmed facts while
+active slots remain; only the overflow is queued as pending candidates).
 """
 
 from __future__ import annotations
@@ -289,7 +290,7 @@ def schedule_context_extraction(
     assistant_response: str,
     locale: Any = None,
     extractor: Callable[..., list[dict[str, Any]]] | None = None,
-    store_candidates: Callable[..., Any] | None = None,
+    store_facts: Callable[..., Any] | None = None,
 ) -> None:
     """完了済みのチャット応答を遅らせたり壊したりしないよう、抽出をバックグラウンドへ投入する。
     抽出器と保存関数は差し替え可能（テスト用）。既定の保存関数は実行時に import する。
@@ -307,19 +308,19 @@ def schedule_context_extraction(
             candidates = extract(user_message, assistant_response, locale=locale)
             if not candidates:
                 return
-            store = store_candidates
+            store = store_facts
             if store is None:
                 from services.context_vault_candidate_service import (
-                    store_extracted_candidates,
+                    store_extracted_facts,
                 )
 
-                store = store_extracted_candidates
+                store = store_extracted_facts
             result = store(user_id, candidates=candidates, source_ref=source_ref)
             if inspect.isawaitable(result):
                 asyncio.run(result)
         except Exception:
             logger.warning(
-                "Failed to extract personal context candidates from chat turn.",
+                "Failed to extract and store memory from chat turn.",
                 extra={"user_id": user_id, "room_id": room_id},
                 exc_info=True,
             )

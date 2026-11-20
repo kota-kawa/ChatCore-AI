@@ -1,17 +1,19 @@
-"""My Context の事実候補(レビュー待ちキュー)の保存・一覧・承認・却下と、自動抽出の設定を永続化する。
-
+"""記憶(context_facts)の自動抽出の保存先を永続化する。抽出した内容は有効件数に空きがあれば事実として直接保存し、
+上限で入らない分だけ承認待ち候補(レビュー待ちキュー)に入れる。候補の一覧・承認・却下と、自動抽出の設定も扱う。
 承認すると候補が正式な context fact に昇格する。services/context_vault_candidate_service.py から使われる。
 
-Async SQLAlchemy persistence for the context-fact review queue.
+Async SQLAlchemy persistence for automatically extracted memory.
+Extracted content is saved directly as facts while active slots remain; only what the cap rejects goes to the
+pending-candidate review queue. Also covers listing, approving and rejecting candidates and the extraction setting.
 Approving a candidate promotes it to a context fact; used by services/context_vault_candidate_service.py.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, NamedTuple
 
-from sqlalchemy import func, select, tuple_, update
+from sqlalchemy import func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -144,6 +146,13 @@ def _serialize_fact(row: Any) -> dict[str, Any]:
     }
 
 
+# 日本語: 自動抽出の保存結果。saved_facts は直接保存した事実(未確認)、queued_count は上限のため承認待ち候補へ回した件数。
+# English: Outcome of storing extracted content: facts saved directly (unconfirmed) and how many went to the pending queue.
+class ExtractedStoreResult(NamedTuple):
+    saved_facts: list[dict[str, Any]]
+    queued_count: int
+
+
 class ContextFactCandidateRepository:
     """所有ユーザーで絞った候補の永続化。トランザクションは呼び出し側が持つ。
 
@@ -160,21 +169,33 @@ class ContextFactCandidateRepository:
             select(func.pg_advisory_xact_lock(_CONTEXT_VAULT_LOCK_NAMESPACE, user_id))
         )
 
-    async def store_candidates(self, user_id: int, candidates: list[dict[str, Any]]) -> int:
-        """重複を除いた候補を、ユーザーごとの承認待ち上限まで挿入し、挿入件数を返す。
+    async def store_extracted(self, user_id: int, candidates: list[dict[str, Any]]) -> ExtractedStoreResult:
+        """重複を除いた抽出結果を、有効件数に空きがある分は未確認の事実として保存し、空きが無い分は承認待ち候補へ入れる。
 
-        Insert unique candidates up to the per-user pending cap.
+        重複判定は既存の事実(無効化済みを含む)・承認待ち・却下済みの候補との BM25 と、候補の fingerprint で行う。
+        無効化(取り消し)された内容と同じものは再び保存されない。事実の有効件数と承認待ちの件数は、それぞれの上限を超えない。
+
+        Save unique extracted content as unconfirmed facts while active slots remain, and queue the rest as
+        pending candidates. Duplicates are judged against existing facts (deprecated included), pending and
+        rejected candidates by BM25, and by candidate fingerprint, so content the owner undid is not saved again.
         """
         await self._lock_user(user_id)
+        active_count = await self.session.scalar(
+            select(func.count(ContextFact.id)).where(
+                ContextFact.user_id == user_id,
+                ContextFact.status == "active",
+            )
+        )
         pending_count = await self.session.scalar(
             select(func.count(ContextFactCandidate.id)).where(
                 ContextFactCandidate.user_id == user_id,
                 ContextFactCandidate.status == "pending",
             )
         )
-        remaining = max(MAX_PENDING_CONTEXT_FACT_CANDIDATES - int(pending_count or 0), 0)
-        if remaining == 0:
-            return 0
+        free_fact_slots = max(MAX_ACTIVE_CONTEXT_FACTS - int(active_count or 0), 0)
+        free_queue_slots = max(MAX_PENDING_CONTEXT_FACT_CANDIDATES - int(pending_count or 0), 0)
+        if free_fact_slots == 0 and free_queue_slots == 0:
+            return ExtractedStoreResult([], 0)
 
         facts_result = await self.session.execute(
             select(
@@ -198,9 +219,10 @@ class ContextFactCandidateRepository:
             )
         )
         # 日本語: 既存の事実・候補を重複判定の比較対象にする。active の事実と pending の候補を優先(priority 0)し、
-        # 却下済みは最後(2)に回して、上限件数で切ったときに有効な内容を残す。同順位では更新が新しいものが先。
+        # 無効化済みの事実は 1、却下済みは最後(2)に回して、上限件数で切ったときに有効な内容を残す。同順位では更新が新しいものが先。
         # English: Existing facts and candidates become the duplicate-check corpus. Active facts and pending candidates rank first
-        # (priority 0) and rejected ones last (2), so the cap drops the least relevant documents; newer updates win within a rank.
+        # (priority 0), deprecated facts next (1) and rejected ones last (2), so the cap drops the least relevant documents;
+        # newer updates win within a rank.
         existing_documents = [
             {
                 "fact_type": str(row.fact_type),
@@ -235,14 +257,13 @@ class ContextFactCandidateRepository:
             existing_documents[:MAX_CONTEXT_DEDUPLICATION_DOCUMENTS],
         )
 
-        # 日本語: 同じ fingerprint の候補は挿入しない。事前確認に加え、承認待ちに限る部分ユニーク索
-        # 引への ON CONFLICT DO NOTHING で並行挿入も防ぐ。
-        # English: Candidates with an existing fingerprint are skipped; ON CONFLICT DO NOTHING on the pending-only partial unique index
-        # also covers concurrent inserts beyond the up-front check.
-        inserted = 0
+        saved_facts: list[dict[str, Any]] = []
+        queued_count = 0
         for candidate in unique_candidates:
-            if inserted >= remaining:
+            if len(saved_facts) >= free_fact_slots and queued_count >= free_queue_slots:
                 break
+            # 日本語: 同じ fingerprint の候補(承認済み・却下済みを含む)がある内容は、事実としても候補としても入れない。
+            # English: Content whose fingerprint already has a candidate (approved or rejected included) is neither saved nor queued.
             already_exists = await self.session.scalar(
                 select(ContextFactCandidate.id).where(
                     ContextFactCandidate.user_id == user_id,
@@ -251,24 +272,52 @@ class ContextFactCandidateRepository:
             )
             if already_exists is not None:
                 continue
-            statement = pg_insert(ContextFactCandidate).values(
-                user_id=user_id,
-                fact_type=candidate["fact_type"],
-                title=candidate["title"],
-                content=candidate["content"],
-                source_kind=candidate.get("source_kind", "chat"),
-                source_ref=candidate.get("source_ref"),
-                source_client_id=candidate.get("source_client_id"),
-                importance=candidate.get("importance", 50),
-                confidence=candidate.get("confidence", 0),
-                fingerprint=candidate["fingerprint"],
-            ).on_conflict_do_nothing(
-                index_elements=[ContextFactCandidate.user_id, ContextFactCandidate.fingerprint],
-                index_where=ContextFactCandidate.status == "pending",
-            ).returning(ContextFactCandidate.id)
-            if (await self.session.execute(statement)).scalar_one_or_none() is not None:
-                inserted += 1
-        return inserted
+            if len(saved_facts) < free_fact_slots:
+                saved_facts.append(await self._insert_unconfirmed_fact(user_id, candidate))
+            elif queued_count < free_queue_slots and await self._insert_pending_candidate(user_id, candidate):
+                queued_count += 1
+        return ExtractedStoreResult(saved_facts, queued_count)
+
+    # 日本語: 抽出した内容を事実として挿入する。last_confirmed_at は書かず NULL(本人未確認)のまま、確信度は抽出時の値を残す。
+    # 本人が Web UI で編集すれば確認済みになる(ADR 0016)。
+    # English: Insert extracted content as a fact. last_confirmed_at stays NULL (unconfirmed by the owner) and the extraction
+    # confidence is kept; an owner edit in the web UI later confirms it (ADR 0016).
+    async def _insert_unconfirmed_fact(self, user_id: int, candidate: dict[str, Any]) -> dict[str, Any]:
+        statement = pg_insert(ContextFact).values(
+            user_id=user_id,
+            fact_type=candidate["fact_type"],
+            title=candidate["title"],
+            content=candidate["content"],
+            source_kind=candidate.get("source_kind", "chat"),
+            source_ref=candidate.get("source_ref"),
+            importance=candidate.get("importance", 50),
+            confidence=candidate.get("confidence", 0),
+        ).returning(*_FACT_RETURNING)
+        row = (await self.session.execute(statement)).mappings().first()
+        if row is None:  # pragma: no cover - PostgreSQL RETURNING invariant
+            raise RuntimeError("Extracted context fact was not returned.")
+        return _serialize_fact(row)
+
+    # 日本語: 承認待ち候補として挿入する。承認待ちに限る部分ユニーク索引への ON CONFLICT DO NOTHING で並行挿入も防ぎ、入ったかを返す。
+    # English: Insert a pending candidate; ON CONFLICT DO NOTHING on the pending-only partial unique index also covers
+    # concurrent inserts, and the return value tells whether a row went in.
+    async def _insert_pending_candidate(self, user_id: int, candidate: dict[str, Any]) -> bool:
+        statement = pg_insert(ContextFactCandidate).values(
+            user_id=user_id,
+            fact_type=candidate["fact_type"],
+            title=candidate["title"],
+            content=candidate["content"],
+            source_kind=candidate.get("source_kind", "chat"),
+            source_ref=candidate.get("source_ref"),
+            source_client_id=candidate.get("source_client_id"),
+            importance=candidate.get("importance", 50),
+            confidence=candidate.get("confidence", 0),
+            fingerprint=candidate["fingerprint"],
+        ).on_conflict_do_nothing(
+            index_elements=[ContextFactCandidate.user_id, ContextFactCandidate.fingerprint],
+            index_where=ContextFactCandidate.status == "pending",
+        ).returning(ContextFactCandidate.id)
+        return (await self.session.execute(statement)).scalar_one_or_none() is not None
 
     # 日本語: (created_at, id) の降順によるキーセットページング。before_* を渡すとそれより古い行だけを返す。
     # English: Keyset pagination ordered by (created_at, id) descending; before_* restricts the result to older rows.
@@ -440,6 +489,11 @@ class ContextFactCandidateRepository:
             status="fail",
         )
 
+    # 日本語: 列は NOT NULL なので None はユーザー行が読めなかったときだけ。その場合は無効として扱い、
+    # 読めない相手に抽出が走らないようにする。
+    # 初期オンは列の server_default(と migration)だけで表す。
+    # English: The column is NOT NULL, so None only means the user row could not be read. That counts as disabled, so no
+    # extraction runs for a user we cannot read. The on-by-default behavior lives only in the column's server_default (and the migration).
     async def get_extraction_settings(self, user_id: int) -> bool:
         enabled = await self.session.scalar(
             select(User.context_auto_extract_enabled).where(User.id == user_id)
@@ -459,9 +513,19 @@ class ContextFactCandidateRepository:
             raise ResourceNotFoundError(ERROR_CONTEXT_EXTRACTION_SETTINGS_NOT_FOUND)
         return bool(value)
 
-    # 日本語: 自動抽出を実行してよいか。ユーザー設定が有効で、承認待ちが上限未満のときだけ True(キューが満杯なら抽出しない)。
-    # English: Whether auto-extraction may run: enabled for the user and the pending queue is below its cap (no extraction when full).
+    # 日本語: 自動抽出を実行してよいか。ユーザー設定が有効で、有効な事実か承認待ち候補のどちらかに空きがあるときだけ True
+    # (どちらも上限なら、抽出しても保存先が無い)。
+    # English: Whether auto-extraction may run: enabled for the user and either the active facts or the pending queue
+    # has room (with both at their caps there would be nowhere to save the result).
     async def should_extract_context(self, user_id: int) -> bool:
+        active_count = (
+            select(func.count(ContextFact.id))
+            .where(
+                ContextFact.user_id == User.id,
+                ContextFact.status == "active",
+            )
+            .scalar_subquery()
+        )
         pending_count = (
             select(func.count(ContextFactCandidate.id))
             .where(
@@ -472,8 +536,13 @@ class ContextFactCandidateRepository:
         )
         row = (
             await self.session.execute(
-                select(User.context_auto_extract_enabled, pending_count < MAX_PENDING_CONTEXT_FACT_CANDIDATES)
-                .where(User.id == user_id)
+                select(
+                    User.context_auto_extract_enabled,
+                    or_(
+                        active_count < MAX_ACTIVE_CONTEXT_FACTS,
+                        pending_count < MAX_PENDING_CONTEXT_FACT_CANDIDATES,
+                    ),
+                ).where(User.id == user_id)
             )
         ).first()
         return bool(row and row[0] and row[1])

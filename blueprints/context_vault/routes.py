@@ -1,6 +1,6 @@
-"""パーソナル・コンテキスト金庫の事実・抽出候補・インポート/エクスポートを扱う HTTP API（/api/context-facts）。
+"""記憶（パーソナル・コンテキスト金庫）の事実・承認待ち候補・インポート/エクスポートの HTTP API（/api/context-facts）。
 
-HTTP API for the personal context vault: facts, extraction candidates, and import/export (/api/context-facts).
+HTTP API for memory (the personal context vault): facts, pending candidates, and import/export (/api/context-facts).
 """
 from __future__ import annotations
 
@@ -270,9 +270,9 @@ async def api_list_context_fact_candidates(
     limit: int = DEFAULT_CONTEXT_CANDIDATE_LIST_LIMIT,
     cursor: str | None = None,
 ):
-    # ユーザー確認待ちの抽出候補をkeysetページングで取得する。
-    # List extraction candidates awaiting user review, using keyset paging.
-    """ユーザー確認待ちの抽出候補をkeysetページングで取得する。"""
+    # 承認待ちの抽出候補（有効な事実が上限に達して直接保存できなかったもの）をkeysetページングで取得する。
+    # List pending candidates (extractions that could not be saved directly because the active-fact cap was reached), using keyset paging.
+    """承認待ちの抽出候補（有効な事実が上限に達して直接保存できなかったもの）をkeysetページングで取得する。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
@@ -376,9 +376,9 @@ async def api_reject_context_fact_candidate(request: Request, candidate_id: int)
     name="context_vault.api_get_extraction_settings",
 )
 async def api_get_context_extraction_settings(request: Request):
-    # 現在の会話コンテキスト自動抽出opt-in設定を取得する。
-    # Get the current opt-in setting for automatic context extraction from conversations.
-    """現在の会話コンテキスト自動抽出opt-in設定を取得する。"""
+    # 現在の会話からの記憶の自動抽出の設定（初期値は有効）を取得する。
+    # Get the current setting for automatic memory extraction from conversations (on by default).
+    """現在の会話からの記憶の自動抽出の設定（初期値は有効）を取得する。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
@@ -396,9 +396,9 @@ async def api_get_context_extraction_settings(request: Request):
     name="context_vault.api_update_extraction_settings",
 )
 async def api_update_context_extraction_settings(request: Request):
-    # 会話コンテキスト自動抽出をユーザーの明示操作で有効・無効化する。
-    # Enable or disable automatic context extraction through an explicit user action.
-    """会話コンテキスト自動抽出をユーザーの明示操作で有効・無効化する。"""
+    # 会話からの記憶の自動抽出をユーザーの明示操作で有効・無効化する。
+    # Enable or disable automatic memory extraction through an explicit user action.
+    """会話からの記憶の自動抽出をユーザーの明示操作で有効・無効化する。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)

@@ -237,7 +237,7 @@ class UsageSubjectPropagationTests(unittest.TestCase):
                 user_message="message",
                 assistant_response="response",
                 extractor=extractor,
-                store_candidates=MagicMock(),
+                store_facts=MagicMock(),
             )
         )
 
