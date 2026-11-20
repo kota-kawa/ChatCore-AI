@@ -31,6 +31,7 @@ from services.context_vault_service import (
 from services.csrf import require_csrf
 from services.error_messages import (
     ERROR_CONTEXT_EXTRACTION_SETTINGS_PAYLOAD_INVALID,
+    ERROR_CONTEXT_FACT_SEARCH_QUERY_TOO_LONG,
     ERROR_CONTEXT_MEMORY_USE_SETTINGS_PAYLOAD_INVALID,
     ERROR_CONTEXT_VAULT_EXPORT_FORMAT_INVALID,
     ERROR_CONTEXT_VAULT_IMPORT_PAYLOAD_INVALID,
@@ -59,6 +60,7 @@ from .constants import (
     CONTEXT_FACT_CREATE_ERROR,
     CONTEXT_FACT_UPDATE_ERROR,
     DEFAULT_CONTEXT_LIST_LIMIT,
+    MAX_CONTEXT_SEARCH_QUERY_LENGTH,
 )
 
 # CSRF保護を設定したパーソナル・コンテキスト金庫用APIRouter。
@@ -126,10 +128,11 @@ async def api_list_context_facts(
     status: str = "active",
     limit: int = DEFAULT_CONTEXT_LIST_LIMIT,
     cursor: str | None = None,
+    q: str | None = None,
 ):
-    # コンテキスト事実の一覧を取得する（種類・状態でフィルタ、keyset ページング）。
-    # List context facts, filtered by type and status, with keyset paging.
-    """コンテキスト事実の一覧を取得する（種類・状態でフィルタ、keyset ページング）。"""
+    # コンテキスト事実の一覧を取得する（種類・状態・検索語でフィルタ、keyset ページング）。
+    # List context facts, filtered by type, status and search query, with keyset paging.
+    """コンテキスト事実の一覧を取得する（種類・状態・検索語でフィルタ、keyset ページング）。"""
     user_id = user_id_from_session(request.session)
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
@@ -139,12 +142,17 @@ async def api_list_context_facts(
     if status not in _VALID_STATUSES:
         return jsonify({"status": "fail", "error": "状態の指定が不正です。"}, status_code=400)
 
+    query = q.strip() if q is not None else None
+    if query is not None and len(query) > MAX_CONTEXT_SEARCH_QUERY_LENGTH:
+        return jsonify({"status": "fail", "error": ERROR_CONTEXT_FACT_SEARCH_QUERY_TOO_LONG}, status_code=400)
+
     safe_limit = max(1, min(int(limit), MAX_CONTEXT_LIST_LIMIT))
     try:
         result = await list_facts(
             user_id,
             fact_type=fact_type,
             status=status,
+            query=query or None,
             limit=safe_limit,
             cursor=cursor,
         )

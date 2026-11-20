@@ -190,14 +190,17 @@ class ContextFactRepository:
         )
         return int(count or 0)
 
-    # 日本語: (updated_at, id) の降順によるキーセットページング。before_* より古い行だけを返す。
-    # English: Keyset pagination ordered by (updated_at, id) descending; only rows older than before_* are returned.
+    # 日本語: (updated_at, id) の降順によるキーセットページング。before_* より古い行だけを返す。query があれば、語に分けて
+    # すべての語を title か content に含む(大文字小文字を区別しない部分一致、LIKE のワイルドカードはエスケープ)行に絞る。
+    # English: Keyset pagination ordered by (updated_at, id) descending; only rows older than before_* are returned. With query, rows
+    # are narrowed to those whose title or content contains every term (case-insensitive substring match, LIKE wildcards escaped).
     async def list_facts(
         self,
         user_id: int,
         *,
         fact_type: str | None = None,
         status: str = "active",
+        query: str | None = None,
         limit: int = 50,
         before_updated_at: datetime | None = None,
         before_id: int | None = None,
@@ -205,6 +208,11 @@ class ContextFactRepository:
         conditions = [ContextFact.user_id == user_id, ContextFact.status == status]
         if fact_type is not None:
             conditions.append(ContextFact.fact_type == fact_type)
+        for term in split_search_terms(query or ""):
+            pattern = build_like_pattern(term)
+            conditions.append(
+                ContextFact.title.ilike(pattern, escape="\\") | ContextFact.content.ilike(pattern, escape="\\")
+            )
         if before_updated_at is not None and before_id is not None:
             conditions.append(
                 tuple_(ContextFact.updated_at, ContextFact.id)

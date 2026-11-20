@@ -168,6 +168,9 @@ ERROR_CONTEXT_FACT_LIMIT_REACHED = (
     "保存できる有効なコンテキストは200件までです。"
     "不要な項目を無効化してから追加してください。"
 )
+# 日本語: 置き換えの取り消し・完全削除・検索の入力に関するメッセージ（記憶の画面）。
+# English: Messages for undoing a replacement, permanent deletion and search input (the memory screen).
+ERROR_CONTEXT_FACT_SEARCH_QUERY_TOO_LONG = "検索語が長すぎます。"
 ERROR_CONTEXT_VAULT_IMPORT_TOO_LARGE = "インポートファイルは10MiB以下にしてください。"
 ERROR_CONTEXT_VAULT_IMPORT_REQUEST_TOO_LARGE = (
     "インポートリクエストのサイズが上限を超えています。"

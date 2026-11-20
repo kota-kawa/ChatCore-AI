@@ -184,6 +184,7 @@ _ENGLISH_BY_JAPANESE_TEXT: dict[str, str] = {
     "他の場所で先に更新されました。最新の内容を読み込み直してからやり直してください。": (
         "This context was updated elsewhere. Reload the latest version and try again."
     ),
+    "検索語が長すぎます。": "The search query is too long.",
     "インポート形式が不正です。": "The import format is invalid.",
     "エクスポート形式が不正です。": "The export format is invalid.",
 }

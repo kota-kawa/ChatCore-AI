@@ -300,7 +300,7 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
         repo.list_facts.assert_awaited_once()
         repo.count_active.assert_awaited_once_with(7)
 
-    async def test_list_attaches_provenance_per_fact(self):
+    async def test_list_passes_the_search_query_and_attaches_provenance_per_fact(self):
         repo = _repo()
         repo.list_facts.return_value = [
             fact_row(id=4, status="active"),
@@ -321,8 +321,9 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
         with patch("services.context_vault_service._repository", return_value=repo), patch(
             "services.context_vault_service.ContextFactProvenanceRepository", return_value=provenance
         ):
-            result = await list_facts(7, session=object())
+            result = await list_facts(7, query="東京", session=object())
 
+        self.assertEqual(repo.list_facts.await_args.kwargs["query"], "東京")
         newer, older = result.facts
         self.assertEqual(newer.source_count, 5)
         self.assertEqual(newer.last_mentioned_at, "2026-11-01T00:00:00+00:00")
