@@ -173,7 +173,7 @@ class WordMatchCoverageTestCase(unittest.TestCase):
         self.assertEqual(WORD_MATCH_MIN_COVERAGE, 0.3)
 
     def test_a_single_shared_bigram_is_not_a_word_match(self):
-        # 「フォーマット」と「コミットメッセージ」が共有するのは「ット」だけ（証拠のトークン 5 個のうち 1 個）。
+        # 「フォーマット」と「コミットメッセージ」が共有するのは「ット」だけ（「フォーマット」の証拠のトークン 4 個のうち 1 個 = 25%。長音は索引で落ちる）。
         # フォーマット and コミットメッセージ share only "ット" (1 of 5 evidence tokens).
         rows = _custom_rows(self.COMMIT, self.REPORT)
 
@@ -222,6 +222,15 @@ class WordMatchCoverageTestCase(unittest.TestCase):
         rows = _custom_rows(dog, partial)
 
         self.assertEqual(_ids(rows, "犬 犬種 年齢 誕生日 プレゼント"), [1])
+
+    def test_a_partial_match_between_short_words_still_enters_the_word_list(self):
+        # 既知の限界: 証拠のトークンが 1〜3 個の短い語は 1 個の一致で通るので、「ラーメン」（ラメ・メン）と「メンバー」の
+        # 「メン」のような、短い語どうしの語の一部の一致は外せない。
+        # Known limit: a short word of 1-3 evidence tokens passes on one match, so a partial match between short words
+        # (the メン shared by ラーメン and メンバー) cannot be dropped.
+        rows = _custom_rows((1, "好きな食べ物", "ラーメンが好き。"), (2, "チーム", "メンバーは5人。"))
+
+        self.assertEqual(_ids(rows, "ラーメン 好み 店"), [1, 2])
 
     def test_a_sentence_query_with_one_content_word_misses_by_word_and_is_found_by_meaning(self):
         # 既知の限界: 空白の無い文の形の検索語は 1 語として扱う。内容のある語が 1 つだけ一致する記憶（10 個中 2 個 = 20%）は

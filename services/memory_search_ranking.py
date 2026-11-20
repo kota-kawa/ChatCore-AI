@@ -39,15 +39,18 @@ RRF_K = 60
 
 # 語の一致を「証拠」として数えるのに必要な、検索語の 1 語（空白で区切った語）の証拠のトークンが記憶に現れた割合。どれか 1 語が
 # この割合を満たせば、その記憶は語の一致の一覧に入る。日本語は 2 文字連続（bigram）で索引するので、無関係な記憶でも語の一部が
-# たまたま一致する（「フォーマット」と「コミットメッセージ」が「ット」を共有する、など。5 個中 1 個 = 20%）。30% なら、そうした
-# 語の一部だけの一致は外れ、証拠のトークンが 1〜3 個の短い語は 1 個の一致で通り、空白の無い文の形の検索語（「犬の名前を教えて」
+# たまたま一致する（「フォーマット」と「コミットメッセージ」が「ット」を共有する、など。長音は索引で落ちるので「フォーマット」の
+# 証拠は 4 個で、4 個中 1 個 = 25%）。30% なら、証拠のトークンが 4 個以上の語は 1 個の一致では通らず、1〜3 個の短い語（「ラーメン」は
+# 2 個）は 1 個の一致で通り（短い語どうしの語の一部の一致、「ラーメン」と「メンバー」の「メン」は外せない）、空白の無い文の形の検索語（「犬の名前を教えて」
 # = 7 個）は 3 個（「犬の」「の名」「名前」のようなまとまった一致）が要る。割合を検索語の全体ではなく語ごとに見るのは、モデルが
 # キーワードを並べた検索語（「犬 犬種 年齢 誕生日 プレゼント」）で、1 語だけが当たる関連する記憶を落とさないため（全体で見ると、
 # 語を足すほど 1 語の一致の割合が下がる）。外れた記憶も、意味の近さがしきい値以内なら意味の一覧から入る。
 # The share of one query word's evidence tokens (words are split on whitespace) a memory must contain for its word match to count.
 # A memory enters the word list when any one word reaches this share. Japanese is indexed as character bigrams, so an unrelated
-# memory shares part of a word by chance (the "ット" shared by フォーマット and コミットメッセージ: 1 of 5 = 20%). At 30% such
-# partial matches drop out, a short word of 1-3 evidence tokens passes on one match, and a sentence-shaped query without spaces
+# memory shares part of a word by chance (the "ット" shared by フォーマット and コミットメッセージ; the long-vowel mark is dropped
+# by the index, so フォーマット has 4 evidence tokens and this is 1 of 4 = 25%). At 30% a word of 4 or more evidence tokens does not
+# pass on one match, a short word of 1-3 tokens (ラーメン has 2) passes on one match (so a partial match between short words, the
+# メン shared by ラーメン and メンバー, cannot be dropped), and a sentence-shaped query without spaces
 # (犬の名前を教えて = 7 tokens) needs 3 (a coherent run such as 犬の / の名 / 名前). The share is taken per word, not over the
 # whole query, so that a keyword-list query from the model (犬 犬種 年齢 誕生日 プレゼント) keeps a related memory matching
 # only one of its words: over the whole query, every added keyword would lower the share of a single matching word.
@@ -84,30 +87,21 @@ def _is_word_match_evidence(token: str, *, word_has_pair: bool) -> bool:
     return not _is_kana(token) and not word_has_pair
 
 
-def _query_terms(query: str) -> list[str]:
-    """検索語のトークンのうち、語の一致の証拠にしてよいものを、重複なしで出現順に返す。空白で区切った語ごとに判定する。
+def _query_words(query: str) -> list[list[str]]:
+    """検索語を空白で区切った語ごとに、語の一致の証拠にしてよいトークンを重複なしで返す（証拠のトークンが無い語は除く）。
 
     1 文字のトークンは、どの文にも現れるので原則として証拠にしない。英字 1 文字（"s" など）とかな 1 文字は常に除く。
-    漢字 1 文字は、その語に 2 文字連続（bigram）が 1 つでもあれば除く（「犬の名前」の「前」が「以前」と一致しても関係はない）。
+    漢字 1 文字は、その語に 2 文字連続（bigram）が 1 つでもあれば除く（「犬の名前」の「前」が「以前」と一致しても関係がない）。
     「犬」のように 2 文字連続が作れない短い語のときだけ、漢字 1 文字も使う。数字は 1 文字でも使う。
     空白で区切るのは、tokenize_bm25 が空白をまたいで文字を連結し、別々のキーワード（「犬 猫」）から偽の 2 文字連続を作るため。
 
-    The query's tokens that may count as word-match evidence, distinct and in order of first appearance, judged per
-    whitespace-separated word.
+    The evidence tokens of each whitespace-separated query word, distinct within the word; words with none are dropped.
 
     A single-character token appears in nearly any sentence, so it is not evidence by default. A single Latin letter ("s") and a
     single kana are always dropped. A single kanji is dropped when its word has any two-character pair (the 前 of 犬の名前 matching
     the 前 of 以前 means nothing); it is used only when the word is too short to make a pair, such as 犬. A digit counts even alone.
     Words are split on whitespace because tokenize_bm25 joins characters across whitespace and would make a false pair out of
     separate keywords such as "犬 猫".
-    """
-    return list(dict.fromkeys(token for word in _query_words(query) for token in word))
-
-
-def _query_words(query: str) -> list[list[str]]:
-    """検索語を空白で区切った語ごとに、証拠にしてよいトークンを重複なしで返す（証拠のトークンが無い語は除く）。
-
-    The evidence tokens of each whitespace-separated query word, distinct within the word; words with none are dropped.
     """
     words: list[list[str]] = []
     for word in str(query or "").split():
