@@ -39,8 +39,9 @@ from services.error_messages import (
     ERROR_CONTEXT_FACT_LIMIT_REACHED,
     ERROR_CONTEXT_FACT_NOT_FOUND,
     ERROR_CONTEXT_FACT_REVISION_CONFLICT,
+    ERROR_CONTEXT_MEMORY_USE_SETTINGS_NOT_FOUND,
 )
-from services.models import ContextFact, ContextFactSource
+from services.models import ContextFact, ContextFactSource, User
 from services.models.types import Vector
 from services.search_terms import build_like_pattern, split_search_terms
 
@@ -143,6 +144,24 @@ class ContextFactRepository:
         await self.session.execute(
             select(func.pg_advisory_xact_lock(_CONTEXT_FACT_LOCK_NAMESPACE, user_id))
         )
+
+    # 日本語: 列は NOT NULL なので None はユーザー行が読めなかったときだけ。その場合は「使わない」として扱い、
+    # 読めない相手の記憶を回答へ入れない。初期オンは列の server_default（と migration）だけで表す。
+    # English: The column is NOT NULL, so None only means the user row could not be read. That counts as "do not use",
+    # so the memory of a user we cannot read never reaches an answer. On-by-default lives only in the column's server_default
+    # (and the migration).
+    async def get_memory_use_enabled(self, user_id: int) -> bool:
+        enabled = await self.session.scalar(select(User.memory_use_enabled).where(User.id == user_id))
+        return bool(enabled) if enabled is not None else False
+
+    async def update_memory_use_enabled(self, user_id: int, enabled: bool) -> bool:
+        result = await self.session.execute(
+            update(User).where(User.id == user_id).values(memory_use_enabled=bool(enabled)).returning(User.memory_use_enabled)
+        )
+        value = result.scalar_one_or_none()
+        if value is None:
+            raise ResourceNotFoundError(ERROR_CONTEXT_MEMORY_USE_SETTINGS_NOT_FOUND)
+        return bool(value)
 
     async def count_active(self, user_id: int) -> int:
         count = await self.session.scalar(

@@ -819,6 +819,12 @@ class ContextExtractionSettingsUpdateRequest(RequestPayloadModel):
     enabled: bool
 
 
+# 日本語: 保存した記憶をチャットの回答に使う設定（初期値は有効）。記憶を保存するか（上の設定）とは別。
+# English: Setting for using saved memory in chat answers (enabled by default); separate from whether memory is saved.
+class ContextMemoryUseSettingsUpdateRequest(RequestPayloadModel):
+    enabled: bool
+
+
 # 日本語: MCP 経由でコンテキスト事実を保存するリクエスト。
 # English: Request for saving a context fact through MCP.
 class McpContextFactSaveRequest(BaseModel):

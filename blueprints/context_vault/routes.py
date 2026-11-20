@@ -23,12 +23,15 @@ from services.context_vault_portability import (
 from services.context_vault_service import (
     MAX_CONTEXT_LIST_LIMIT,
     create_fact,
+    get_memory_use_settings,
     list_facts,
     update_fact,
+    update_memory_use_settings,
 )
 from services.csrf import require_csrf
 from services.error_messages import (
     ERROR_CONTEXT_EXTRACTION_SETTINGS_PAYLOAD_INVALID,
+    ERROR_CONTEXT_MEMORY_USE_SETTINGS_PAYLOAD_INVALID,
     ERROR_CONTEXT_VAULT_EXPORT_FORMAT_INVALID,
     ERROR_CONTEXT_VAULT_IMPORT_PAYLOAD_INVALID,
     ERROR_CONTEXT_VAULT_IMPORT_REQUEST_TOO_LARGE,
@@ -40,6 +43,7 @@ from services.request_models import (
     ContextExtractionSettingsUpdateRequest,
     ContextFactCreateRequest,
     ContextFactUpdateRequest,
+    ContextMemoryUseSettingsUpdateRequest,
     ContextVaultImportConfirmRequest,
     ContextVaultImportPreviewRequest,
 )
@@ -296,6 +300,55 @@ async def api_update_context_extraction_settings(request: Request):
         return validation_error
     try:
         result = await update_extraction_settings(user_id, payload.enabled)
+        return jsonify({"status": "success", **result.model_dump()})
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc, status="fail")
+
+
+@context_vault_bp.get(
+    "/memory-use-settings",
+    name="context_vault.api_get_memory_use_settings",
+)
+async def api_get_context_memory_use_settings(request: Request):
+    # 保存した記憶をチャットの回答に使う設定（初期値は有効）を取得する。
+    # Get the setting for using saved memory in chat answers (on by default).
+    """保存した記憶をチャットの回答に使う設定（初期値は有効）を取得する。"""
+    user_id = user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
+    try:
+        result = await get_memory_use_settings(user_id)
+        return jsonify(result.model_dump())
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc, status="fail")
+    except Exception:
+        return log_and_internal_server_error(logger, CONTEXT_FACT_UPDATE_ERROR, status="fail")
+
+
+@context_vault_bp.put(
+    "/memory-use-settings",
+    name="context_vault.api_update_memory_use_settings",
+)
+async def api_update_context_memory_use_settings(request: Request):
+    # 保存した記憶をチャットの回答に使うかを、ユーザーの明示操作で切り替える。
+    # Switch whether saved memory is used in chat answers through an explicit user action.
+    """保存した記憶をチャットの回答に使うかを、ユーザーの明示操作で切り替える。"""
+    user_id = user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
+    data, error_response = await require_json_dict(request, status="fail")
+    if error_response is not None:
+        return error_response
+    payload, validation_error = validate_payload_model(
+        data,
+        ContextMemoryUseSettingsUpdateRequest,
+        error_message=ERROR_CONTEXT_MEMORY_USE_SETTINGS_PAYLOAD_INVALID,
+        status="fail",
+    )
+    if validation_error is not None:
+        return validation_error
+    try:
+        result = await update_memory_use_settings(user_id, payload.enabled)
         return jsonify({"status": "success", **result.model_dump()})
     except ApiServiceError as exc:
         return jsonify_service_error(exc, status="fail")

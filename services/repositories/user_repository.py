@@ -342,5 +342,6 @@ class UserRepository:
             "generative_ui_skill_enabled": user.generative_ui_skill_enabled,
             "memo_tools_skill_enabled": user.memo_tools_skill_enabled,
             "prompt_tools_skill_enabled": user.prompt_tools_skill_enabled,
+            "memory_use_enabled": user.memory_use_enabled,
             "preferred_locale": user.preferred_locale,
         }

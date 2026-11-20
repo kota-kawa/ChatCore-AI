@@ -39,6 +39,7 @@ from services.response_models import (
     ContextFactListItemResponse,
     ContextFactListResponse,
     ContextFactResponse,
+    ContextMemoryUseSettingsResponse,
 )
 
 logger = logging.getLogger("blueprints.context_vault")
@@ -431,3 +432,24 @@ async def search_facts(
         return ContextSearchResult(total=len(rows), facts=[_to_response(row) for row in rows])
 
     return await _transaction(session, operation)
+
+
+# 日本語: 保存した記憶をチャットの回答に使う設定。保存する設定（context_vault_candidate_service の抽出設定）とは別。
+# English: The setting for using saved memory in chat answers; separate from the extraction setting that decides saving.
+async def get_memory_use_settings(
+    user_id: int,
+    *,
+    session: AsyncSession | None = None,
+) -> ContextMemoryUseSettingsResponse:
+    enabled = await _transaction(session, lambda db: _repository(db).get_memory_use_enabled(user_id))
+    return ContextMemoryUseSettingsResponse(enabled=enabled)
+
+
+async def update_memory_use_settings(
+    user_id: int,
+    enabled: bool,
+    *,
+    session: AsyncSession | None = None,
+) -> ContextMemoryUseSettingsResponse:
+    updated = await _transaction(session, lambda db: _repository(db).update_memory_use_enabled(user_id, enabled))
+    return ContextMemoryUseSettingsResponse(enabled=updated)
