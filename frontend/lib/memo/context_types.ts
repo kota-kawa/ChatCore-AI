@@ -3,11 +3,6 @@
 import type {
   ContextExtractionSettingsResponse,
   ContextExtractionSettingsUpdateRequest,
-  ContextFactCandidateApprovalResponse,
-  ContextFactCandidateApproveRequest,
-  ContextFactCandidateListResponse,
-  ContextFactCandidateRejectRequest,
-  ContextFactCandidateResponse,
   ContextFactCreateRequest,
   ContextFactListResponse,
   ContextFactResponse,
@@ -47,35 +42,6 @@ type ContextFactUpdateFields = Pick<
 
 export type ContextFactUpdateInput = Pick<ContextFactUpdateRequest, "revision"> & {
   [Field in keyof ContextFactUpdateFields]?: Exclude<ContextFactUpdateFields[Field], null>;
-};
-
-export type ContextFactCandidate = ContextFactCandidateResponse;
-export type ContextCandidateStatus = ContextFactCandidate["status"];
-
-export type ContextCandidateListPayload = ContextFactCandidateListResponse & {
-  error?: string;
-};
-
-type ContextCandidateApproveFields = Pick<
-  ContextFactCandidateApproveRequest,
-  "title" | "content" | "fact_type" | "importance"
->;
-
-export type ContextCandidateApproveInput = Pick<
-  ContextFactCandidateApproveRequest,
-  "revision"
-> & {
-  [Field in keyof ContextCandidateApproveFields]?: Exclude<
-    ContextCandidateApproveFields[Field],
-    null
-  >;
-};
-
-export type ContextCandidateRejectInput = ContextFactCandidateRejectRequest;
-
-export type ContextCandidateMutationPayload = Partial<ContextFactCandidateApprovalResponse> & {
-  status?: string;
-  error?: string;
 };
 
 export type ContextExtractionSettings = ContextExtractionSettingsResponse;

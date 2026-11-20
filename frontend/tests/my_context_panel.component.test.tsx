@@ -1,26 +1,23 @@
 // 個人コンテキストの表示と操作を検証する。
 // Tests my context panel behavior.
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import { describe, expect, it, vi } from "vitest";
 
 import { MyContextPanel } from "../components/memo/MyContextPanel";
-import type { ContextCandidateApi } from "../components/memo/ContextCandidatePanel";
+import type { ContextExtractionApi } from "../components/memo/ContextExtractionSetting";
 import type { ContextFact } from "../lib/memo/context_types";
 
 function renderPanel(props: Parameters<typeof MyContextPanel>[0]) {
-  const candidateApi: ContextCandidateApi = {
-    load: vi.fn().mockResolvedValue({ candidates: [], totalPending: 0, nextCursor: null }),
-    approve: vi.fn().mockResolvedValue(null),
-    reject: vi.fn().mockResolvedValue(undefined),
-    loadSettings: vi.fn().mockResolvedValue({ enabled: false }),
-    updateSettings: vi.fn().mockImplementation(async ({ enabled }) => ({ enabled })),
-    ...props.candidateApi,
+  const extractionApi: ContextExtractionApi = {
+    load: vi.fn().mockResolvedValue({ enabled: false }),
+    update: vi.fn().mockImplementation(async ({ enabled }) => ({ enabled })),
+    ...props.extractionApi,
   };
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <MyContextPanel {...props} candidateApi={candidateApi} />
+      <MyContextPanel {...props} extractionApi={extractionApi} />
     </SWRConfig>,
   );
 }
@@ -36,6 +33,7 @@ const sampleFact: ContextFact = {
   revision: 2,
   confidence: null,
   last_confirmed_at: null,
+  deprecated_reason: null,
   created_at: null,
   updated_at: null,
 };
@@ -47,21 +45,6 @@ const projectFact: ContextFact = {
   title: "進行中の刷新プロジェクト",
   content: "API互換性を維持して段階移行する",
   revision: 1,
-};
-
-const candidateFact = {
-  id: 30,
-  fact_type: "decision" as const,
-  title: "API互換性を優先する",
-  content: "段階移行中は既存クライアントとの互換性を維持する",
-  importance: 75,
-  confidence: 0.9,
-  status: "pending" as const,
-  revision: 1,
-  source_kind: "chat" as const,
-  source_ref: "chat:100",
-  created_at: null,
-  updated_at: null,
 };
 
 describe("MyContextPanel", () => {
@@ -108,31 +91,45 @@ describe("MyContextPanel", () => {
     expect(screen.getByRole("tab", { name: /取り込み/ })).toBeInTheDocument();
   });
 
-  it("revalidates the fact list after approving an AI suggestion", async () => {
+  it("puts the auto-save switch on the memory screen and has no pending-approval panel", async () => {
+    const load = vi.fn().mockResolvedValue({ facts: [sampleFact], totalActive: 1, nextCursor: null });
+    renderPanel({ isLoggedIn: true, api: { load }, extractionApi: { load: vi.fn().mockResolvedValue({ enabled: true }) } });
+
+    await screen.findByText("エディタの好み");
+    const toggle = await screen.findByRole("switch", { name: "チャットからの自動保存" });
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
+    expect(
+      screen.getByText(/上限（200件）に達すると、長く話題に出ていない記憶から自動で入れ替わります/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("承認待ちの提案")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "承認" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "却下" })).not.toBeInTheDocument();
+  });
+
+  it("marks only the facts the memory limit deactivated in the deactivated list", async () => {
     const load = vi.fn().mockResolvedValue({
-      facts: [sampleFact],
+      facts: [
+        { ...sampleFact, id: 7, title: "上限で外れた記憶", status: "deprecated", deprecated_reason: "capacity" },
+        { ...sampleFact, id: 8, title: "自分で無効化した記憶", status: "deprecated", deprecated_reason: "user" },
+        { ...sampleFact, id: 9, title: "以前に無効化した記憶", status: "deprecated", deprecated_reason: null },
+      ],
       totalActive: 1,
       nextCursor: null,
     });
-    const approve = vi.fn().mockResolvedValue(null);
-    renderPanel({
-      isLoggedIn: true,
-      api: { load },
-      candidateApi: {
-        load: vi.fn().mockResolvedValue({
-          candidates: [candidateFact],
-          totalPending: 1,
-          nextCursor: null,
-        }),
-        approve,
-      },
-    });
+    renderPanel({ isLoggedIn: true, api: { load } });
 
-    await screen.findByText(candidateFact.title);
-    fireEvent.click(screen.getByRole("button", { name: "承認" }));
+    await screen.findByText("上限で外れた記憶");
+    fireEvent.click(screen.getByRole("button", { name: "無効化済み" }));
 
-    await waitFor(() => expect(approve).toHaveBeenCalledWith(candidateFact.id, { revision: 1 }));
-    await waitFor(() => expect(load.mock.calls.length).toBeGreaterThanOrEqual(2));
+    await waitFor(() => expect(load).toHaveBeenCalledWith({ factType: null, status: "deprecated" }));
+    expect(screen.getAllByText("上限のため自動で無効化")).toHaveLength(1);
+    const card = screen.getByText("上限で外れた記憶").closest("article");
+    expect(card).toHaveTextContent("上限のため自動で無効化");
+    expect(screen.getByText("自分で無効化した記憶").closest("article")).not.toHaveTextContent("上限のため自動で無効化");
+    expect(screen.getByText("以前に無効化した記憶").closest("article")).not.toHaveTextContent("上限のため自動で無効化");
+    // 復元は既存の操作のまま。
+    // Restoring stays the existing action.
+    expect(within(card as HTMLElement).getByRole("button", { name: "復元" })).toBeInTheDocument();
   });
 
   it("creates a fact through the editor and reloads", async () => {

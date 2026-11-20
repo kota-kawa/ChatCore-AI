@@ -1,6 +1,6 @@
-// 記憶（パーソナル・コンテキスト）の API クライアント。事実と AI の提案候補の取得・作成・更新・承認・却下、
+// 記憶（パーソナル・コンテキスト）の API クライアント。事実の取得・作成・更新、
 // 自動抽出の設定、記憶の書き出しとインポート（確認してから取り込む）を扱う。
-// API client for Memory (the personal context): loading, creating, updating, approving and rejecting facts and AI-suggested candidates,
+// API client for Memory (the personal context): loading, creating and updating facts,
 // the auto-extraction setting, and exporting and importing the memory (import is previewed before it is confirmed).
 
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
@@ -9,15 +9,9 @@ import { writeCachedAuthState } from "../../scripts/core/auth_state_cache";
 import { memoFetchJsonOrThrow } from "./api";
 import type { HttpError } from "./types";
 import type {
-  ContextCandidateApproveInput,
-  ContextCandidateListPayload,
-  ContextCandidateMutationPayload,
-  ContextCandidateRejectInput,
-  ContextCandidateStatus,
   ContextExtractionSettings,
   ContextExtractionSettingsUpdateInput,
   ContextFact,
-  ContextFactCandidate,
   ContextFactCreateInput,
   ContextFactListPayload,
   ContextFactMutationPayload,
@@ -36,14 +30,6 @@ import type {
 export type ContextFactListResult = {
   facts: ContextFact[];
   totalActive: number;
-  nextCursor: string | null;
-};
-
-// AI の提案候補の一覧と、次のページを取るためのカーソル。
-// A page of AI-suggested candidates plus the cursor for fetching the next page.
-export type ContextCandidateListResult = {
-  candidates: ContextFactCandidate[];
-  totalPending: number;
   nextCursor: string | null;
 };
 
@@ -167,70 +153,6 @@ export async function updateContextFact(
     { defaultMessage: "記憶の更新に失敗しました。", hasApplicationError: (d) => !d.fact },
   );
   return payload.fact as ContextFact;
-}
-
-// 承認待ちなどの抽出候補（有効な記憶が上限で自動保存できなかったもの）を状態・カーソルで取得する。
-// Load extraction candidates (those that could not be auto-saved at the active-memory cap) by status and opaque cursor.
-export async function loadContextCandidates(params: {
-  status?: ContextCandidateStatus;
-  limit?: number;
-  cursor?: string | null;
-} = {}): Promise<ContextCandidateListResult> {
-  const query = new URLSearchParams();
-  query.set("status", params.status ?? "pending");
-  if (params.limit) query.set("limit", String(params.limit));
-  if (params.cursor) query.set("cursor", params.cursor);
-
-  const res = await resilientFetch(`/api/context-facts/candidates?${query.toString()}`, {
-    credentials: "same-origin",
-  });
-  const data: ContextCandidateListPayload = await res.json().catch(() => ({}));
-  if (res.status === 401) return { candidates: [], totalPending: 0, nextCursor: null };
-  if (!res.ok) {
-    throw new Error(data.error || `AIからの提案の取得に失敗しました (${res.status})`);
-  }
-  return {
-    candidates: Array.isArray(data.candidates) ? data.candidates : [],
-    totalPending: typeof data.total_pending === "number" ? data.total_pending : 0,
-    nextCursor: data.next_cursor ?? null,
-  };
-}
-
-// 候補を必要に応じて編集し、コンテキスト事実として承認する。
-// Approve a candidate as a context fact, optionally with edits.
-export async function approveContextCandidate(
-  candidateId: number,
-  input: ContextCandidateApproveInput,
-): Promise<ContextFact | null> {
-  const { payload } = await memoFetchJsonOrThrow<ContextCandidateMutationPayload>(
-    `/api/context-facts/candidates/${candidateId}/approve`,
-    {
-      method: "PUT",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    },
-    { defaultMessage: "AIからの提案を承認できませんでした。" },
-  );
-  return payload.fact ?? null;
-}
-
-// 候補を却下し、pending一覧から除外する。
-// Reject a candidate and remove it from the pending list.
-export async function rejectContextCandidate(
-  candidateId: number,
-  input: ContextCandidateRejectInput,
-): Promise<void> {
-  await memoFetchJsonOrThrow<ContextCandidateMutationPayload>(
-    `/api/context-facts/candidates/${candidateId}/reject`,
-    {
-      method: "PUT",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    },
-    { defaultMessage: "AIからの提案を却下できませんでした。" },
-  );
 }
 
 // 会話からの記憶の自動保存の設定（初期値は有効）を取得する。

@@ -1,5 +1,5 @@
-// 「マイコンテキスト」（AI が回答に使うユーザーの事実・好み・方針）を一覧し、追加・編集・無効化・書き出し/取り込みを行うパネル。AI の提案候補パネルも内包する。MemoPage から使われる。
-// Panel for "my context" (facts, preferences, and decisions the AI may use in answers): list, add, edit, deprecate, and export/import, with the AI suggestion panel embedded. Used by MemoPage.
+// 「マイコンテキスト」（AI が回答に使うユーザーの事実・好み・方針）を一覧し、追加・編集・無効化・書き出し/取り込みを行うパネル。チャットからの自動保存の設定も内包する。MemoPage から使われる。
+// Panel for "my context" (facts, preferences, and decisions the AI may use in answers): list, add, edit, deprecate, and export/import, with the auto-save setting embedded. Used by MemoPage.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 
@@ -24,9 +24,9 @@ import { MemoSelect } from "./MemoSelect";
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
 import {
-  ContextCandidatePanel,
-  type ContextCandidateApi,
-} from "./ContextCandidatePanel";
+  ContextExtractionSetting,
+  type ContextExtractionApi,
+} from "./ContextExtractionSetting";
 import {
   ContextPortabilityModal,
   type ContextPortabilityApi,
@@ -45,7 +45,7 @@ type ContextApi = {
 type MyContextPanelProps = {
   isLoggedIn: boolean;
   api?: Partial<ContextApi>;
-  candidateApi?: Partial<ContextCandidateApi>;
+  extractionApi?: Partial<ContextExtractionApi>;
   portabilityApi?: Partial<ContextPortabilityApi>;
 };
 
@@ -73,12 +73,12 @@ const EMPTY_EDITOR: EditorState = {
   content: "",
 };
 
-// 事実の一覧（状態・種類で絞り込み、カーソルで続きを読み込む）と、追加・編集モーダル、提案候補パネルを束ねる。
-// Combines the fact list (filtered by status and type, with cursor-based "load more"), the add/edit modal, and the candidate panel.
+// 事実の一覧（状態・種類で絞り込み、カーソルで続きを読み込む）と、追加・編集モーダル、自動保存の設定を束ねる。
+// Combines the fact list (filtered by status and type, with cursor-based "load more"), the add/edit modal, and the auto-save setting.
 export function MyContextPanel({
   isLoggedIn,
   api,
-  candidateApi,
+  extractionApi,
   portabilityApi,
 }: MyContextPanelProps) {
   const { t } = useTranslation();
@@ -148,10 +148,6 @@ export function MyContextPanel({
     () => [{ value: "all", label: t("memo.allTypes") }, ...localizedTypeOptions],
     [t],
   );
-
-  const refreshFactsAfterCandidateApproval = useCallback(async () => {
-    await mutate();
-  }, [mutate]);
 
   const openCreate = () => {
     setErrorText(null);
@@ -319,10 +315,7 @@ export function MyContextPanel({
         api={portabilityApi}
       />
 
-      <ContextCandidatePanel
-        api={candidateApi}
-        onApproved={refreshFactsAfterCandidateApproval}
-      />
+      <ContextExtractionSetting api={extractionApi} />
 
       <div className="memo-context__filters">
         <MemoSelect
@@ -506,6 +499,9 @@ export function MyContextPanel({
                   <div className="memo-context-card__meta">
                     <span>{t("memo.source", { source: sourceLabel(fact.source_kind) })}</span>
                     <span>{t("memo.importanceValue", { value: importanceLabel(fact.importance) })}</span>
+                    {fact.status === "deprecated" && fact.deprecated_reason === "capacity" && (
+                      <span>{t("memo.deprecatedAtCapacity")}</span>
+                    )}
                   </div>
                   <div className="memo-context-card__actions">
                     <button
