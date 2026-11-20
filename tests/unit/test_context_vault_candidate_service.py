@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from services.api_errors import ApiServiceError
 from services.context_vault_candidate_service import (
     approve_candidate,
-    list_auto_saved_facts,
     list_candidates,
     reject_candidate,
     store_extracted_facts,
@@ -74,7 +73,6 @@ def _repo():
     for name in (
         "get_extraction_settings",
         "store_extracted",
-        "list_auto_saved_in_room",
         "list_candidates",
         "count_pending",
         "approve_candidate",
@@ -158,22 +156,6 @@ class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(result, ExtractedStoreResult([], 0))
         repo.get_extraction_settings.assert_not_awaited()
-
-    async def test_list_auto_saved_facts_extracts_message_id_and_reports_setting(self):
-        repo = _repo()
-        repo.get_extraction_settings.return_value = True
-        repo.list_auto_saved_in_room.return_value = [
-            {"id": 31, "title": "Rust", "revision": 2, "source_ref": "chat:room-1:message:55"},
-            {"id": 32, "title": "Odd", "revision": 1, "source_ref": "chat:room-1:message:oops"},
-        ]
-        with patch("services.context_vault_candidate_service._repository", return_value=repo):
-            result = await list_auto_saved_facts(7, "room-1", session=object())
-        self.assertTrue(result.enabled)
-        self.assertEqual(
-            [fact.model_dump() for fact in result.facts],
-            [{"id": 31, "message_id": 55, "title": "Rust", "revision": 2}],
-        )
-        repo.list_auto_saved_in_room.assert_awaited_once_with(7, "room-1")
 
     async def test_list_candidates_returns_cursor_and_allowlisted_dto(self):
         repo = _repo()

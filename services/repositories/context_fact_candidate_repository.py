@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, NamedTuple
 
-from sqlalchemy import exists, func, or_, select, tuple_, update
+from sqlalchemy import func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -318,34 +318,6 @@ class ContextFactCandidateRepository:
             index_where=ContextFactCandidate.status == "pending",
         ).returning(ContextFactCandidate.id)
         return (await self.session.execute(statement)).scalar_one_or_none() is not None
-
-    # 日本語: 指定した部屋のチャットから自動保存された、有効な事実。候補の承認で作られた事実(本人が見て承認した)は含めない。
-    # source_ref の前方一致は room_id 内の LIKE ワイルドカードをエスケープする(autoescape)。有効な事実の上限で件数は抑えられる。
-    # English: Active facts auto-saved from one room's chat, excluding facts created by approving a candidate (the owner
-    # reviewed those). The source_ref prefix match escapes LIKE wildcards in room_id (autoescape); the active-fact cap bounds the rows.
-    async def list_auto_saved_in_room(self, user_id: int, room_id: str) -> list[dict[str, Any]]:
-        promoted_from_candidate = exists().where(ContextFactCandidate.promoted_fact_id == ContextFact.id)
-        result = await self.session.execute(
-            select(ContextFact.id, ContextFact.title, ContextFact.revision, ContextFact.source_ref)
-            .where(
-                ContextFact.user_id == user_id,
-                ContextFact.status == "active",
-                ContextFact.source_kind == "chat",
-                ContextFact.source_ref.startswith(f"chat:{room_id}:message:", autoescape=True),
-                ~promoted_from_candidate,
-            )
-            .order_by(ContextFact.id.asc())
-            .limit(MAX_ACTIVE_CONTEXT_FACTS)
-        )
-        return [
-            {
-                "id": int(row.id),
-                "title": str(row.title or ""),
-                "revision": int(row.revision),
-                "source_ref": str(row.source_ref),
-            }
-            for row in result
-        ]
 
     # 日本語: (created_at, id) の降順によるキーセットページング。before_* を渡すとそれより古い行だけを返す。
     # English: Keyset pagination ordered by (created_at, id) descending; before_* restricts the result to older rows.

@@ -22,9 +22,6 @@ import type { ChatRoomMode, NormalizedTask, UiChatMessage } from "../../lib/chat
 import { createStructuredUiStateScope } from "../../lib/chat_page/structured_ui_scope";
 import { stripCopyBlockFences } from "../../scripts/chat/copy_block_markdown";
 import { stripWebSearchArtifacts } from "../../scripts/chat/memo_text";
-import type { AutoSavedMemory } from "../../lib/chat_page/auto_saved_memory_api";
-import type { AutoSavedMemoriesByMessage } from "../../lib/chat_page/auto_saved_memory_state";
-import { AutoSavedMemoryNotices } from "./auto_saved_memory_notices";
 import { BotMessageParts } from "./bot_message_parts";
 import { BranchNavigator } from "./branch_navigator";
 import { CopyActionButton } from "./copy_action_button";
@@ -42,10 +39,6 @@ import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 // SSR 環境では useLayoutEffect が警告を出すため、ブラウザ上でのみ useLayoutEffect を使う。
 // Use useLayoutEffect on the browser to avoid React SSR warnings.
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
-
-// 通知の無い回答に渡す空配列。毎回新しい配列を作らず、行の memo 化を崩さない。
-// Empty array for answers without notices; a shared reference keeps row memoization intact.
-const NO_AUTO_SAVED_ENTRIES: readonly never[] = [];
 
 // ユーザーメッセージのインライン編集フォーム。送信すると再生成をトリガーする。
 // Inline edit form for a user message; submitting triggers message regeneration.
@@ -206,8 +199,6 @@ type ChatMessageRowProps = {
   onEditCancel: () => void;
   onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
   onSwitchBranch: (messageId: number) => void;
-  autoSavedMemories: AutoSavedMemoriesByMessage;
-  onUndoAutoSavedMemory: (memory: AutoSavedMemory) => Promise<void>;
   taskLookup: Map<string, NormalizedTask>;
 };
 
@@ -245,8 +236,6 @@ function ChatMessageRow({
   onEditCancel,
   onEditAndRegenerate,
   onSwitchBranch,
-  autoSavedMemories,
-  onUndoAutoSavedMemory,
   rows,
   style,
   taskLookup,
@@ -478,14 +467,6 @@ function ChatMessageRow({
             />
           )}
         </div>
-        {/* この回答から自動保存された記憶の通知。取得・取り消しの状態は一覧の外（hook）が持つので、仮想リストが行を作り直しても残る。 */}
-        {/* Notices for memories auto-saved from this answer. Their fetch and undo state lives outside the list (a hook), so it survives the virtual list rebuilding rows. */}
-        {!message.error && !isActivelyStreaming && message.serverId !== undefined ? (
-          <AutoSavedMemoryNotices
-            entries={autoSavedMemories.get(message.serverId) ?? NO_AUTO_SAVED_ENTRIES}
-            onUndo={onUndoAutoSavedMemory}
-          />
-        ) : null}
       </div>
     </div>
   );
@@ -515,8 +496,6 @@ type ChatMessageListProps = {
   onToolApprovalDecide: (approvalId: string, decision: ToolApprovalDecision, acknowledgeWarnings?: boolean) => Promise<void>;
   onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
   onSwitchBranch: (messageId: number) => void;
-  autoSavedMemories: AutoSavedMemoriesByMessage;
-  onUndoAutoSavedMemory: (memory: AutoSavedMemory) => Promise<void>;
   tasks: NormalizedTask[];
 };
 
@@ -544,8 +523,6 @@ function ChatMessageListComponent({
   onToolApprovalDecide,
   onEditAndRegenerate,
   onSwitchBranch,
-  autoSavedMemories,
-  onUndoAutoSavedMemory,
   tasks,
 }: ChatMessageListProps) {
   const { t } = useTranslation();
@@ -653,8 +630,6 @@ function ChatMessageListComponent({
       onEditCancel: handleEditCancel,
       onEditAndRegenerate,
       onSwitchBranch,
-      autoSavedMemories,
-      onUndoAutoSavedMemory,
       taskLookup,
     }),
     [
@@ -675,8 +650,6 @@ function ChatMessageListComponent({
       handleEditCancel,
       onEditAndRegenerate,
       onSwitchBranch,
-      autoSavedMemories,
-      onUndoAutoSavedMemory,
       taskLookup,
     ],
   );

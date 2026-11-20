@@ -69,8 +69,6 @@ from services.response_models import (  # noqa: E402
     ChatHistoryPagination,
     ChatHistoryResponse,
     ChatJsonResponse,
-    ContextAutoSavedFactListResponse,
-    ContextAutoSavedFactResponse,
     ContextDigestGroup,
     ContextDigestResponse,
     ContextExtractionSettingsResponse,
@@ -207,8 +205,6 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
     ("ContextFactCandidateListResponse", ContextFactCandidateListResponse),
     ("ContextFactCandidateApprovalResponse", ContextFactCandidateApprovalResponse),
     ("ContextExtractionSettingsResponse", ContextExtractionSettingsResponse),
-    ("ContextAutoSavedFactResponse", ContextAutoSavedFactResponse),
-    ("ContextAutoSavedFactListResponse", ContextAutoSavedFactListResponse),
     ("ContextDigestGroup", ContextDigestGroup),
     ("ContextDigestResponse", ContextDigestResponse),
 ]

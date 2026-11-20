@@ -1,12 +1,11 @@
 """LLM が会話から自動抽出した記憶（個人コンテキストの事実）のユースケース。
 
 抽出結果の保存（空きがあれば未確認の事実として直接保存し、上限で入らない分は承認待ち候補へ）、
-チャットで自動保存した事実の一覧、候補の一覧・承認・却下、抽出機能の ON/OFF 設定を扱う。
+候補の一覧・承認・却下、抽出機能の ON/OFF 設定を扱う。
 
 Use cases for memory (personal-context facts) that the LLM extracts from conversations.
 Covers storing extraction results (saved directly as unconfirmed facts while there is room, the rest queued
-as pending candidates), listing facts auto-saved from a chat, listing/approving/rejecting candidates,
-and the extraction setting.
+as pending candidates), listing/approving/rejecting candidates, and the extraction setting.
 """
 
 from __future__ import annotations
@@ -39,8 +38,6 @@ from services.request_models import (
     ContextFactType,
 )
 from services.response_models import (
-    ContextAutoSavedFactListResponse,
-    ContextAutoSavedFactResponse,
     ContextExtractionSettingsResponse,
     ContextFactCandidateApprovalResponse,
     ContextFactCandidateListResponse,
@@ -223,50 +220,6 @@ async def store_extracted_facts(
                 int(fact["revision"]),
             )
     return result
-
-
-def _message_id_from_source_ref(source_ref: str) -> int | None:
-    # source_ref は "chat:{room_id}:message:{id}"。末尾が整数でなければ（他形式の行）None。
-    # source_ref is "chat:{room_id}:message:{id}"; None when the tail is not an integer (a row of another shape).
-    try:
-        return int(source_ref.rsplit(":", 1)[1])
-    except (IndexError, ValueError):
-        return None
-
-
-async def list_auto_saved_facts(
-    user_id: int,
-    room_id: str,
-    *,
-    session: AsyncSession | None = None,
-) -> ContextAutoSavedFactListResponse:
-    """指定した部屋のチャットから自動保存された、本人の有効な事実と、自動抽出が有効かを返す。
-    チャット画面が「記憶しました」を出し、その場で取り消せるようにするための読み取り。
-
-    Return the owner's active facts auto-saved from one room's chat and whether auto-extraction is on,
-    so the chat can show "remembered" notices with an in-place undo.
-    """
-
-    async def operation(db: AsyncSession) -> ContextAutoSavedFactListResponse:
-        repo = _repository(db)
-        enabled = await repo.get_extraction_settings(user_id)
-        rows = await repo.list_auto_saved_in_room(user_id, room_id)
-        facts = []
-        for row in rows:
-            message_id = _message_id_from_source_ref(row["source_ref"])
-            if message_id is None:
-                continue
-            facts.append(
-                ContextAutoSavedFactResponse(
-                    id=row["id"],
-                    message_id=message_id,
-                    title=row["title"],
-                    revision=max(row["revision"], 1),
-                )
-            )
-        return ContextAutoSavedFactListResponse(enabled=enabled, facts=facts)
-
-    return await _transaction(session, operation)
 
 
 # カーソルは「作成日時~ID」形式。最後の区切りで分割するので、日時側に区切り文字が含まれても壊れない。
