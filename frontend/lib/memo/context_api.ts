@@ -18,6 +18,7 @@ import type {
   ContextFactListPayload,
   ContextFactMutationPayload,
   ContextFactMutationResult,
+  ContextFactRevertResult,
   ContextFactStatus,
   ContextFactType,
   ContextFactUpdateInput,
@@ -27,6 +28,10 @@ import type {
   ContextVaultImportPreviewInput,
   ContextVaultImportResult,
 } from "./context_types";
+
+// 「すべての記憶を削除」がリクエストへ付ける確認の値。サーバーの blueprints/context_vault/constants.py の DELETE_ALL_CONFIRMATION と揃える。
+// The confirmation value "delete all memories" sends; keep in step with DELETE_ALL_CONFIRMATION in the server's blueprints/context_vault/constants.py.
+const DELETE_ALL_CONFIRMATION = "delete-all";
 
 // 事実の一覧と、次のページを取るためのカーソル。
 // A page of facts plus the cursor for fetching the next page.
@@ -93,17 +98,33 @@ async function throwContextResponseError(response: Response, defaultMessage: str
   throw createContextApiError(message, response.status);
 }
 
-// 記憶の一覧を種類・状態で絞り込んで取得する。
-// Load the Memory list, filtered by fact type / status.
+// 一覧の 1 件を、出典・置き換えの項目が無い応答（旧バージョンのサーバー）でも同じ形で扱えるよう既定値で補う。
+// Fills a list item's defaults so a response without the source and replacement fields (an older server) is handled the same way.
+function normalizeContextFact(fact: ContextFact): ContextFact {
+  return {
+    ...fact,
+    source_count: typeof fact.source_count === "number" ? fact.source_count : 0,
+    last_mentioned_at: fact.last_mentioned_at ?? null,
+    sources: Array.isArray(fact.sources) ? fact.sources : [],
+    superseded_by: fact.superseded_by ?? null,
+    replaces: fact.replaces ?? null,
+  };
+}
+
+// 記憶の一覧を種類・状態・検索語で絞り込んで取得する。検索語は前後の空白を除き、空なら送らない。
+// Load the Memory list, filtered by fact type / status / search query; the query is trimmed and omitted when empty.
 export async function loadContextFacts(params: {
   factType?: ContextFactType | null;
   status?: ContextFactStatus;
   cursor?: string | null;
+  query?: string | null;
 }): Promise<ContextFactListResult> {
   const query = new URLSearchParams();
   if (params.factType) query.set("fact_type", params.factType);
   query.set("status", params.status ?? "active");
   if (params.cursor) query.set("cursor", params.cursor);
+  const searchText = params.query?.trim();
+  if (searchText) query.set("q", searchText);
 
   const res = await resilientFetch(`/api/context-facts?${query.toString()}`, {
     credentials: "same-origin",
@@ -117,7 +138,7 @@ export async function loadContextFacts(params: {
     );
   }
   return {
-    facts: Array.isArray(data.facts) ? data.facts : [],
+    facts: Array.isArray(data.facts) ? data.facts.map(normalizeContextFact) : [],
     totalActive: typeof data.total_active === "number" ? data.total_active : 0,
     nextCursor: data.next_cursor ?? null,
   };
@@ -156,6 +177,43 @@ export async function updateContextFact(
     { defaultMessage: "記憶の更新に失敗しました。", hasApplicationError: (d) => !d.fact },
   );
   return payload.fact as ContextFactMutationResult;
+}
+
+// 置き換えで入った新しい記憶を無効化し（この内容は再び覚えない）、置き換えられた古い記憶を有効へ戻す。revision は新しい記憶のもの。
+// Deprecate the memory that came in by replacement (that content is not remembered again) and make the older memory it replaced active again; revision is the new memory's.
+export async function revertContextFactReplacement(factId: number, revision: number): Promise<ContextFactRevertResult> {
+  const { payload } = await memoFetchJsonOrThrow<Partial<ContextFactRevertResult> & { error?: string }>(
+    `/api/context-facts/${factId}/revert-replacement`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ revision }),
+    },
+    { defaultMessage: "記憶を元に戻せませんでした。", hasApplicationError: (d) => !d.fact || !d.restored_fact },
+  );
+  return payload as ContextFactRevertResult;
+}
+
+// 記憶 1 件を、有効・無効化済みのどちらでも完全に削除する。無効化と違い、文面と出典も消える。
+// Delete one memory for good, active or deprecated; unlike deprecating, its wording and sources are erased too.
+export async function deleteContextFact(factId: number, revision: number): Promise<void> {
+  await memoFetchJsonOrThrow(
+    `/api/context-facts/${factId}?${new URLSearchParams({ revision: String(revision) }).toString()}`,
+    { method: "DELETE", credentials: "same-origin" },
+    { defaultMessage: "記憶を削除できませんでした。" },
+  );
+}
+
+// 自分の記憶・出典・候補をすべて削除し、消した記憶の件数を返す。誤操作を防ぐため確認の値を付ける。設定（自動で記憶する・回答に使う）は変わらない。
+// Delete all of the owner's memories, sources and candidates and return how many memories were deleted; the confirmation value guards against accidents. The settings (auto-saving, use in answers) are unchanged.
+export async function deleteAllContextFacts(): Promise<number> {
+  const { payload } = await memoFetchJsonOrThrow<{ deleted_count?: unknown; error?: string }>(
+    `/api/context-facts?${new URLSearchParams({ confirm: DELETE_ALL_CONFIRMATION }).toString()}`,
+    { method: "DELETE", credentials: "same-origin" },
+    { defaultMessage: "記憶を削除できませんでした。" },
+  );
+  return typeof payload.deleted_count === "number" ? payload.deleted_count : 0;
 }
 
 // 「enabled」だけを持つ記憶の設定を読む。未ログイン（401）は無効として返す。

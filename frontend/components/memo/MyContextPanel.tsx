@@ -1,12 +1,19 @@
-// 「マイコンテキスト」（AI が回答に使うユーザーの事実・好み・方針）を一覧し、追加・編集・無効化・書き出し/取り込みを行うパネル。チャットからの自動保存の設定も内包する。MemoPage から使われる。
-// Panel for "my context" (facts, preferences, and decisions the AI may use in answers): list, add, edit, deprecate, and export/import, with the auto-save setting embedded. Used by MemoPage.
+// 「記憶」（AI が回答に使うユーザーの事実・好み・方針）の画面。一覧（検索・出典・置き換えの履歴）と、追加・編集・無効化・復元・置き換えを元に戻す・完全な削除・すべての削除・書き出し/取り込みを行う。
+// チャットからの自動保存と回答への利用の設定も内包する。MemoPage から使われる。
+// The "memory" screen (facts, preferences, and decisions the AI may use in answers): the list (search, sources, replacement history) and add, edit, deactivate, restore, undo a replacement,
+// delete for good, delete all, and export/import, with the auto-save and use-in-answers settings embedded. Used by MemoPage.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 
 import { useBodyScrollLock } from "../../hooks/use_body_scroll_lock";
+import { useContextFactDeletion } from "../../hooks/memo_page/use_context_fact_deletion";
+import { useDebouncedValue } from "../../hooks/use_debounced_value";
 import {
   createContextFact as defaultCreate,
+  deleteAllContextFacts as defaultDeleteAll,
+  deleteContextFact as defaultDeleteOne,
   loadContextFacts as defaultLoad,
+  revertContextFactReplacement as defaultRevert,
   updateContextFact as defaultUpdate,
 } from "../../lib/memo/context_api";
 import {
@@ -18,8 +25,10 @@ import {
   type ContextFactStatus,
   type ContextFactType,
 } from "../../lib/memo/context_types";
+import { ContextDeleteAllModal } from "./ContextDeleteAllModal";
+import { CONTEXT_FACT_TYPE_MESSAGE_KEYS, ContextFactCard } from "./ContextFactCard";
+import { ContextFactDeleteModal } from "./ContextFactDeleteModal";
 import { MemoListSkeleton } from "./MemoListSkeleton";
-import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
@@ -36,7 +45,13 @@ import {
   type ContextPortabilityApi,
 } from "./ContextPortabilityModal";
 import { useTranslation } from "../../contexts/locale_context";
-import type { MessageKey } from "../../lib/i18n/catalogs/ja";
+
+// 検索語の入力から取得までの待ち時間。打鍵のたびに取得せず、入力が止まってから 1 回だけ取る。
+// How long to wait after the last keystroke before fetching, so typing causes one fetch instead of one per key.
+const SEARCH_DEBOUNCE_MS = 300;
+// 検索語の最大文字数。サーバーの MAX_CONTEXT_SEARCH_QUERY_LENGTH（blueprints/context_vault/constants.py）と揃える。
+// The longest search query; keep in step with the server's MAX_CONTEXT_SEARCH_QUERY_LENGTH (blueprints/context_vault/constants.py).
+const MAX_SEARCH_LENGTH = 200;
 
 // 通信関数の束。テストでは props で差し替えられる。
 // Bundle of API functions, overridable through props in tests.
@@ -44,6 +59,9 @@ type ContextApi = {
   load: typeof defaultLoad;
   create: typeof defaultCreate;
   update: typeof defaultUpdate;
+  revert: typeof defaultRevert;
+  deleteOne: typeof defaultDeleteOne;
+  deleteAll: typeof defaultDeleteAll;
 };
 
 type MyContextPanelProps = {
@@ -88,20 +106,18 @@ export function MyContextPanel({
   portabilityApi,
 }: MyContextPanelProps) {
   const { t } = useTranslation();
-  const factTypeKeys: Record<ContextFactType, MessageKey> = {
-    profile: "memo.factTypeProfile", preference: "memo.factTypePreference", project: "memo.factTypeProject",
-    decision: "memo.factTypeDecision", reference: "memo.factTypeReference",
-  };
-  const localizedTypeOptions = CONTEXT_FACT_TYPE_OPTIONS.map((option) => ({ ...option, label: t(factTypeKeys[option.value as ContextFactType]) }));
+  const localizedTypeOptions = CONTEXT_FACT_TYPE_OPTIONS.map((option) => ({ ...option, label: t(CONTEXT_FACT_TYPE_MESSAGE_KEYS[option.value as ContextFactType]) }));
   const importanceOptions = CONTEXT_FACT_IMPORTANCE_OPTIONS.map((option) => ({ ...option, label: option.value === "25" ? t("memo.importanceLow") : option.value === "75" ? t("memo.importanceHigh") : t("memo.importanceStandard") }));
-  const sourceLabel = (source: string) => source === "manual" ? t("memo.sourceManual") : source === "chat" ? t("memo.sourceChat") : source === "import" ? t("memo.sourceImport") : source;
-  const importanceLabel = (value: number) => value <= 33 ? t("memo.importanceLow") : value >= 67 ? t("memo.importanceHigh") : t("memo.importanceStandard");
   const load = api?.load ?? defaultLoad;
   const create = api?.create ?? defaultCreate;
   const update = api?.update ?? defaultUpdate;
+  const revert = api?.revert ?? defaultRevert;
+  const deleteOne = api?.deleteOne ?? defaultDeleteOne;
+  const deleteAll = api?.deleteAll ?? defaultDeleteAll;
 
   const [statusFilter, setStatusFilter] = useState<ContextFactStatus>("active");
   const [typeFilter, setTypeFilter] = useState<ContextFactType | "all">("all");
+  const [searchInput, setSearchInput] = useState("");
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -110,13 +126,18 @@ export function MyContextPanel({
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [isPortabilityOpen, setIsPortabilityOpen] = useState(false);
+  const [noticeText, setNoticeText] = useState<string | null>(null);
   const activeLoadMoreRef = useRef<string | null>(null);
   const activeFilterKeyRef = useRef<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
 
+  // 検索は語の一致だけ（意味検索は使わない）。前後の空白を除いた語を、入力が止まってから取得に使う。
+  // Search is term matching only (no semantic search); the trimmed query is used for fetching once typing pauses.
+  const searchQuery = useDebouncedValue(searchInput.trim(), SEARCH_DEBOUNCE_MS);
+
   // 絞り込み条件ごとの取得キー。未ログインのときは null にして取得しない。
   // Fetch key per filter combination; null when logged out so nothing is fetched.
-  const swrKey = isLoggedIn ? `context-facts|${statusFilter}|${typeFilter}` : null;
+  const swrKey = isLoggedIn ? `context-facts|${statusFilter}|${typeFilter}|${searchQuery}` : null;
   activeFilterKeyRef.current = swrKey;
   const { data, error, isLoading, mutate } = useSWR(
     swrKey,
@@ -124,9 +145,22 @@ export function MyContextPanel({
       load({
         factType: typeFilter === "all" ? null : typeFilter,
         status: statusFilter,
+        ...(searchQuery ? { query: searchQuery } : {}),
       }),
     { revalidateOnFocus: false },
   );
+
+  // 削除の確認モーダルと実行。成功したら通知を出して一覧を取り直す。
+  // The delete confirmation modals and their execution; on success the notice is shown and the list is reloaded.
+  const deletion = useContextFactDeletion({
+    deleteOne,
+    deleteAll,
+    onDeleted: async (message) => {
+      setNoticeText(message);
+      setAdditionalFacts([]);
+      await mutate();
+    },
+  });
 
   useEffect(() => {
     setAdditionalFacts([]);
@@ -137,6 +171,7 @@ export function MyContextPanel({
 
   useEffect(() => {
     setErrorText(null);
+    setNoticeText(null);
   }, [swrKey]);
 
   // 先頭ページと追加ページを結合し、id の重複を除く。
@@ -239,6 +274,23 @@ export function MyContextPanel({
     }
   };
 
+  // 置き換えで入った新しい記憶を無効化し（この内容は再び覚えない）、置き換えられた古い記憶を有効へ戻す。
+  // Deactivates the memory that came in by replacement (that content is not remembered again) and makes the older memory it replaced active again.
+  const handleRevert = async (fact: ContextFact) => {
+    setBusyFactId(fact.id);
+    setErrorText(null);
+    setNoticeText(null);
+    try {
+      await revert(fact.id, fact.revision);
+      setNoticeText(t("memo.revertDone"));
+      await mutate();
+    } catch (err) {
+      setErrorText(err instanceof Error ? err.message : t("memo.revertFailed"));
+    } finally {
+      setBusyFactId(null);
+    }
+  };
+
   // 次のページを読み込む。多重実行を避け、絞り込み条件が変わった後に届いた古い結果は反映しない。
   // Loads the next page, avoiding concurrent runs and ignoring a result that arrives after the filter changed.
   const handleLoadMore = async () => {
@@ -254,6 +306,7 @@ export function MyContextPanel({
         factType: typeFilter === "all" ? null : typeFilter,
         status: statusFilter,
         cursor: requestedCursor,
+        ...(searchQuery ? { query: searchQuery } : {}),
       });
       if (activeFilterKeyRef.current !== requestedFilterKey) return;
 
@@ -327,6 +380,28 @@ export function MyContextPanel({
       </div>
 
       <div className="memo-context__filters">
+        <div className="memo-context__search">
+          <i className="bi bi-search" aria-hidden="true"></i>
+          <input
+            id="context-search"
+            type="search"
+            value={searchInput}
+            maxLength={MAX_SEARCH_LENGTH}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder={t("memo.contextSearch")}
+            aria-label={t("memo.contextSearch")}
+          />
+          {searchInput && (
+            <button
+              type="button"
+              className="memo-context__search-clear"
+              onClick={() => setSearchInput("")}
+              aria-label={t("memo.contextSearchClear")}
+            >
+              <i className="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+          )}
+        </div>
         <MemoSelect
           value={typeFilter}
           onChange={(v) => setTypeFilter(v as ContextFactType | "all")}
@@ -354,6 +429,12 @@ export function MyContextPanel({
       {errorText && editor === null && (
         <div className="memo-flash memo-flash--error" role="alert">
           {errorText}
+        </div>
+      )}
+      {noticeText && (
+        <div className="memo-context__notice" role="status">
+          <i className="bi bi-check-circle" aria-hidden="true"></i>
+          <span>{noticeText}</span>
         </div>
       )}
 
@@ -478,11 +559,13 @@ export function MyContextPanel({
         </div>
       ) : facts.length === 0 ? (
         <div className="memo-context-empty">
-          <i className="bi bi-safe" aria-hidden="true"></i>
+          <i className={`bi ${searchQuery ? "bi-search" : "bi-safe"}`} aria-hidden="true"></i>
           <p className="memo-context-empty__text">
-            {statusFilter === "active"
-              ? t("memo.noContext")
-              : t("memo.noDeprecatedContext")}
+            {searchQuery
+              ? t("memo.noSearchResults", { query: searchQuery })
+              : statusFilter === "active"
+                ? t("memo.noContext")
+                : t("memo.noDeprecatedContext")}
           </p>
         </div>
       ) : (
@@ -490,52 +573,14 @@ export function MyContextPanel({
           <ul className="memo-context-list">
             {facts.map((fact) => (
               <li key={fact.id}>
-                <article
-                  className={`memo-context-card${fact.status === "deprecated" ? " is-deprecated" : ""}`}
-                >
-                  <div className="memo-context-card__head">
-                    <span
-                      className={`memo-context-card__badge memo-context-card__badge--${fact.fact_type}`}
-                    >
-                      {t(factTypeKeys[fact.fact_type])}
-                    </span>
-                    <h3 className="memo-context-card__title">{fact.title}</h3>
-                  </div>
-                  <MemoMarkdown
-                    className="memo-context-card__body md-content"
-                    text={fact.content}
-                  />
-                  <div className="memo-context-card__meta">
-                    <span>{t("memo.source", { source: sourceLabel(fact.source_kind) })}</span>
-                    <span>{t("memo.importanceValue", { value: importanceLabel(fact.importance) })}</span>
-                    {fact.status === "deprecated" && fact.deprecated_reason === "capacity" && (
-                      <span>{t("memo.deprecatedAtCapacity")}</span>
-                    )}
-                  </div>
-                  <div className="memo-context-card__actions">
-                    <button
-                      type="button"
-                      className="memo-context-card__action"
-                      onClick={() => openEdit(fact)}
-                      disabled={busyFactId === fact.id}
-                    >
-                      <i className="bi bi-pencil" aria-hidden="true"></i>
-                      <span>{t("common.edit")}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="memo-context-card__action"
-                      onClick={() => handleToggleStatus(fact)}
-                      disabled={busyFactId === fact.id}
-                    >
-                      <i
-                        className={`bi ${fact.status === "active" ? "bi-archive" : "bi-arrow-counterclockwise"}`}
-                        aria-hidden="true"
-                      ></i>
-                      <span>{fact.status === "active" ? t("memo.deactivate") : t("memo.restore")}</span>
-                    </button>
-                  </div>
-                </article>
+                <ContextFactCard
+                  fact={fact}
+                  busy={busyFactId === fact.id}
+                  onEdit={openEdit}
+                  onToggleStatus={handleToggleStatus}
+                  onRevert={handleRevert}
+                  onDelete={deletion.openDelete}
+                />
               </li>
             ))}
           </ul>
@@ -553,6 +598,33 @@ export function MyContextPanel({
           )}
         </>
       )}
+
+      <section className="memo-context__delete-all" aria-labelledby="context-delete-all-heading">
+        <div className="memo-context__delete-all-copy">
+          <h2 id="context-delete-all-heading" className="memo-context__delete-all-title">{t("memo.deleteAllHeading")}</h2>
+          <p>{t("memo.deleteAllSectionDescription")}</p>
+        </div>
+        <button type="button" className="memo-context__delete-all-btn" onClick={deletion.openDeleteAll}>
+          <i className="bi bi-trash3" aria-hidden="true"></i>
+          <span>{t("memo.deleteAllOpen")}</span>
+        </button>
+      </section>
+
+      <ContextFactDeleteModal
+        fact={deletion.target}
+        busy={deletion.deleting}
+        errorText={deletion.errorText}
+        onConfirm={() => void deletion.confirmDelete()}
+        onClose={deletion.closeDelete}
+      />
+      <ContextDeleteAllModal
+        isOpen={deletion.isAllOpen}
+        activeCount={totalActive}
+        busy={deletion.deletingAll}
+        errorText={deletion.allErrorText}
+        onConfirm={() => void deletion.confirmDeleteAll()}
+        onClose={deletion.closeDeleteAll}
+      />
     </div>
   );
 }

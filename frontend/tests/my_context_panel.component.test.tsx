@@ -40,6 +40,11 @@ const sampleFact: ContextFact = {
   confidence: null,
   last_confirmed_at: null,
   deprecated_reason: null,
+  source_count: 0,
+  last_mentioned_at: null,
+  sources: [],
+  superseded_by: null,
+  replaces: null,
   created_at: null,
   updated_at: null,
 };
