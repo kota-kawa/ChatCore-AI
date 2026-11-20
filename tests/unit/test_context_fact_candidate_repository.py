@@ -5,12 +5,20 @@ and the extraction setting).
 """
 
 import unittest
+import unittest.mock
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 from sqlalchemy.dialects.postgresql import dialect
 from sqlalchemy.exc import IntegrityError
 
+from services.context_vault_bm25 import find_bm25_duplicates
+from services.context_vault_reconcile import (
+    CandidatePlan,
+    ReconcileResolution,
+    RelatedFact,
+    resolve_reconcile_decisions,
+)
 from services.repositories.context_fact_candidate_repository import (
     ContextFactCandidateRepository,
 )
@@ -532,6 +540,486 @@ class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(saved), 1)
         sources = [sql for sql in _executed_sql(session) if sql.startswith("INSERT INTO context_fact_sources")]
         self.assertEqual(len(sources), 1)
+
+    async def test_store_extracted_never_compares_facts_replaced_by_a_newer_fact(self):
+        # 置き換えで無効化した事実(superseded)は比較対象に入らないので、本人が元の内容に戻したら(東京→大阪→東京)保存できる。
+        # 比較対象は理由が NULL か user の無効化済みの事実と有効な事実だけで、理由 superseded・capacity・merged は条件に現れない。
+        # A fact deprecated by replacement (superseded) is not compared, so going back to the old content (Tokyo -> Osaka -> Tokyo)
+        # can be saved. Only active facts and facts with a NULL or user reason are compared; superseded, capacity and merged never
+        # appear in the condition.
+        session = _store_session(active=3, facts=[], inserts=[_result(mapping=_fact(id=41))])
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()])
+
+        self.assertEqual([fact["id"] for fact in saved], [41])
+        facts_query = _executed(session)[1]
+        self.assertEqual(set(facts_query.params.values()), {7, "active", "user"})
+        self.assertNotIn("superseded", facts_query.params.values())
+        self.assertIn("context_facts.deprecated_reason IS NULL OR context_facts.deprecated_reason = ", str(facts_query))
+
+    async def test_store_extracted_supersedes_the_target_without_a_capacity_replacement(self):
+        # 上限でも、置き換えは対象の無効化→新しい事実の挿入→対象への置き換え先の記録の順で、有効件数が変わらないので
+        # 別の事実の入れ替え(capacity)は起こさない。
+        # Even at the cap a supersede runs: deprecate the target, insert the new fact, record the replacement on the target. The
+        # active count does not change, so no other fact is replaced (capacity).
+        session = _store_session(
+            active=MAX_ACTIVE_CONTEXT_FACTS,
+            inserts=[_result(inserted_id=12), _result(mapping=_fact(id=41)), MagicMock()],
+        )
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("supersede", 12, 3))}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual([fact["id"] for fact in saved], [41])
+        statements = _executed(session)
+        self.assertEqual(len(statements), 6)
+        deprecate, insert, link = statements[3:]
+        self.assertTrue(str(deprecate).startswith("UPDATE context_facts SET"))
+        self.assertEqual(deprecate.params["status"], "deprecated")
+        self.assertEqual(deprecate.params["deprecated_reason"], "superseded")
+        self.assertIn("revision=(context_facts.revision + ", str(deprecate).replace(" = ", "="))
+        # 判定の時点の revision(3)のままの、本人の有効な事実だけを無効化する。
+        # Only the owner's active fact still at the revision it was judged at (3) is deprecated.
+        self.assertEqual(deprecate.params["id_1"], 12)
+        self.assertEqual(deprecate.params["user_id_1"], 7)
+        self.assertEqual(deprecate.params["status_1"], "active")
+        self.assertEqual(deprecate.params["revision_2"], 3)
+        self.assertTrue(str(insert).startswith("INSERT INTO context_facts"))
+        self.assertTrue(str(link).startswith("UPDATE context_facts SET"))
+        self.assertEqual(link.params["superseded_by_fact_id"], 41)
+        self.assertEqual(link.params["id_1"], 12)
+        self.assertEqual(link.params["user_id_1"], 7)
+        self.assertFalse(any("FOR UPDATE" in str(statement) for statement in statements))
+        self.assertFalse(any(statement.params.get("deprecated_reason") == "capacity" for statement in statements))
+        self.assertFalse(any(str(statement).startswith("DELETE") for statement in statements))
+
+    async def test_store_extracted_supersede_keeps_the_new_fact_unconfirmed_and_records_its_source(self):
+        session = _store_session(
+            active=3,
+            inserts=[_result(inserted_id=12), _result(mapping=_fact(id=41)), MagicMock(), _result(inserted_id=70), MagicMock()],
+        )
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("supersede", 12, 3))}
+
+        await ContextFactCandidateRepository(session).store_extracted(
+            7, [_extracted()], room_id="room-1", user_message_id=8, plans=plans
+        )
+
+        statements = _executed(session)
+        insert = statements[4]
+        self.assertNotIn("last_confirmed_at", insert.params)
+        self.assertEqual(insert.params["source_kind"], "chat")
+        self.assertTrue(str(statements[5]).startswith("UPDATE context_facts"))
+        self.assertTrue(str(statements[6]).startswith("INSERT INTO context_fact_sources"))
+        self.assertIn(41, statements[6].params.values())
+
+    async def test_store_extracted_saves_as_a_new_fact_when_the_target_changed_after_it_was_judged(self):
+        # 対象の更新が 0 行(判定の後に編集・無効化された)なら置き換えず、新しい事実として保存する。上限なら通常の入れ替えを行う。
+        # With zero rows updated (the target was edited or deprecated after the judgement) nothing is replaced and the content is
+        # saved as a new fact, going through the usual replacement at the cap.
+        session = _store_session(
+            active=MAX_ACTIVE_CONTEXT_FACTS,
+            inserts=[_nothing_replaceable(), _replaced(5), _result(mapping=_fact(id=41))],
+        )
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("supersede", 12, 3))}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual([fact["id"] for fact in saved], [41])
+        statements = _executed(session)
+        self.assertEqual(statements[3].params["deprecated_reason"], "superseded")
+        self.assertEqual(statements[4].params["deprecated_reason"], "capacity")
+        self.assertTrue(str(statements[5]).startswith("INSERT INTO context_facts"))
+        self.assertFalse(any("superseded_by_fact_id" in statement.params for statement in statements))
+
+    async def test_store_extracted_supersede_does_not_free_a_slot_for_the_next_candidate(self):
+        # 上限(空き 0)で、1 件目は置き換え、2 件目は通常の追加。置き換えは有効件数を変えないので、2 件目は入れ替えを必要とする。
+        # At the cap (no free slot), the first candidate supersedes and the second is a plain add. A supersede leaves the active
+        # count unchanged, so the second still needs a replacement.
+        session = _store_session(
+            active=MAX_ACTIVE_CONTEXT_FACTS,
+            inserts=[
+                _result(inserted_id=12),
+                _result(mapping=_fact(id=41)),
+                MagicMock(),
+                _replaced(5),
+                _result(mapping=_fact(id=42)),
+            ],
+        )
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("supersede", 12, 3))}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(
+            7,
+            [_extracted(), _extracted(title="Go", content="Writes services in Go", fingerprint="c" * 64)],
+            plans=plans,
+        )
+
+        self.assertEqual([fact["id"] for fact in saved], [41, 42])
+        statements = _executed(session)
+        self.assertEqual(statements[6].params["deprecated_reason"], "capacity")
+        # 入れ替えの対象から、置き換えて保存したばかりの 41 を外す。
+        # The replacement excludes fact 41, which was just saved by the supersede.
+        self.assertIn(41, statements[6].params["id_1"])
+
+    async def test_store_extracted_supersede_with_a_free_slot_leaves_the_slot_for_the_next_candidate(self):
+        session = _store_session(
+            active=MAX_ACTIVE_CONTEXT_FACTS - 1,
+            inserts=[
+                _result(inserted_id=12),
+                _result(mapping=_fact(id=41)),
+                MagicMock(),
+                _result(mapping=_fact(id=42)),
+            ],
+        )
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("supersede", 12, 3))}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(
+            7,
+            [_extracted(), _extracted(title="Go", content="Writes services in Go", fingerprint="c" * 64)],
+            plans=plans,
+        )
+
+        self.assertEqual([fact["id"] for fact in saved], [41, 42])
+        self.assertFalse(any(statement.params.get("deprecated_reason") == "capacity" for statement in _executed(session)))
+
+    async def test_store_extracted_mention_adds_a_source_to_the_target_and_saves_no_fact(self):
+        session = _store_session(active=3, fact_lock=12, inserts=[_result(inserted_id=70), MagicMock()])
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("mention", 12, 3))}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(
+            7, [_extracted()], room_id="room-1", user_message_id=8, plans=plans
+        )
+
+        self.assertEqual(saved, [])
+        # 再言及と同じく、判定の時点の revision(3)の有効な本人の事実だけを FOR SHARE でロックしてから出典を入れる。
+        # Like any re-mention, the source goes in after locking FOR SHARE the owner's active fact at the revision it was judged at (3).
+        lock = session.scalar.await_args_list[-1].args[0].compile(dialect=dialect())
+        self.assertIn("FOR SHARE", str(lock))
+        self.assertEqual({12, 7, 3, "active"}, set(lock.params.values()))
+        statements = _executed_sql(session)
+        self.assertEqual(len(statements), 5)
+        self.assertTrue(statements[3].startswith("INSERT INTO context_fact_sources"))
+        self.assertFalse(any(sql.startswith(("UPDATE context_facts", "INSERT INTO context_facts")) for sql in statements))
+
+    async def test_store_extracted_skip_saves_nothing(self):
+        session = _store_session(active=3, inserts=[])
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("skip", 12, 3))}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual(saved, [])
+        self.assertEqual(session.execute.await_count, 3)
+
+    async def test_store_extracted_does_not_replace_what_a_mention_just_re_mentioned(self):
+        session = _store_session(
+            active=MAX_ACTIVE_CONTEXT_FACTS,
+            fact_lock=12,
+            inserts=[
+                _result(inserted_id=70),
+                MagicMock(),
+                _replaced(5),
+                _result(mapping=_fact(id=41)),
+                _result(inserted_id=71),
+                MagicMock(),
+            ],
+        )
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("mention", 12, 3))}
+
+        await ContextFactCandidateRepository(session).store_extracted(
+            7,
+            [_extracted(), _extracted(title="Go", content="Writes services in Go", fingerprint="c" * 64)],
+            room_id="room-1",
+            user_message_id=8,
+            plans=plans,
+        )
+
+        replacement = next(
+            statement
+            for statement in _executed(session)
+            if str(statement).startswith("UPDATE context_facts") and statement.params.get("deprecated_reason") == "capacity"
+        )
+        self.assertIn(12, replacement.params["id_1"])
+
+    async def test_store_extracted_applies_a_plan_only_to_candidates_that_pass_the_duplicate_checks(self):
+        # BM25 で既存の事実と重複した候補と、却下済みの fingerprint の候補には、照合の結果を適用しない。
+        # A candidate that duplicates an existing fact by BM25, or matches a rejected fingerprint, gets no reconciliation result.
+        duplicate = _store_session(
+            active=3,
+            facts=[_existing_fact("deprecated")],
+            inserts=[],
+        )
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("supersede", 99, 1))}
+
+        await ContextFactCandidateRepository(duplicate).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertFalse(any(sql.startswith("UPDATE context_facts") for sql in _executed_sql(duplicate)))
+        rejected = _store_session(active=3, fingerprint_hit=99, inserts=[])
+
+        await ContextFactCandidateRepository(rejected).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual(rejected.execute.await_count, 3)
+
+    async def test_store_extracted_stores_the_reconciliation_embedding_with_the_new_fact(self):
+        session = _store_session(active=3, inserts=[_result(mapping=_fact(id=41, embedding_status="ready"))])
+        plans = {0: CandidatePlan(embedding=[0.25] * 768)}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        insert = _executed(session)[-1]
+        self.assertEqual(insert.params["embedding_vector"], [0.25] * 768)
+        self.assertEqual(insert.params["embedding_status"], "ready")
+        # 呼び出し側が保存後の予約を省けるよう、保存した事実の埋め込みの状態を返す。
+        # The saved fact reports its embedding status so the caller can skip scheduling one after the save.
+        self.assertEqual(saved[0]["embedding_status"], "ready")
+
+    async def test_store_extracted_without_a_plan_leaves_the_embedding_to_be_generated_later(self):
+        session = _store_session(active=3, inserts=[_result(mapping=_fact(id=41))])
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()])
+
+        insert = _executed(session)[-1]
+        self.assertNotIn("embedding_vector", insert.params)
+        self.assertNotIn("embedding_status", insert.params)
+        self.assertEqual(saved[0]["embedding_status"], "pending")
+
+    async def test_store_extracted_reuses_the_embedding_for_a_candidate_added_after_a_failed_supersede(self):
+        session = _store_session(
+            active=3,
+            inserts=[_nothing_replaceable(), _result(mapping=_fact(id=41, embedding_status="ready"))],
+        )
+        plans = {0: CandidatePlan(embedding=[0.5] * 768, resolution=ReconcileResolution("supersede", 12, 3))}
+
+        await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual(_executed(session)[-1].params["embedding_vector"], [0.5] * 768)
+
+    async def test_store_extracted_applies_a_supersede_to_a_candidate_that_bm25_matched_to_an_active_fact(self):
+        # BM25 は有効な事実(12)との重複とみなすが、事前の照合が同じ事実を見て update と判定していれば、再言及にせず置き換える。
+        # BM25 calls it a duplicate of active fact 12, but when reconciliation saw the same fact and decided update, it is
+        # replaced instead of being re-mentioned.
+        session = _store_session(
+            active=MAX_ACTIVE_CONTEXT_FACTS,
+            facts=[_existing_fact("active", 12)],
+            inserts=[_result(inserted_id=12), _result(mapping=_fact(id=41)), MagicMock()],
+        )
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("supersede", 12, 3), matched_fact_id=12)}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual([fact["id"] for fact in saved], [41])
+        statements = _executed_sql(session)
+        self.assertTrue(statements[3].startswith("UPDATE context_facts"))
+        self.assertTrue(statements[4].startswith("INSERT INTO context_facts"))
+        self.assertTrue(statements[5].startswith("UPDATE context_facts"))
+        self.assertFalse(any(sql.startswith("INSERT INTO context_fact_sources") for sql in statements))
+
+    async def test_store_extracted_saves_a_candidate_that_bm25_matched_when_the_decision_is_add(self):
+        session = _store_session(
+            active=3,
+            facts=[_existing_fact("active", 12)],
+            inserts=[_result(mapping=_fact(id=41, embedding_status="ready"))],
+        )
+        plans = {0: CandidatePlan(embedding=[0.5] * 768, resolution=ReconcileResolution(), matched_fact_id=12)}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual([fact["id"] for fact in saved], [41])
+        insert = _executed(session)[-1]
+        self.assertTrue(str(insert).startswith("INSERT INTO context_facts"))
+        self.assertEqual(insert.params["embedding_vector"], [0.5] * 768)
+        # 再言及ではないので出典は足さない（room_id が無い）。一致した事実の行も更新しない。
+        # It is not a re-mention, so no source goes to the matched fact, and its row is not updated.
+        self.assertFalse(any(sql.startswith("UPDATE context_facts") for sql in _executed_sql(session)))
+
+    async def test_store_extracted_does_not_save_an_add_decision_whose_content_the_owner_rejected(self):
+        session = _store_session(active=3, facts=[_existing_fact("active", 12)], fingerprint_hit=99, inserts=[])
+        plans = {0: CandidatePlan(resolution=ReconcileResolution(), matched_fact_id=12)}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual(saved, [])
+        self.assertEqual(session.execute.await_count, 3)
+
+    async def test_store_extracted_re_mentions_a_bm25_matched_candidate_without_a_decision(self):
+        # 判定が無い（照合が失敗した・応答が不正・その候補の判定が無い）ときは、従来どおり有効な事実への再言及（出典だけを足す）。
+        # With no decision (reconciliation failed, the response was invalid, or it held none for this candidate) it is a re-mention
+        # of the active fact as before: only a source is added.
+        for label, plans in (("no plan", None), ("plan without a decision", {0: CandidatePlan(matched_fact_id=12)})):
+            with self.subTest(label):
+                session = _store_session(
+                    active=3,
+                    facts=[_existing_fact("active", 12)],
+                    fact_lock=12,
+                    inserts=[_result(inserted_id=70), MagicMock()],
+                )
+
+                saved = await ContextFactCandidateRepository(session).store_extracted(
+                    7, [_extracted()], room_id="room-1", user_message_id=8, plans=plans
+                )
+
+                self.assertEqual(saved, [])
+                statements = _executed_sql(session)
+                self.assertTrue(statements[3].startswith("INSERT INTO context_fact_sources"))
+                lock = session.scalar.await_args_list[-1].args[0].compile(dialect=dialect())
+                self.assertEqual({12, 7, 3, "active"}, set(lock.params.values()))
+
+    async def test_store_extracted_ignores_a_decision_when_the_bm25_match_differs_from_the_earlier_one(self):
+        # 事前は有効な事実に一致していなかった（plan の一致は None）のに、ここでは事実 12 に一致した: 事前の判定は使わず再言及。
+        # Earlier no active fact matched (the plan's match is None) but fact 12 matches now: the earlier decision is ignored and
+        # the candidate is re-mentioned.
+        session = _store_session(
+            active=3,
+            facts=[_existing_fact("active", 12)],
+            fact_lock=12,
+            inserts=[_result(inserted_id=70), MagicMock()],
+        )
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("supersede", 99, 1))}
+
+        await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], room_id="room-1", user_message_id=8, plans=plans)
+
+        statements = _executed_sql(session)
+        self.assertTrue(statements[3].startswith("INSERT INTO context_fact_sources"))
+        self.assertFalse(any(sql.startswith("UPDATE context_facts") for sql in statements))
+
+    async def test_store_extracted_ignores_a_decision_when_a_bm25_match_has_disappeared(self):
+        # 事前は事実 12 に一致していたが、ここでは一致しない: 事前の判定は使わず、従来どおり新しい事実として保存する。
+        # Earlier fact 12 matched but nothing matches now: the earlier decision is ignored and the content is saved as a new fact.
+        session = _store_session(active=3, inserts=[_result(mapping=_fact(id=41))])
+        plans = {0: CandidatePlan(resolution=ReconcileResolution("supersede", 12, 3), matched_fact_id=12)}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual([fact["id"] for fact in saved], [41])
+        self.assertFalse(any(sql.startswith("UPDATE context_facts") for sql in _executed_sql(session)))
+
+    async def test_store_extracted_never_reconciles_a_candidate_matched_to_something_other_than_an_active_fact(self):
+        # 最良一致が本人の無効化した事実のときは、plan に何があっても何も保存しない（従来どおり）。
+        # When the best match is a fact the owner deprecated, nothing is saved whatever the plan holds (as before).
+        session = _store_session(active=3, facts=[_existing_fact("deprecated", 12)], inserts=[])
+        plans = {0: CandidatePlan(resolution=ReconcileResolution(), matched_fact_id=12)}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual(saved, [])
+        self.assertEqual(session.execute.await_count, 3)
+
+    # 日本語: 有効な事実 A と、本人が無効化した事実 B（または却下済みの候補 R）の両方に BM25 で重複するが、最良一致は A になる内容。
+    # English: Content that BM25 calls a duplicate of both an active fact A and a fact the owner deactivated B (or a rejected
+    # candidate R), with A as the best match.
+    _A = ("Programming interests", "Likes Python scripting, Rust compiler building, and Go tooling")
+    _B = ("Rust compiler", "builds a Rust compiler")
+    _CANDIDATE = ("Programming interests", "Likes Python scripting and Rust compiler building and builds a Rust compiler")
+
+    @staticmethod
+    def _fact_row(fact_id, title_and_content, status, revision=3):
+        title, content = title_and_content
+        return SimpleNamespace(
+            id=fact_id, revision=revision, fact_type="profile", title=title, content=content, updated_at=None, status=status
+        )
+
+    @staticmethod
+    def _extracted_pair(title_and_content):
+        title, content = title_and_content
+        return _extracted(fact_type="profile", title=title, content=content, evidence="I like it", fingerprint="e" * 64)
+
+    def _removed_content_session(self, *, owner_removed, inserts):
+        facts = [self._fact_row(12, self._A, "active")]
+        rejected = []
+        if owner_removed == "deactivated":
+            facts.append(self._fact_row(13, self._B, "deprecated"))
+        elif owner_removed == "rejected":
+            rejected.append(
+                SimpleNamespace(fact_type="profile", title=self._B[0], content=self._B[1], updated_at=None, status="rejected")
+            )
+        return _store_session(active=3, facts=facts, candidates=rejected, fact_lock=12, inserts=inserts)
+
+    def test_the_reproduction_is_a_duplicate_of_a_alone_of_b_alone_and_a_wins_when_both_exist(self):
+        candidate = self._extracted_pair(self._CANDIDATE)
+        a = {"fact_id": 12, "fact_revision": 3, "fact_status": "active", "fact_type": "profile", "priority": 0}
+        b = {"fact_id": 13, "fact_revision": 3, "fact_status": "deprecated", "fact_type": "profile", "priority": 1}
+        a_doc = {**a, "title": self._A[0], "content": self._A[1]}
+        b_doc = {**b, "title": self._B[0], "content": self._B[1]}
+
+        self.assertEqual(find_bm25_duplicates([candidate], [a_doc])[0]["fact_id"], 12)
+        self.assertEqual(find_bm25_duplicates([candidate], [b_doc])[0]["fact_id"], 13)
+        self.assertEqual(find_bm25_duplicates([candidate], [a_doc, b_doc])[0]["fact_id"], 12)
+
+    async def test_an_active_match_that_also_duplicates_removed_content_is_never_saved_as_a_new_memory(self):
+        # LLM の判定が add・update・noop・失敗のどれでも、新しい記憶は作られず、最良一致の有効な記憶 A への再言及（出典だけ）になる。
+        # Whatever the LLM answers (add, update, noop, or fails), no new memory is made and it is a re-mention of the active best
+        # match A (only a source).
+        related = {0: [RelatedFact(12, 3, "profile", self._A[0], self._A[1], "active", None)]}
+        responses = {
+            "add": '{"decisions":[{"candidate":0,"action":"add","target_id":null}]}',
+            "update": '{"decisions":[{"candidate":0,"action":"update","target_id":12}]}',
+            "noop": '{"decisions":[{"candidate":0,"action":"noop","target_id":12}]}',
+            "failure": None,
+            "invalid": "no json",
+        }
+        for owner_removed in ("deactivated", "rejected"):
+            for label, response in responses.items():
+                with self.subTest(owner_removed=owner_removed, llm=label):
+                    session = self._removed_content_session(
+                        owner_removed=owner_removed, inserts=[_result(inserted_id=70), MagicMock()]
+                    )
+                    decided = resolve_reconcile_decisions(response, related)
+                    plans = {0: CandidatePlan(resolution=decided.get(0), matched_fact_id=12)}
+
+                    saved = await ContextFactCandidateRepository(session).store_extracted(
+                        7, [self._extracted_pair(self._CANDIDATE)], room_id="room-1", user_message_id=8, plans=plans
+                    )
+
+                    self.assertEqual(saved, [])
+                    statements = _executed_sql(session)
+                    self.assertFalse(any(sql.startswith(("INSERT INTO context_facts", "UPDATE context_facts")) for sql in statements))
+                    self.assertTrue(statements[3].startswith("INSERT INTO context_fact_sources"))
+                    lock = session.scalar.await_args_list[-1].args[0].compile(dialect=dialect())
+                    self.assertEqual({12, 7, 3, "active"}, set(lock.params.values()))
+                    # 読み取りは増えない（ロック・事実・却下済みの候補・出典）。
+                    # No extra reads (lock, facts, rejected candidates, then the source).
+                    self.assertEqual(len([sql for sql in statements if sql.startswith("SELECT")]), 3)
+
+    async def test_the_same_content_is_saved_when_no_removed_content_duplicates_it(self):
+        # 本人が無効化した記憶・却下済みの候補が無ければ、add の判定どおり新しい記憶として保存する。
+        # With no removed content to duplicate, an add decision saves the new memory.
+        session = self._removed_content_session(owner_removed=None, inserts=[_result(mapping=_fact(id=41))])
+        plans = {0: CandidatePlan(resolution=ReconcileResolution(), matched_fact_id=12)}
+
+        saved = await ContextFactCandidateRepository(session).store_extracted(
+            7, [self._extracted_pair(self._CANDIDATE)], plans=plans
+        )
+
+        self.assertEqual([fact["id"] for fact in saved], [41])
+
+    async def test_memory_deprecated_by_replacement_or_the_cap_does_not_block_saving(self):
+        # 置き換え(superseded)・上限(capacity)・統合(merged)で無効化した記憶は比較対象（事実の読み取り）に入らない。したがって
+        # 有効な記憶 A だけが見え、本人が元の内容へ戻した add は保存される。
+        # Memory deprecated by replacement, the cap or merging is not in the compared facts, so only active A is seen and an
+        # add that returns to the old content is saved.
+        for reason in ("superseded", "capacity", "merged"):
+            with self.subTest(reason=reason):
+                session = self._removed_content_session(owner_removed=None, inserts=[_result(mapping=_fact(id=41))])
+                plans = {0: CandidatePlan(resolution=ReconcileResolution(), matched_fact_id=12)}
+
+                saved = await ContextFactCandidateRepository(session).store_extracted(
+                    7, [self._extracted_pair(self._CANDIDATE)], plans=plans
+                )
+
+                self.assertEqual([fact["id"] for fact in saved], [41])
+                facts_query = _executed(session)[1]
+                self.assertNotIn(reason, facts_query.params.values())
+
+    async def test_a_unique_candidate_is_not_checked_a_second_time(self):
+        # 最良一致が無い候補は、定義上、本人が無効化した記憶・却下済みの候補とも重複しないので、追加の BM25 の確認をしない。
+        # A candidate with no best match duplicates neither by definition, so no second BM25 pass runs for it.
+        session = _store_session(active=3, inserts=[_result(mapping=_fact(id=41))])
+        plans = {0: CandidatePlan(resolution=ReconcileResolution())}
+
+        with unittest.mock.patch(
+            "services.repositories.context_fact_candidate_repository.find_bm25_duplicates", wraps=find_bm25_duplicates
+        ) as bm25:
+            await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()], plans=plans)
+
+        self.assertEqual(bm25.call_count, 1)
 
     async def test_get_extraction_settings_is_disabled_when_the_user_row_cannot_be_read(self):
         # 列は NOT NULL。None は行が読めないときだけなので、有効扱いにせず抽出が走らない側へ倒す。

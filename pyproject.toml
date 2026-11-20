@@ -68,6 +68,7 @@ ignore = [
 "services/chat_prompt.py" = ["E501"]
 "services/chat_summary.py" = ["E501"]
 "services/context_vault_extraction.py" = ["E501"]
+"services/context_vault_reconcile.py" = ["E501"]
 "services/email_service.py" = ["E501"]
 "services/memo_agent_actions.py" = ["E501"]
 "services/page_actions.py" = ["E501"]
