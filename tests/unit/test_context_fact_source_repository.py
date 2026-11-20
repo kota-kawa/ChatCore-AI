@@ -3,6 +3,7 @@
 Tests the SQL emitted by ContextFactSourceRepository, which adds memory source rows and prunes the oldest ones.
 """
 
+import logging
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -105,6 +106,26 @@ class ContextFactSourceRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         await _record(session)
 
         self.assertTrue(session.savepoint.rolled_back)
+
+    async def test_a_failed_write_is_logged_without_the_quote(self):
+        # SQLAlchemy の例外の文面には SQL のパラメータ(本人の発話の引用)が入る。例外ごとログに出すと引用が漏れる。
+        # SQLAlchemy puts the SQL parameters (the owner's quoted words) in the exception text, so logging the
+        # exception would leak the quote.
+        quote = "I write a compiler in Rust"
+        session = _session(inserted_id=70)
+        session.execute = AsyncMock(
+            side_effect=IntegrityError("INSERT", {"evidence": quote}, Exception("foreign key violation"))
+        )
+
+        with self.assertLogs("services.repositories.context_fact_source_repository", level="INFO") as logs:
+            await _record(session, evidence=quote)
+
+        self.assertEqual(len(logs.records), 1)
+        record = logs.records[0]
+        self.assertIsNone(record.exc_info)
+        self.assertEqual((record.fact_id, record.error_type), (12, "IntegrityError"))
+        self.assertNotIn(quote, logging.Formatter().format(record))
+        self.assertNotIn(quote, str(vars(record)))
 
     async def test_prune_keeps_only_the_newest_sources_of_the_fact(self):
         session = _session(inserted_id=70)

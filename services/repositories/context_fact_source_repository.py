@@ -74,10 +74,19 @@ class ContextFactSourceRepository:
                 )
                 if (await self.session.execute(statement)).scalar_one_or_none() is not None:
                     await self._prune(fact_id)
-        except (IntegrityError, DataError):
-            # 引用の中身はログに出さない（本人の発話）。
-            # The quote is the owner's words, so it is not logged.
-            logger.info("Skipped a memory source that could not be stored.", extra={"fact_id": fact_id}, exc_info=True)
+        except (IntegrityError, DataError) as exc:
+            # 例外の文面には SQL のパラメータ（本人の発話の引用）が入るので、例外そのものはログに出さず、
+            # 種類と SQLSTATE だけを残す。
+            # The exception text carries the SQL parameters (the owner's quoted words), so the exception itself
+            # is not logged; only its type and SQLSTATE are.
+            logger.info(
+                "Skipped a memory source that could not be stored.",
+                extra={
+                    "fact_id": fact_id,
+                    "error_type": type(exc).__name__,
+                    "sqlstate": getattr(exc.orig, "sqlstate", None),
+                },
+            )
 
     async def _lock_fact(self, fact_id: int, user_id: int, revision: int) -> bool:
         locked = await self.session.scalar(
