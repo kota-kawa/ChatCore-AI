@@ -4,7 +4,8 @@ Revision ID: 20261120_01
 Revises: 20261119_01
 Create Date: 2026-11-20
 
-Extraction used to verify a verbatim quote of the user's own words and then throw it away, so a
+Extraction used to check a quote of the user's own words against the message (after NFKC, whitespace and case
+normalization, so not necessarily character-identical) and then throw it away, so a
 fact only knew its `source_ref` string. `context_fact_sources` keeps one row per mention: the
 quote, the user message it came from, the room, and when it was observed. How often and how
 recently a fact was mentioned is derived from these rows, so no counter column is added to
@@ -43,6 +44,11 @@ def upgrade() -> None:
         sa.Column("chat_room_id", sa.String(length=255), nullable=False),
         sa.Column("user_message_id", sa.Integer(), nullable=True),
         sa.Column("evidence", sa.Text(), nullable=False),
+        # timestamptz: 新しく作る表の近年の流儀（承認カード・デモコード・使用量）に合わせた。context_facts の日時は
+        # タイムゾーンなしなので、比較するクエリはセッションの TimeZone で暗黙変換される（Python 側では naive と aware を混ぜない）。
+        # timestamptz follows the recent convention for newly created tables (approvals, demo codes, usage). context_facts
+        # datetimes are naive, so queries comparing them rely on the session TimeZone for the implicit cast (never mix
+        # naive and aware values in Python).
         sa.Column("observed_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["fact_id"], ["context_facts.id"], ondelete="CASCADE"),

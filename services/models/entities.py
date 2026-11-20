@@ -840,8 +840,8 @@ class ContextFactCandidate(Base):
     )
 
 
-# 記憶の事実ごとの出典。1 行が 1 回の言及（本人の発話の逐語引用、発話、ルーム、時刻）で、言及回数や最終言及日はこの行から導く。
-# One mention of a memory fact (a verbatim quote of the owner's words, its message, room and time);
+# 記憶の事実ごとの出典。1 行が 1 回の言及（本人の発話と照合した引用、発話、ルーム、時刻）で、言及回数や最終言及日はこの行から導く。
+# One mention of a memory fact (a quote of the owner's words checked against the message, its message, room and time);
 # how often and how recently a fact was mentioned is derived from these rows.
 class ContextFactSource(Base):
     __tablename__ = "context_fact_sources"
@@ -852,6 +852,8 @@ class ContextFactSource(Base):
     chat_room_id: Mapped[str] = mapped_column(String(255), ForeignKey("chat_rooms.id", ondelete="CASCADE"), nullable=False)
     user_message_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("chat_history.id", ondelete="SET NULL"))
     evidence: Mapped[str] = mapped_column(Text, nullable=False)
+    # timestamptz は新しい表の流儀に合わせたもの。context_facts の日時（タイムゾーンなし）とはセッションの TimeZone で暗黙変換して比べる。
+    # timestamptz follows newer tables; comparing with the naive context_facts datetimes relies on the session TimeZone.
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
 
     __table_args__ = (
