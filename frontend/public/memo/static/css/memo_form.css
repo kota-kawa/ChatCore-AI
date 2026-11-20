@@ -4765,6 +4765,7 @@ body.memo-page {
 
 :where(body.memo-page, .memo-page-shell) .memo-context-card__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: auto;
   padding-top: 0.3rem;
@@ -4923,10 +4924,6 @@ body.memo-page {
   margin: 0;
   color: var(--memo-text-muted);
   font-size: 0.76rem;
-}
-
-:where(body.memo-page, .memo-page-shell) .memo-context-card__actions {
-  flex-wrap: wrap;
 }
 
 /* タッチ端末では、カード内の操作を 44px 以上のタップ領域にする。

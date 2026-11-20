@@ -23,9 +23,6 @@ export type ContextFact = ContextFactListItemResponse;
 // 作成・更新の応答。一覧の 1 件と違い、無効化の理由（deprecated_reason）は含まない。
 // The create/update response; unlike a list item, it carries no deprecation reason (deprecated_reason).
 export type ContextFactMutationResult = ContextFactResponse;
-// 一覧の 1 件が持つ出典（本人の発話の引用・会話・時刻）。件数が 3 を超える記憶は、新しい順の先頭 3 件だけを持つ。
-// One source of a list item (a quote of the owner's words, its conversation and time); a fact with more than three sources carries the newest three.
-export type ContextFactSource = NonNullable<ContextFact["sources"]>[number];
 // 置き換えを元に戻した結果。fact は無効化した新しい記憶、restored_fact は有効へ戻した古い記憶。
 // The result of undoing a replacement: fact is the newer memory now deprecated, restored_fact the older one made active again.
 export type ContextFactRevertResult = ContextFactRevertReplacementResponse;
