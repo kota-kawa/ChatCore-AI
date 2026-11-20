@@ -835,8 +835,8 @@ class ContextFactCandidateRejectRequest(RequestPayloadModel):
     revision: int = Field(ge=1)
 
 
-# 日本語: 会話からのコンテキスト自動抽出のopt-in設定。
-# English: User opt-in setting for automatic context extraction from chats.
+# 日本語: 会話から記憶を自動で抽出する設定（初期値は有効）。
+# English: Setting for automatic memory extraction from chats (enabled by default).
 class ContextExtractionSettingsUpdateRequest(RequestPayloadModel):
     enabled: bool
 

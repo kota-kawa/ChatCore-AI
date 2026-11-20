@@ -174,7 +174,7 @@ async def store_extracted_facts(
     空きが無い分だけ承認待ち候補へ入れる。検証に通らない候補は黙って捨てる。
     session を渡した場合、埋め込みの予約はコミット後に呼び出し側が行う。
 
-    Validate LLM-extracted content and store it as unique memory for an opted-in owner.
+    Validate LLM-extracted content and store it as unique memory for an owner who has extraction enabled.
     What fits under the active-fact cap is saved directly as unconfirmed facts (embeddings are scheduled after
     the commit); only the overflow is queued as pending candidates. Invalid candidates are silently skipped.
     With a caller-supplied session, the caller schedules embeddings after its own commit.
