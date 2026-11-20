@@ -771,12 +771,18 @@ class ContextFact(Base):
     # Extraction confidence (NULL when the owner wrote it) and when the owner last confirmed it (NULL = unconfirmed).
     confidence: Mapped[float | None] = mapped_column(DOUBLE_PRECISION)
     last_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime)
-    # 無効化した理由。user=本人・MCP、capacity=上限での自動の入れ替え。NULL は未記録（有効な事実と、この列の追加前に無効化した事実。
-    # 後者は本人が無効化したので user と同じに扱う）。superseded・merged は後続の変更が書く。
-    # Why the fact was deprecated: user (the owner or MCP), capacity (automatic replacement at the cap). NULL means not recorded
-    # (active facts, and facts deprecated before the column existed, which were the owner's and read like user).
-    # superseded and merged are written by later changes.
+    # 無効化した理由。user=本人・MCP、capacity=上限での自動の入れ替え、superseded=新しい事実による置き換え。NULL は未記録
+    # （有効な事実と、この列の追加前に無効化した事実。後者は本人が無効化したので user と同じに扱う）。merged は後続の変更が書く。
+    # Why the fact was deprecated: user (the owner or MCP), capacity (automatic replacement at the cap), superseded
+    # (replaced by a newer fact). NULL means not recorded (active facts, and facts deprecated before the column existed,
+    # which were the owner's and read like user). merged is written by a later change.
     deprecated_reason: Mapped[str | None] = mapped_column(String(20))
+    # 置き換えで無効化した事実が指す、置き換えた新しい事実。NULL は置き換えられていない事実。置き換え先を消すと NULL に戻る。
+    # For a fact deprecated by replacement, the newer fact that replaced it. NULL means not replaced; deleting the
+    # replacement resets it to NULL.
+    superseded_by_fact_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("context_facts.id", ondelete="SET NULL", name="fk_context_facts_superseded_by")
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -805,6 +811,7 @@ class ContextFact(Base):
         Index("idx_context_facts_user_updated_id", "user_id", desc("updated_at"), desc("id")),
         Index("idx_context_facts_user_digest", "user_id", "status", desc("importance"), desc("updated_at"), desc("id")),
         Index("idx_context_facts_content_trgm", "content", postgresql_using="gin", postgresql_ops={"content": "gin_trgm_ops"}),
+        Index("idx_context_facts_superseded_by", "superseded_by_fact_id", postgresql_where=text("superseded_by_fact_id IS NOT NULL")),
         Index("idx_context_facts_embedding_hnsw", "embedding_vector", postgresql_using="hnsw",
               postgresql_ops={"embedding_vector": "vector_cosine_ops"}, postgresql_where=text("embedding_vector IS NOT NULL")),
     )

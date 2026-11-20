@@ -588,13 +588,17 @@ class ContextFactRepository:
                 ),
                 else_=ContextFact.last_confirmed_at,
             )
-        # 日本語: 利用者・MCP による無効化は理由 user、有効へ戻すときは NULL にする。上限での自動の入れ替え(capacity)は
-        # 抽出の保存側(context_fact_candidate_repository)だけが書く。
-        # English: Deprecating through the owner or MCP records reason user; restoring clears it. The automatic replacement at
-        # the cap (capacity) is written only by the extraction store (context_fact_candidate_repository).
+        # 日本語: 利用者・MCP による無効化は理由 user、有効へ戻すときは理由と置き換え先(superseded_by_fact_id)を NULL にする。
+        # 上限での自動の入れ替え(capacity)と、新しい事実による置き換え(superseded)は抽出の保存側
+        # (context_fact_candidate_repository)だけが書く。
+        # English: Deprecating through the owner or MCP records reason user; restoring clears the reason and the replacement link
+        # (superseded_by_fact_id). The automatic replacement at the cap (capacity) and the replacement by a newer fact (superseded)
+        # are written only by the extraction store (context_fact_candidate_repository).
         if status is not None:
             changes["status"] = status
             changes["deprecated_reason"] = "user" if status == "deprecated" else None
+            if status == "active":
+                changes["superseded_by_fact_id"] = None
         if importance is not None:
             changes["importance"] = importance
         changes["updated_at"] = func.current_timestamp()

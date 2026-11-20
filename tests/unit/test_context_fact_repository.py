@@ -302,6 +302,18 @@ class ContextFactConfirmationTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIn("deprecated_reason=", restore_sql.replace(" ", ""))
         self.assertIsNone(restore_params["deprecated_reason"])
 
+    async def test_restoring_clears_the_replacement_link_and_other_updates_leave_it(self):
+        _, restore_params = await self._update(status="active")
+        _, deprecate_params = await self._update(status="deprecated")
+
+        self.assertIn("superseded_by_fact_id", restore_params)
+        self.assertIsNone(restore_params["superseded_by_fact_id"])
+        self.assertNotIn("superseded_by_fact_id", deprecate_params)
+        for kwargs in ({"importance": 90}, {"title": "New title"}):
+            with self.subTest(kwargs=kwargs):
+                _, params = await self._update(**kwargs)
+                self.assertNotIn("superseded_by_fact_id", params)
+
     async def test_updates_that_leave_the_status_alone_keep_the_reason(self):
         for kwargs in ({"importance": 90}, {"title": "New title"}, {"content": "New", "confirmed_by_owner": True}):
             with self.subTest(kwargs=kwargs):
