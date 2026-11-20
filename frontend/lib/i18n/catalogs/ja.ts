@@ -685,7 +685,7 @@ export const jaMessages = {
   "memo.deleteAllOpen": "すべての記憶を削除…",
   "memo.deleteAllTitle": "すべての記憶を削除しますか？",
   "memo.deleteAllDescription": "有効な記憶{count}件と、無効化済みの記憶、それぞれの出典、あなたが却下した候補をすべて消します。この操作は取り消せません。",
-  "memo.deleteAllSettingsKept": "「チャットから自動で記憶する」と「記憶を回答に使う」の設定は変わりません。無効化や却下で「再び覚えない」ことにしていた内容も、削除後にチャットでまた話すと、もう一度覚えることがあります。",
+  "memo.deleteAllSettingsKept": "「チャットから自動で記憶する」と「記憶を回答に使う」の設定は変わりません。無効化や却下で「再び覚えない」ことにしていた内容も、チャットでまた話すと、もう一度覚えることがあります。",
   "memo.deleteAllAcknowledge": "取り消せないことを理解しました",
   "memo.deleteAllConfirm": "すべて削除",
   "memo.deleteAllDone": "{count}件の記憶を削除しました。",

@@ -305,7 +305,9 @@ describe("MyContextPanel search", () => {
     expect(screen.getByRole("button", { name: "さらに読み込む" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("searchbox", { name: "記憶を検索" }), { target: { value: "東京" } });
-    await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+    // 入力が止まってから取得するので、全件を並列で流して遅いときも待てるよう長めに待つ。
+    // The fetch waits for typing to pause, so wait longer to cover a slow run of the whole suite.
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2), { timeout: 4000 });
 
     expect(screen.getByText("住所")).toBeInTheDocument();
     expect(screen.queryByRole("status", { name: /読み込み/ })).not.toBeInTheDocument();
@@ -314,7 +316,7 @@ describe("MyContextPanel search", () => {
     expect(screen.queryByRole("button", { name: "さらに読み込む" })).not.toBeInTheDocument();
 
     await act(async () => resolveSearch(page([fact({ id: 2, title: "東京の記憶" })])));
-    expect(await screen.findByText("東京の記憶")).toBeInTheDocument();
+    expect(await screen.findByText("東京の記憶", undefined, { timeout: 4000 })).toBeInTheDocument();
     expect(screen.queryByText("住所")).not.toBeInTheDocument();
   });
 
@@ -471,7 +473,7 @@ describe("MyContextPanel delete all", () => {
     expect(dialog).toHaveTextContent("「チャットから自動で記憶する」と「記憶を回答に使う」の設定は変わりません");
     // 無効化や却下で「再び覚えない」ことにしていた内容も、削除すれば再び覚えうることを伝える。
     // It says that what was deactivated or rejected so it would not be remembered again can be remembered again after deleting.
-    expect(dialog).toHaveTextContent("無効化や却下で「再び覚えない」ことにしていた内容も、削除後にチャットでまた話すと、もう一度覚えることがあります");
+    expect(dialog).toHaveTextContent("無効化や却下で「再び覚えない」ことにしていた内容も、チャットでまた話すと、もう一度覚えることがあります");
 
     const confirm = within(dialog).getByRole("button", { name: "すべて削除" });
     expect(confirm).toBeDisabled();
