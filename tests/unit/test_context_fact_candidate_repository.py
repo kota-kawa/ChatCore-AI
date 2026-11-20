@@ -88,6 +88,7 @@ def _extracted(**overrides):
         "content": "Writes a compiler in Rust",
         "source_kind": "chat",
         "source_ref": "chat:room-1:message:9",
+        "evidence": "I write a compiler in Rust",
         "importance": 85,
         "confidence": 0.93,
         "fingerprint": "b" * 64,
@@ -99,14 +100,14 @@ def _extracted(**overrides):
 # 日本語: store_extracted が実行する SQL の順(ロック→既存の事実→既存の候補→挿入)に合わせたセッションのモックを作ります。
 # English: Build a session mock that follows the order of SQL store_extracted runs (lock, existing facts, existing
 # candidates, then inserts).
-def _store_session(*, active, pending, facts=(), fingerprint_hit=None, inserts):
+def _store_session(*, active, pending, facts=(), candidates=(), fingerprint_hit=None, inserts):
     session = MagicMock()
     session.scalar = AsyncMock(side_effect=[active, pending] + [fingerprint_hit] * 5)
     session.execute = AsyncMock(
         side_effect=[
             MagicMock(),
             iter(list(facts)),
-            iter([]),
+            iter(list(candidates)),
             *inserts,
         ]
     )
@@ -177,6 +178,7 @@ class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         # 取り消し(deprecated)した事実は重複判定の比較対象に残るので、同じ内容は再び保存されない。
         # A deprecated (undone) fact stays in the duplicate-check corpus, so the same content is not saved again.
         undone = SimpleNamespace(
+            id=12,
             fact_type="project",
             title="Rust",
             content="Writes a compiler in Rust",
@@ -201,6 +203,136 @@ class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual((stored.saved_facts, stored.queued_count), ([], 0))
         self.assertEqual(session.execute.await_count, 3)
+
+    # 日本語: 事実テーブルの 1 行(重複判定の比較対象)を模した行を作ります。
+    # English: Build a row standing in for one fact-table row of the duplicate-check corpus.
+    @staticmethod
+    def _existing_fact(status="active"):
+        return SimpleNamespace(
+            id=12,
+            fact_type="project",
+            title="Rust",
+            content="Writes a compiler in Rust",
+            updated_at=None,
+            status=status,
+        )
+
+    @staticmethod
+    def _executed_sql(session):
+        return [str(call.args[0].compile(dialect=dialect())) for call in session.execute.await_args_list]
+
+    async def test_store_extracted_records_a_source_with_the_saved_fact(self):
+        session = _store_session(
+            active=3,
+            pending=0,
+            inserts=[_result(mapping=_fact(id=41)), _result(inserted_id=70), MagicMock()],
+        )
+
+        stored = await ContextFactCandidateRepository(session).store_extracted(
+            7, [_extracted()], room_id="room-1", user_message_id=8
+        )
+
+        self.assertEqual([fact["id"] for fact in stored.saved_facts], [41])
+        statements = self._executed_sql(session)
+        self.assertIn("INSERT INTO context_facts", statements[3])
+        self.assertIn("INSERT INTO context_fact_sources", statements[4])
+        self.assertIn("DELETE FROM context_fact_sources", statements[5])
+        source_params = session.execute.await_args_list[4].args[0].compile(dialect=dialect()).params
+        self.assertEqual(
+            {value for value in source_params.values() if not isinstance(value, str) or value != "active"},
+            {41, 7, "room-1", 8, "I write a compiler in Rust"},
+        )
+
+    async def test_store_extracted_keeps_no_source_without_a_room_or_evidence(self):
+        for room_id, evidence in ((None, "quote"), ("room-1", "")):
+            with self.subTest(room_id=room_id, evidence=evidence):
+                session = _store_session(active=3, pending=0, inserts=[_result(mapping=_fact(id=41))])
+
+                await ContextFactCandidateRepository(session).store_extracted(
+                    7, [_extracted(evidence=evidence)], room_id=room_id, user_message_id=8
+                )
+
+                self.assertFalse(any("context_fact_sources" in sql for sql in self._executed_sql(session)))
+
+    async def test_store_extracted_adds_a_source_to_an_active_fact_without_updating_it(self):
+        session = _store_session(
+            active=3,
+            pending=0,
+            facts=[self._existing_fact("active")],
+            inserts=[_result(inserted_id=70), MagicMock()],
+        )
+
+        stored = await ContextFactCandidateRepository(session).store_extracted(
+            7, [_extracted()], room_id="room-1", user_message_id=8
+        )
+
+        self.assertEqual((stored.saved_facts, stored.queued_count), ([], 0))
+        statements = self._executed_sql(session)
+        self.assertIn("INSERT INTO context_fact_sources", statements[3])
+        self.assertIn("DELETE FROM context_fact_sources", statements[4])
+        # 事実の行は更新しない(updated_at・revision を進めない)。
+        # The fact row is not updated, so updated_at and revision stay put.
+        self.assertFalse(any(sql.startswith(("UPDATE context_facts", "INSERT INTO context_facts")) for sql in statements))
+        source_params = session.execute.await_args_list[3].args[0].compile(dialect=dialect()).params
+        self.assertIn(12, source_params.values())
+
+    async def test_store_extracted_adds_no_source_when_the_match_is_not_an_active_fact(self):
+        pending_candidate = SimpleNamespace(
+            fact_type="project",
+            title="Rust",
+            content="Writes a compiler in Rust",
+            updated_at=None,
+            status="pending",
+        )
+        rejected_candidate = SimpleNamespace(
+            fact_type="project",
+            title="Rust",
+            content="Writes a compiler in Rust",
+            updated_at=None,
+            status="rejected",
+        )
+        cases = {
+            "deprecated fact": {"facts": [self._existing_fact("deprecated")]},
+            "pending candidate": {"candidates": [pending_candidate]},
+            "rejected candidate": {"candidates": [rejected_candidate]},
+        }
+        for name, existing in cases.items():
+            with self.subTest(name):
+                session = _store_session(active=3, pending=0, inserts=[], **existing)
+
+                stored = await ContextFactCandidateRepository(session).store_extracted(
+                    7, [_extracted()], room_id="room-1", user_message_id=8
+                )
+
+                self.assertEqual((stored.saved_facts, stored.queued_count), ([], 0))
+                self.assertEqual(session.execute.await_count, 3)
+
+    async def test_store_extracted_adds_no_source_for_a_duplicate_inside_the_same_batch(self):
+        # 同じ発話から同じ内容が 2 件返っても、2 件目は先に保存した事実と重複するだけで出典は二重に入らない。
+        # Two identical results from one message: the second matches the first candidate, which has no fact id yet.
+        session = _store_session(
+            active=3,
+            pending=0,
+            inserts=[_result(mapping=_fact(id=41)), _result(inserted_id=70), MagicMock()],
+        )
+
+        stored = await ContextFactCandidateRepository(session).store_extracted(
+            7, [_extracted(), _extracted(fingerprint="c" * 64)], room_id="room-1", user_message_id=8
+        )
+
+        self.assertEqual(len(stored.saved_facts), 1)
+        sources = [sql for sql in self._executed_sql(session) if sql.startswith("INSERT INTO context_fact_sources")]
+        self.assertEqual(len(sources), 1)
+
+    async def test_store_extracted_keeps_no_source_for_candidates_queued_over_the_cap(self):
+        session = _store_session(active=MAX_ACTIVE_CONTEXT_FACTS, pending=0, inserts=[_result(inserted_id=5)])
+
+        stored = await ContextFactCandidateRepository(session).store_extracted(
+            7, [_extracted()], room_id="room-1", user_message_id=8
+        )
+
+        self.assertEqual(stored.queued_count, 1)
+        self.assertFalse(any("context_fact_sources" in sql for sql in self._executed_sql(session)))
 
     async def test_get_extraction_settings_is_disabled_when_the_user_row_cannot_be_read(self):
         # 列は NOT NULL。None は行が読めないときだけなので、有効扱いにせず抽出が走らない側へ倒す。

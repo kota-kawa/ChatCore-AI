@@ -230,6 +230,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             42,
             room_id="room-1",
             assistant_message_id=2,
+            user_message_id=1,
             user_message=user_message,
             assistant_response="assistant reply",
             locale="ja",
@@ -245,6 +246,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
                 room_mode="normal",
                 chat_room_id="room-1",
                 assistant_message_id=2,
+                user_message_id=1,
                 user_message=user_message,
                 assistant_response="assistant reply",
             )
@@ -262,6 +264,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
                 use_case._defer_context_extraction(
                     **gate_values,
                     chat_room_id="room-1",
+                    user_message_id=1,
                     user_message=user_message,
                     assistant_response="assistant reply",
                 )
@@ -275,6 +278,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
                 room_mode="normal",
                 chat_room_id="room-1",
                 assistant_message_id=2,
+                user_message_id=1,
                 user_message=user_message,
                 assistant_response="assistant reply",
             )
@@ -294,6 +298,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
                 room_mode="normal",
                 chat_room_id="room-1",
                 assistant_message_id=2,
+                user_message_id=1,
                 user_message=user_message,
                 assistant_response="assistant reply",
             )

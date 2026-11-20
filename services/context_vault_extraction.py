@@ -192,8 +192,10 @@ class ExtractedContextEnvelope(BaseModel):
 
 # プロンプトで禁止していても LLM が秘密を返す可能性があるため、保存前に必ず正規表現で再確認する。
 # The prompt forbids secrets, but the LLM may still emit them, so candidates are re-checked by regex before storing.
+# 出典として保存される evidence（本人発話の一節）にも秘密情報が含まれうるため、title / content と同じ検査をかける。
+# The evidence quote is stored as a source too, so it gets the same check as title and content.
 def _contains_obvious_secret(candidate: ExtractedContextCandidate) -> bool:
-    combined = f"{candidate.title}\n{candidate.content}"
+    combined = f"{candidate.title}\n{candidate.content}\n{candidate.evidence}"
     if _SECRET_ASSIGNMENT_PATTERN.search(combined):
         return True
     return any(pattern.search(combined) for pattern in _SECRET_VALUE_PATTERNS)
@@ -227,13 +229,13 @@ def extract_context_candidates(
     llm_json_response: Callable[[list[dict[str, str]], str], str | None] | None = None,
 ) -> list[dict[str, Any]]:
     """直近の完了ターンから、信頼度が高く秘密情報を含まない候補を抽出して辞書のリストで返す。
-    LLM 応答が空・不正なら空リスト。信頼度・重要度・発話根拠・秘密情報・重複の順に絞り込み、
-    保存対象でない evidence は結果から除く。llm_json_response はテスト用の差し替え口。
+    LLM 応答が空・不正なら空リスト。信頼度・重要度・発話根拠・秘密情報・重複の順に絞り込む。
+    照合に使った発話の一節（evidence）は、出典として保存できるよう各候補に残す。llm_json_response はテスト用の差し替え口。
 
     Extract high-confidence, non-secret candidates from the latest completed turn.
     Returns an empty list when the LLM response is empty or invalid. Candidates are filtered by confidence,
-    importance, verbatim evidence, secrets and duplicates; evidence is dropped from the result.
-    llm_json_response is an injection point for tests.
+    importance, verbatim evidence, secrets and duplicates; the evidence span used for the check stays on each
+    candidate so it can be stored as the source. llm_json_response is an injection point for tests.
     """
     bounded_user_message = str(user_message or "")[:MAX_EXTRACTION_USER_MESSAGE_CHARS]
     input_payload = json.dumps(
@@ -277,7 +279,7 @@ def extract_context_candidates(
         if key in seen:
             continue
         seen.add(key)
-        accepted.append(candidate.model_dump(exclude={"evidence"}))
+        accepted.append(candidate.model_dump())
     return accepted
 
 
@@ -286,6 +288,7 @@ def schedule_context_extraction(
     *,
     room_id: str,
     assistant_message_id: int,
+    user_message_id: int | None = None,
     user_message: str,
     assistant_response: str,
     locale: Any = None,
@@ -294,11 +297,12 @@ def schedule_context_extraction(
 ) -> None:
     """完了済みのチャット応答を遅らせたり壊したりしないよう、抽出をバックグラウンドへ投入する。
     抽出器と保存関数は差し替え可能（テスト用）。既定の保存関数は実行時に import する。
-    どの失敗も警告ログだけで握りつぶす。
+    どの失敗も警告ログだけで握りつぶす。user_message_id は保存済みの利用者発話の ID で、出典行が発話を指すために保存関数へ渡す。
 
     Submit extraction without delaying or breaking the completed chat response.
     The extractor and store function are injectable for tests; the default store function is imported lazily at run time.
-    Any failure is swallowed with a warning log.
+    Any failure is swallowed with a warning log. user_message_id is the persisted user message's id, passed to the
+    store function so the source row can point at the message.
     """
     source_ref = f"chat:{room_id}:message:{assistant_message_id}"
 
@@ -315,7 +319,13 @@ def schedule_context_extraction(
                 )
 
                 store = store_extracted_facts
-            result = store(user_id, candidates=candidates, source_ref=source_ref)
+            result = store(
+                user_id,
+                candidates=candidates,
+                source_ref=source_ref,
+                room_id=room_id,
+                user_message_id=user_message_id,
+            )
             if inspect.isawaitable(result):
                 asyncio.run(result)
         except Exception:

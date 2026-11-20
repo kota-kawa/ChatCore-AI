@@ -8,7 +8,7 @@ Japanese.
 import unittest
 
 from services.bm25 import tokenize_bm25
-from services.context_vault_bm25 import filter_bm25_duplicates
+from services.context_vault_bm25 import filter_bm25_duplicates, find_bm25_duplicates
 
 
 # 日本語: 重複判定に渡す事実 1 件分の辞書を作ります。
@@ -91,6 +91,41 @@ class ContextVaultBm25TestCase(unittest.TestCase):
         ]
 
         self.assertEqual(filter_bm25_duplicates(candidates, []), [candidates[0]])
+
+    def test_find_returns_the_matched_document_for_each_candidate(self):
+        existing = [
+            {**_document("Chat-Core backend framework", "The Chat-Core backend is built with FastAPI."), "fact_id": 12},
+            {**_document("Rust compiler", "Uses Rust for an ongoing compiler project."), "fact_id": 13},
+        ]
+        candidates = [
+            _document("Chat-Core backend", "Chat-Core uses FastAPI for its backend."),
+            _document("Deep sea fish research", "Researches deep sea fish as an occupation."),
+            _document("Chat-Core server", "The Chat-Core server uses FastAPI."),
+        ]
+
+        matches = find_bm25_duplicates(candidates, existing)
+
+        # 既存文書の一致はその文書(fact_id つき)、重複なしは None、同一バッチの一致は先に残った候補そのもの。
+        # An existing match is that document (with its fact_id), a unique candidate is None, and a same-batch
+        # match is the earlier candidate itself.
+        self.assertEqual(matches[0]["fact_id"], 12)
+        self.assertIsNone(matches[1])
+        self.assertEqual(matches[2]["fact_id"], 12)
+        self.assertEqual(
+            filter_bm25_duplicates(candidates, existing),
+            [candidates[1]],
+        )
+
+    def test_find_matches_an_earlier_candidate_of_the_same_batch(self):
+        candidates = [
+            _document("Chat-Core backend framework", "The Chat-Core backend is built with FastAPI."),
+            _document("Chat-Core backend", "Chat-Core uses FastAPI for its backend."),
+        ]
+
+        matches = find_bm25_duplicates(candidates, [])
+
+        self.assertIsNone(matches[0])
+        self.assertIs(matches[1], candidates[0])
 
 
 if __name__ == "__main__":

@@ -110,6 +110,9 @@ MAX_MEMO_STORED_CONTENT_LENGTH = 60000
 # Per-fact limits for the personal context vault; facts are kept small.
 MAX_CONTEXT_FACT_TITLE_LENGTH = 100
 MAX_CONTEXT_FACT_CONTENT_LENGTH = 2000
+# 日本語: 記憶の出典として保存する、本人発話の引用の最大文字数。
+# English: Maximum characters of the owner's quoted words stored as a memory source.
+MAX_CONTEXT_FACT_EVIDENCE_LENGTH = 1000
 MAX_CONTEXT_IDEMPOTENCY_KEY_LENGTH = 128
 DEFAULT_CONTEXT_FACT_IMPORTANCE = 50
 MAX_CONTEXT_VAULT_IMPORT_CONTENT_LENGTH = 10 * 1024 * 1024
