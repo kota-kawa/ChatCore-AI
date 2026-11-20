@@ -99,7 +99,7 @@ describe("MyContextPanel", () => {
     const toggle = await screen.findByRole("switch", { name: "チャットからの自動保存" });
     await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
     expect(
-      screen.getByText(/上限（200件）に達すると、長く話題に出ていない記憶から自動で入れ替わります/),
+      screen.getByText(/上限（200件）に達すると、自動保存されたまま一度も手を入れていない記憶のうち、長く話題に出ていないものから自動で入れ替わります/),
     ).toBeInTheDocument();
     expect(screen.queryByText("承認待ちの提案")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "承認" })).not.toBeInTheDocument();
