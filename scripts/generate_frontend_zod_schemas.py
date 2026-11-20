@@ -26,6 +26,7 @@ from services.request_models import (  # noqa: E402
     ContextExtractionSettingsUpdateRequest,
     ContextFactCreateRequest,
     ContextFactUpdateRequest,
+    ContextMemoryUseSettingsUpdateRequest,
     ContextVaultImportConfirmRequest,
     ContextVaultImportPreviewRequest,
     CreateUserSkillRequest,
@@ -73,6 +74,7 @@ from services.response_models import (  # noqa: E402
     ContextFactListItemResponse,
     ContextFactListResponse,
     ContextFactResponse,
+    ContextMemoryUseSettingsResponse,
     ContextVaultExportDocument,
     ContextVaultImportPreviewResponse,
     ContextVaultImportResponse,
@@ -153,6 +155,7 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
     ("ContextVaultImportPreviewRequest", ContextVaultImportPreviewRequest),
     ("ContextVaultImportConfirmRequest", ContextVaultImportConfirmRequest),
     ("ContextExtractionSettingsUpdateRequest", ContextExtractionSettingsUpdateRequest),
+    ("ContextMemoryUseSettingsUpdateRequest", ContextMemoryUseSettingsUpdateRequest),
     ("UserProfileUpdateRequest", UserProfileUpdateRequest),
     # レスポンスの正本はバックエンドのresponse_models。
     # Response payloads (source of truth: services/response_models.py)
@@ -197,6 +200,7 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
     ("ContextVaultImportPreviewResponse", ContextVaultImportPreviewResponse),
     ("ContextVaultImportResponse", ContextVaultImportResponse),
     ("ContextExtractionSettingsResponse", ContextExtractionSettingsResponse),
+    ("ContextMemoryUseSettingsResponse", ContextMemoryUseSettingsResponse),
     ("ContextDigestGroup", ContextDigestGroup),
     ("ContextDigestResponse", ContextDigestResponse),
 ]

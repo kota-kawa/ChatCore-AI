@@ -13,9 +13,11 @@ from unittest.mock import AsyncMock, patch
 from blueprints.context_vault.routes import (
     api_create_context_fact,
     api_get_context_extraction_settings,
+    api_get_context_memory_use_settings,
     api_list_context_facts,
     api_update_context_extraction_settings,
     api_update_context_fact,
+    api_update_context_memory_use_settings,
     context_vault_bp,
 )
 from services.api_errors import ApiServiceError
@@ -24,6 +26,7 @@ from services.response_models import (
     ContextFactListItemResponse,
     ContextFactListResponse,
     ContextFactResponse,
+    ContextMemoryUseSettingsResponse,
 )
 from tests.helpers.request_helpers import build_request
 
@@ -147,6 +150,7 @@ class ContextVaultRouteTestCase(unittest.TestCase):
         paths = {route.path for route in context_vault_bp.routes}
         self.assertFalse([path for path in paths if "candidates" in path])
         self.assertIn("/api/context-facts/extraction-settings", paths)
+        self.assertIn("/api/context-facts/memory-use-settings", paths)
 
     def test_deprecated_list_reports_why_each_fact_was_deprecated(self):
         request = build_request(method="GET", path="/api/context-facts", session={"user_id": 7})
@@ -190,6 +194,53 @@ class ContextVaultRouteTestCase(unittest.TestCase):
             response = asyncio.run(api_update_context_extraction_settings(request))
         self.assertEqual(json.loads(response.body), {"status": "success", "enabled": True})
         update_settings.assert_awaited_once_with(7, True)
+
+    def test_memory_use_settings_routes_await_service_and_stay_apart_from_extraction(self):
+        request = build_request(method="GET", path="/api/context-facts/memory-use-settings", session={"user_id": 7})
+        get_settings = AsyncMock(return_value=ContextMemoryUseSettingsResponse(enabled=True))
+        with patch("blueprints.context_vault.routes.get_memory_use_settings", new=get_settings):
+            response = asyncio.run(api_get_context_memory_use_settings(request))
+        self.assertEqual(json.loads(response.body), {"enabled": True})
+        get_settings.assert_awaited_once_with(7)
+
+        request = build_request(
+            method="PUT",
+            path="/api/context-facts/memory-use-settings",
+            json_body={"enabled": False},
+            session={"user_id": 7},
+        )
+        update_settings = AsyncMock(return_value=ContextMemoryUseSettingsResponse(enabled=False))
+        # 保存する設定は触らない（2 つは別の設定）。
+        # The saving setting is untouched: they are two different settings.
+        save_settings = AsyncMock()
+        with (
+            patch("blueprints.context_vault.routes.update_memory_use_settings", new=update_settings),
+            patch("blueprints.context_vault.routes.update_extraction_settings", new=save_settings),
+        ):
+            response = asyncio.run(api_update_context_memory_use_settings(request))
+        self.assertEqual(json.loads(response.body), {"status": "success", "enabled": False})
+        update_settings.assert_awaited_once_with(7, False)
+        save_settings.assert_not_awaited()
+
+    def test_memory_use_settings_routes_require_login_and_a_boolean(self):
+        anonymous_get = build_request(method="GET", path="/api/context-facts/memory-use-settings", session={})
+        self.assertEqual(asyncio.run(api_get_context_memory_use_settings(anonymous_get)).status_code, 401)
+        anonymous_put = build_request(
+            method="PUT", path="/api/context-facts/memory-use-settings", json_body={"enabled": True}, session={}
+        )
+        self.assertEqual(asyncio.run(api_update_context_memory_use_settings(anonymous_put)).status_code, 401)
+
+        invalid = build_request(
+            method="PUT",
+            path="/api/context-facts/memory-use-settings",
+            json_body={"enabled": "yes please"},
+            session={"user_id": 7},
+        )
+        update_settings = AsyncMock()
+        with patch("blueprints.context_vault.routes.update_memory_use_settings", new=update_settings):
+            response = asyncio.run(api_update_context_memory_use_settings(invalid))
+        self.assertEqual(response.status_code, 400)
+        update_settings.assert_not_awaited()
 
 
 if __name__ == "__main__":

@@ -71,6 +71,12 @@ pre-deploy の upgrade に含められません。データ backfill が必要�
 404 になります）。旧色の削除は従来どおり物理削除です。この downgrade は、ゴミ箱にメモが残っている間は
 拒否されます。
 
+`users.memory_use_enabled`（記憶を回答に使う設定、`20261120_04`）も追加のみで、`ALTER TABLE` の待ちは
+`lock_timeout` で区切ってあります（取れなければ revision ごと失敗するので再実行します）。旧色はこの列を
+知らず、`users` への INSERT は既定値（TRUE）で入るので、重なり中に旧色が動いても壊れません。旧色は記憶の
+まとめを文脈に入れず、ルーム内記憶（`memory_facts`）の抽出・読み込みを続けます。新色はその両方を逆にします。
+この downgrade は拒否されます（全員の設定を失うため）。
+
 ## Embedding の復旧と監視
 
 `memo_entries.embedding_status`、`context_facts.embedding_status`、`prompts.embedding_status` は、

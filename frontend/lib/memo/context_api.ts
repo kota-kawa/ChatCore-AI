@@ -1,7 +1,7 @@
 // 記憶（パーソナル・コンテキスト）の API クライアント。事実の取得・作成・更新、
-// 自動抽出の設定、記憶の書き出しとインポート（確認してから取り込む）を扱う。
+// 自動保存と回答への利用の設定、記憶の書き出しとインポート（確認してから取り込む）を扱う。
 // API client for Memory (the personal context): loading, creating and updating facts,
-// the auto-extraction setting, and exporting and importing the memory (import is previewed before it is confirmed).
+// the auto-saving and use-in-answers settings, and exporting and importing the memory (import is previewed before it is confirmed).
 
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { setLoggedInState } from "../../scripts/core/app_state";
@@ -11,6 +11,8 @@ import type { HttpError } from "./types";
 import type {
   ContextExtractionSettings,
   ContextExtractionSettingsUpdateInput,
+  ContextMemoryUseSettings,
+  ContextMemoryUseSettingsUpdateInput,
   ContextFact,
   ContextFactCreateInput,
   ContextFactListPayload,
@@ -156,20 +158,42 @@ export async function updateContextFact(
   return payload.fact as ContextFactMutationResult;
 }
 
+// 「enabled」だけを持つ記憶の設定を読む。未ログイン（401）は無効として返す。
+// Read a memory setting that holds only "enabled"; a signed-out session (401) counts as off.
+async function loadEnabledSetting(path: string, failureMessage: string): Promise<{ enabled: boolean }> {
+  const res = await resilientFetch(path, { credentials: "same-origin" });
+  const data = (await res.json().catch(() => ({}))) as { enabled?: unknown; error?: string };
+  if (res.status === 401) return { enabled: false };
+  if (!res.ok) {
+    throw new Error(data.error || `${failureMessage} (${res.status})`);
+  }
+  return { enabled: data.enabled === true };
+}
+
+// 「enabled」だけを持つ記憶の設定を書き、保存された値を返す。
+// Write a memory setting that holds only "enabled" and return the stored value.
+async function updateEnabledSetting(
+  path: string,
+  enabled: boolean,
+  defaultMessage: string,
+): Promise<{ enabled: boolean }> {
+  const { payload } = await memoFetchJsonOrThrow<{ enabled?: unknown; error?: string }>(
+    path,
+    {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    },
+    { defaultMessage },
+  );
+  return { enabled: payload.enabled === true };
+}
+
 // 会話からの記憶の自動保存の設定（初期値は有効）を取得する。
 // Load the setting for automatic memory saving from chats (on by default).
 export async function loadContextExtractionSettings(): Promise<ContextExtractionSettings> {
-  const res = await resilientFetch("/api/context-facts/extraction-settings", {
-    credentials: "same-origin",
-  });
-  const data = (await res.json().catch(() => ({}))) as Partial<ContextExtractionSettings> & {
-    error?: string;
-  };
-  if (res.status === 401) return { enabled: false };
-  if (!res.ok) {
-    throw new Error(data.error || `自動抽出設定の取得に失敗しました (${res.status})`);
-  }
-  return { enabled: data.enabled === true };
+  return loadEnabledSetting("/api/context-facts/extraction-settings", "自動抽出設定の取得に失敗しました");
 }
 
 // 会話からの記憶の自動保存を明示的に有効化・無効化する。
@@ -177,17 +201,29 @@ export async function loadContextExtractionSettings(): Promise<ContextExtraction
 export async function updateContextExtractionSettings(
   input: ContextExtractionSettingsUpdateInput,
 ): Promise<ContextExtractionSettings> {
-  const { payload } = await memoFetchJsonOrThrow<ContextExtractionSettings & { error?: string }>(
+  return updateEnabledSetting(
     "/api/context-facts/extraction-settings",
-    {
-      method: "PUT",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    },
-    { defaultMessage: "自動抽出設定を更新できませんでした。" },
+    input.enabled,
+    "自動抽出設定を更新できませんでした。",
   );
-  return { enabled: payload.enabled === true };
+}
+
+// 保存した記憶をチャットの回答に使う設定（初期値は有効）を取得する。保存の設定とは別。
+// Load the setting for using saved memory in chat answers (on by default); separate from the saving setting.
+export async function loadContextMemoryUseSettings(): Promise<ContextMemoryUseSettings> {
+  return loadEnabledSetting("/api/context-facts/memory-use-settings", "記憶の利用設定の取得に失敗しました");
+}
+
+// 保存した記憶をチャットの回答に使うかを、明示的に切り替える。
+// Explicitly switch whether saved memory is used in chat answers.
+export async function updateContextMemoryUseSettings(
+  input: ContextMemoryUseSettingsUpdateInput,
+): Promise<ContextMemoryUseSettings> {
+  return updateEnabledSetting(
+    "/api/context-facts/memory-use-settings",
+    input.enabled,
+    "記憶の利用設定を更新できませんでした。",
+  );
 }
 
 // 記憶の全事実をポータブルなJSONまたはMarkdownとして取得する。

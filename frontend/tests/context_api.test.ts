@@ -10,9 +10,11 @@ import {
   exportContextVault,
   loadContextExtractionSettings,
   loadContextFacts,
+  loadContextMemoryUseSettings,
   previewContextVaultImport,
   updateContextFact,
   updateContextExtractionSettings,
+  updateContextMemoryUseSettings,
 } from "../lib/memo/context_api";
 
 const originalFetch = globalThis.fetch;
@@ -321,3 +323,38 @@ test("context extraction settings default to off and can be explicitly enabled",
   }
 });
 
+test("memory use settings use their own endpoint, default to off and can be switched", async () => {
+  const requests: { url: string; init?: RequestInit }[] = [];
+  globalThis.fetch = (async (input, init) => {
+    requests.push({ url: String(input), init });
+    if (init?.method === "PUT") return jsonResponse({ status: "success", enabled: false });
+    return jsonResponse({});
+  }) as typeof fetch;
+
+  try {
+    assert.deepEqual(await loadContextMemoryUseSettings(), { enabled: false });
+    assert.deepEqual(await updateContextMemoryUseSettings({ enabled: false }), { enabled: false });
+    assert.equal(requests[0]?.url, "/api/context-facts/memory-use-settings");
+    assert.equal(requests[1]?.url, "/api/context-facts/memory-use-settings");
+    assert.equal(requests[1]?.init?.method, "PUT");
+    assert.deepEqual(JSON.parse(String(requests[1]?.init?.body)), { enabled: false });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a signed-out session reads the memory use setting as off and a server error is reported", async () => {
+  globalThis.fetch = (async () => jsonResponse({ error: "ログインしてください。" }, 401)) as typeof fetch;
+  try {
+    assert.deepEqual(await loadContextMemoryUseSettings(), { enabled: false });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  globalThis.fetch = (async () => jsonResponse({ error: "サーバーエラー" }, 500)) as typeof fetch;
+  try {
+    await assert.rejects(() => loadContextMemoryUseSettings(), /サーバーエラー/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

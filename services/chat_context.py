@@ -1,6 +1,6 @@
-"""LLM に渡す会話コンテキスト（基本指示、プロフィール、要約、記憶、直近履歴）をトークン予算内で組み立てる。
+"""LLM に渡す会話コンテキスト（基本指示、プロフィール、要約、直近履歴）をトークン予算内で組み立てる。
 
-Builds the conversation context sent to the LLM (base prompt, profile, summary, memory, recent history) within token budgets.
+Builds the conversation context sent to the LLM (base prompt, profile, summary, recent history) within token budgets.
 各メッセージは CJK を考慮したトークン見積もりで切り詰め、必須の system メッセージと直近履歴を先に確保する。
 Messages are trimmed using a CJK-aware token estimate, reserving the mandatory system messages and recent history first.
 """
@@ -75,10 +75,12 @@ _LATIN_CHARS_PER_TOKEN = 4.0
 # a comparable amount of context while being expressed in realistic tokens.
 CONTEXT_TOKEN_BUDGET = 26000
 SUMMARY_TOKEN_BUDGET = 2000
-MEMORY_TOKEN_BUDGET = 1100
 RECENT_HISTORY_TOKEN_BUDGET = 7400
 PROJECT_INSTRUCTIONS_TOKEN_BUDGET = 2600
 USER_PROFILE_TOKEN_BUDGET = 2200
+# 利用者の記憶のまとめ（説明文を含む `<user_memory>` 全体）の上限。services/user_memory.py がこの範囲に収めて組む。
+# Cap for the whole `<user_memory>` block, instructions included; services/user_memory.py builds it within this.
+USER_MEMORY_TOKEN_BUDGET = 700
 TASK_PROMPT_TOKEN_BUDGET = 2600
 FOLLOW_UP_CONTINUITY_TOKEN_BUDGET = 180
 RECENT_HISTORY_MAX_MESSAGES = 16
@@ -508,38 +510,6 @@ def build_summary_system_message(summary_text: str) -> dict[str, str] | None:
     }
 
 
-# メモリ・ファクトリストをシステムメッセージの形式で構築する
-# Build the system message representing the memory facts list
-def build_memory_system_message(memory_facts: list[str]) -> dict[str, str] | None:
-    normalized_facts = [
-        trim_text_to_token_budget(fact, 80)
-        for fact in memory_facts
-        if trim_text_to_token_budget(fact, 80)
-    ]
-    if not normalized_facts:
-        return None
-
-    # 日本語: 過去の会話から抽出したユーザーの情報・好み。古くなりうるので、最新の発言と食い違えば
-    # そちらを優先させる（issue #774）。
-    # Facts extracted from earlier conversations. They can go stale, so the latest message wins
-    # when the two disagree (issue #774).
-    sections = [
-        "<memory_facts>",
-        "The following user information and preferences were remembered from earlier conversations. "
-        "Use them when relevant. Each shows when the user last mentioned it; the older it is, the more "
-        "likely it is outdated. When the latest message contradicts one, follow the latest message.",
-    ]
-    # ファクト項目を箇条書きで追加する
-    # Append fact entries as bullet points
-    sections.extend(f"- {fact}" for fact in normalized_facts)
-    sections.append("</memory_facts>")
-    content = "\n".join(sections)
-    return {
-        "role": "system",
-        "content": trim_text_to_token_budget(content, MEMORY_TOKEN_BUDGET),
-    }
-
-
 # プロジェクト（ChatGPT/Claude のプロジェクトに相当）のカスタム指示をシステムメッセージ化する
 # Build the system message carrying a project's custom instructions.
 def build_project_instructions_message(instructions: str | None) -> dict[str, str] | None:
@@ -562,19 +532,19 @@ def build_project_instructions_message(instructions: str | None) -> dict[str, st
     }
 
 
-# ベース指示、ユーザー定義、タスク指示、要約、メモリ、直近履歴を統合したLLM送信用メッセージリストを構築する
-# Build the list of messages for LLM request by integrating base instruction, user info, task context, summary, memory, and recent history
+# ベース指示、ユーザー定義、タスク指示、要約、直近履歴を統合したLLM送信用メッセージリストを構築する
+# Build the list of messages for LLM request by integrating base instruction, user info, task context, summary, and recent history
 def build_context_messages(
     *,
     base_system_prompt: str,
     user_profile_prompt: str | None,
     task_prompt: str | None,
     room_summary: str,
-    memory_facts: list[str],
     recent_messages: list[dict[str, str]],
     project_instructions: str | None = None,
     user_skills_prompt: str | None = None,
     generative_ui_enabled: bool = True,
+    user_memory_prompt: str | None = None,
 ) -> list[dict[str, str]]:
     mandatory_messages = [{"role": "system", "content": base_system_prompt}]
     if generative_ui_enabled:
@@ -621,6 +591,12 @@ def build_context_messages(
     # Add user profile prompt if specified
     append_optional_system_message(user_profile_prompt, USER_PROFILE_TOKEN_BUDGET)
 
+    # 利用者の記憶のまとめ（services/user_memory.py が組む）は、プロフィールの直後の固定側に置く。記憶が変わらない限り文面は
+    # 変わらないので、履歴より前でもプロンプトキャッシュを壊さない（ADR 0011）。
+    # The user's memory summary (built by services/user_memory.py) sits right after the profile on the fixed side. Its text
+    # does not change while the memory does not, so placing it before the history keeps the prompt cache intact (ADR 0011).
+    append_optional_system_message(user_memory_prompt, USER_MEMORY_TOKEN_BUDGET)
+
     # プロジェクト固有のカスタム指示を追加（タスク指示より前に置き全会話で優先）
     # Add project custom instructions (before task prompt; applies to all chats in the project)
     project_instructions_message = build_project_instructions_message(project_instructions)
@@ -649,12 +625,6 @@ def build_context_messages(
     summary_message = build_summary_system_message(room_summary)
     if summary_message is not None:
         append_optional_system_message(summary_message["content"], SUMMARY_TOKEN_BUDGET)
-
-    # 永続メモリファクトメッセージを追加
-    # Add persistent memory facts message if it exists
-    memory_message = build_memory_system_message(memory_facts)
-    if memory_message is not None:
-        append_optional_system_message(memory_message["content"], MEMORY_TOKEN_BUDGET)
 
     # 選択された生成UIの指示と実行契約は同じ動的なまとまりに保つ。
     # Keep the selected UI instructions and execution contract in the same dynamic block.

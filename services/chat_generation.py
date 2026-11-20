@@ -16,7 +16,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterator, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import Request
 
@@ -49,6 +49,9 @@ from .chat_url_context import PastedUrlPage
 from .chat_workspace_tools.registry import ChatWorkspaceToolbox
 from .selected_reference_context import SelectedReferenceLookupTrace
 from .web_search import WebSearchResult
+
+if TYPE_CHECKING:
+    from .user_memory import UserMemorySummary
 
 logger = logging.getLogger(__name__)
 
@@ -587,6 +590,7 @@ class ChatGenerationService:
         explicit_ui_opt_out: bool = False,
         workspace_tools: ChatWorkspaceToolbox | None = None,
         generation_id: str | None = None,
+        user_memory: UserMemorySummary | None = None,
     ) -> ChatGenerationJob:
         if self.generation_store_unavailable():
             raise ChatGenerationCoordinationError("Redis is configured but unavailable.")
@@ -681,6 +685,7 @@ class ChatGenerationService:
                 ),
                 renew_active_job_lock_interval_seconds=self._active_job_lock_renew_interval_seconds,
                 workspace_tools=workspace_tools,
+                user_memory=user_memory,
             )
             self._jobs[job_key] = job
             self._retained_jobs[(job_key, selected_generation_id)] = job
@@ -888,6 +893,7 @@ def start_generation_job(
     explicit_ui_opt_out: bool = False,
     workspace_tools: ChatWorkspaceToolbox | None = None,
     generation_id: str | None = None,
+    user_memory: UserMemorySummary | None = None,
 ) -> ChatGenerationJob:
     target = (
         service
@@ -912,4 +918,5 @@ def start_generation_job(
         explicit_ui_opt_out=explicit_ui_opt_out,
         workspace_tools=workspace_tools,
         generation_id=generation_id,
+        user_memory=user_memory,
     )

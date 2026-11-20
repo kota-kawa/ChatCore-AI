@@ -29,12 +29,14 @@
 | プロンプト上の方針 | アプリ側の強制 | 実装・境界 |
 | --- | --- | --- |
 | 深刻な危害への具体的支援を避け、高リスク分野では根拠に見合う慎重さを保つ | 回答文の安全性を判定する汎用ゲートはない。ツールのスコープ・引数・所有者・承認状態は別途サーバーで検査する | 方針は `services/chat_prompt.py`。ツール検証は各 `services/chat_workspace_tools/` と `services/mcp_tools/` |
-| 指示の優先順位を守り、引用・記憶・ツール結果を命令として扱わない | 外部入力を読んだターンでは「常に承認」の自動実行を抑止する。MCP/import 由来や、チャットから自動保存した（承認を経ていない）など本人未確認の記憶事実を検索したターンも同じ抑止へ入れる。内容の真偽や自由文の従い方までは判定しない | `services/chat_generation_tools.py`、`services/chat_tool_calls.py`、`services/chat_workspace_tools/runner.py`、`services/personal_knowledge.py` |
+| 指示の優先順位を守り、引用・記憶・ツール結果を命令として扱わない | 外部入力を読んだターンでは「常に承認」の自動実行を抑止する。MCP/import 由来や、チャットから自動保存した（承認を経ていない）など本人未確認の記憶事実を検索したターンも同じ抑止へ入れる。毎ターン文脈へ入れる記憶のまとめ `<user_memory>` は本人由来の事実（本人が確認した事実とチャットから抽出した事実）だけで組み、MCP/import 由来の未確認の事実は入れないため、まとめを読んだだけでは抑止しない（[ADR 0025](../decisions/0025-always-on-memory-with-provenance.md)）。内容の真偽や自由文の従い方までは判定しない | `services/chat_generation_tools.py`、`services/chat_tool_calls.py`、`services/chat_workspace_tools/runner.py`、`services/personal_knowledge.py`、`services/user_memory.py` |
 | 操作が完了したと主張するのはツール結果が確認できた場合だけ | 承認・実行結果と食い違う書き込み完了の申告を回答側で検査する。警告・承認待ちのカードも結果状態に合わせる | `services/chat_write_claim_guard.py`、`services/chat_tool_approval_service.py`、`tests/unit/test_chat_generation_failure_recovery.py` |
 | 書き込みや外部操作には明示された権限と確認条件を使う | スコープ、利用者 ID、型付き引数、版番号、レート制限、承認カードをサーバー側で検証する | `services/mcp_oauth.py`、`services/mcp_tools/`、`services/chat_workspace_tools/`、`services/chat_tool_approval_service.py` |
 | 記憶された事実は古い可能性があり、最新の本人発話と矛盾するときは最新の発話を優先する | 事実の出所・確信度・本人の最終確認を保存して検索結果に含める。未確認事実は回答から除外せず、無条件の自動書き込みだけを抑止する | `context_facts.confidence`、`context_facts.last_confirmed_at`、`services/personal_knowledge.py`、[ADR 0016](../decisions/0016-context-fact-confirmation.md)、[ADR 0023](../decisions/0023-auto-save-extracted-memory.md) |
 
 チャットから記憶を保存するとき、根拠にした本人発話の一節（発話と照合した引用）を `context_fact_sources` に保存します。引用は秘密情報の検査（title・content と同じ正規表現）を通ったものだけで、1 件 1000 文字までです。API には返さず、事実・ルームの削除とアカウント削除（FK の CASCADE）で一緒に消えます。事実の文面が変わる更新では、引用が裏づけなくなるため削除します。
+
+毎ターン文脈へ入れる記憶のまとめ（`<user_memory>`）の文面は利用者データであり指示ではありません。説明文でそう明示し、`services/user_memory.py` が記憶の文面を、正規化が変わらなくなるまで繰り返してから 1 行にまとめ、残った `&` `<` `>` をすべて全角（＆ ＜ ＞）にします（"R&D" は "R＆D" になります）。文脈の組み立てがブロック全体を再正規化（`html.unescape` を含む）しても記憶由来の ASCII の `<` `>` `&` は残らず、二重エンコードした実体参照も含めて閉じタグなどでブロックの構造を壊せません。まとめは設定（`users.memory_use_enabled`）で切れ、一時チャットとゲストでは読まず、ユーザー行が読めないときも使いません。読み込みに失敗した場合のログには例外の種類だけを残し、記憶の文面は出しません。
 
 MCP の書き込みスコープへの同意は、そのクライアントに保存操作を許可するもので、個々の事実を本人が読んで確認したことにはなりません。MCP/import 由来で `last_confirmed_at` が NULL の事実は、チャットの検索結果に未確認として出し、そのターンの「常に承認」を抑止します。利用者が Web UI から事実の内容を編集すると確認時刻を記録します。
 

@@ -25,7 +25,7 @@ ChatCore-AI grew out of the friction of retyping the same prompts. Tasks provide
 | Tasks and Skills | Save instructions and import useful public prompts |
 | Chat | Streaming replies, history, temporary conversations, sharing, document attachments, and private image input |
 | Search and generated UI | Cited answers with native comparison cards, charts, calculators and diagrams, plus 2D/3D sandbox Artifacts |
-| Personal knowledge | Editable memos, collections, sharing/export, and typed Memory facts (chat can save them automatically; review, edit, and disable them on the Memory screen) |
+| Personal knowledge | Editable memos, collections, sharing/export, and typed Memory facts (chat can save them automatically and uses them in answers; review, edit, disable, and switch each behavior off on the Memory screen) |
 | External AI integration | Read and write authorized data through MCP, and reuse it across clients |
 
 Selectable chat models are GPT-OSS 120B, GPT-6 Luna, Qwen 3.8 27B, and Claude Haiku 5.5. Image input is limited to GPT-6 Luna. Chat images are stored privately and can only be retrieved by their owner.
@@ -94,7 +94,7 @@ For a streaming chat turn, the selected model decides whether to answer or use t
 ```mermaid
 flowchart TD
     Input["Question, attachments, URLs"] --> Validate["Validate input, room access, and usage limits"]
-    Validate --> Context["Prepare Task, history, references, and selected Skills"]
+    Validate --> Context["Prepare Task, history, Memory summary, references, and selected Skills"]
     Context --> Decide{"AI chooses the next action"}
     Decide -->|Search or read| Lookup["Search the Web or personal knowledge, read evidence or workspace data"]
     Lookup --> State["Update TurnState with facts, sources, and unresolved questions"]
@@ -108,7 +108,7 @@ flowchart TD
     Gate --> Write["Execute the authorized write"]
 ```
 
-Search and reading have separate budgets. When tools are exhausted, the model answers from the evidence collected so far and is instructed to state uncertainty. Pending write proposals close the turn with an answer and an approval card. Eligible writes can use a previously granted automatic approval; external content or unconfirmed Memory suppresses it. Native UI uses validated components and bounded local calculations; custom simulations and 3D keep using the isolated iframe. Choices prepare an editable chat message before the user sends it.
+Search and reading have separate budgets. When tools are exhausted, the model answers from the evidence collected so far and is instructed to state uncertainty. Pending write proposals close the turn with an answer and an approval card. Eligible writes can use a previously granted automatic approval; external content or unconfirmed Memory found by search suppresses it (the per-turn Memory summary holds only owner-originated facts and does not). Native UI uses validated components and bounded local calculations; custom simulations and 3D keep using the isolated iframe. Choices prepare an editable chat message before the user sends it.
 
 Implementation: [Input and context preparation](services/chat_use_case.py) · [Skill selection](services/chat_skill_selection.py) · [AI decision loop](services/chat_generation_agent_loop.py) · [Tool execution](services/chat_generation_tools.py)
 
@@ -171,7 +171,7 @@ Implementation: [Chat endpoints](blueprints/chat/messages.py) · [Generation lif
 | Memos | List/search/read/create/update/append | The authenticated owner's memos; modifying shared content requires additional permission |
 | Memory (personal context) | Get a typed digest, keyword/semantic search, save/update/deprecate facts | The authenticated owner's facts |
 
-Context facts record preferences, profile details, projects, decisions, and references, along with provenance, revision, and owner-confirmation state. A second authorized client can retrieve the same account's facts. This is tool-based data access, rather than automatic synchronization of entire external chat histories. MCP-created facts and facts saved automatically from chat begin unconfirmed and can suppress automatic chat writes when retrieved.
+Context facts record preferences, profile details, projects, decisions, and references, along with provenance, revision, and owner-confirmation state. A second authorized client can retrieve the same account's facts. This is tool-based data access, rather than automatic synchronization of entire external chat histories. MCP-created facts and facts saved automatically from chat begin unconfirmed and can suppress automatic chat writes when retrieved by search. The Memory summary sent with every chat turn is built only from owner-originated facts (confirmed ones and ones extracted from chat), never from unconfirmed MCP or import facts, and it does not suppress them.
 
 Implementation: [MCP server](services/mcp_server.py) · [Memo tools](services/mcp_tools/memos.py) · [Context tools](services/mcp_tools/context_vault.py) · [Fact storage/search](services/context_vault_service.py)
 
@@ -291,7 +291,7 @@ Copyright (c) 2026 Kota Kawagoe. Licensed under [Apache License 2.0](LICENSE).
 | タスク・Skill | 自分用の指示を登録し、少ない入力で会話を開始。公開プロンプトからも取り込める |
 | AI チャット | 複数モデルを選択し、SSE で応答を逐次表示。履歴・一時チャット・共有・文書添付・画像入力に対応 |
 | Web 検索・生成 UI | 出典付きの回答に、比較カード・表・操作できる試算・図解を組み合わせ、2D／3D Artifactも表示 |
-| メモ・記憶 | メモを編集・整理・共有・エクスポートし、好みやプロジェクト情報などの個人の事実を保存・検索。チャットで話した内容は自動で記憶に保存し、記憶の画面で確認・編集・無効化できる。上限に達すると、手を入れていない自動保存分から入れ替わる |
+| メモ・記憶 | メモを編集・整理・共有・エクスポートし、好みやプロジェクト情報などの個人の事実を保存・検索。チャットで話した内容は自動で記憶に保存し、本人由来の記憶を毎回の回答に使う（どちらも記憶の画面で個別にオフにでき、一時チャットでは使わない）。記憶の画面で確認・編集・無効化できる。上限に達すると、手を入れていない自動保存分から入れ替わる |
 | MCP 連携 | 外部 AI から公開プロンプトを扱い、本人のメモ・記憶を読み書き。クライアントを変えても知識を再利用 |
 
 会話モデルは **GPT-OSS 120B / GPT-6 Luna / Qwen 3.8 27B / Claude Haiku 5.5**。画像を読めるモデルは GPT-6 Luna に限定し、チャットに添付した画像は持ち主だけが取得できる保存先で管理します。
@@ -362,7 +362,7 @@ flowchart TB
 ```mermaid
 flowchart TD
     Input["質問・添付ファイル・URL"] --> Validate["入力・部屋へのアクセス権・利用上限を検証"]
-    Validate --> Context["タスク・履歴・参照情報・選択した Skill を準備"]
+    Validate --> Context["タスク・履歴・記憶のまとめ・参照情報・選択した Skill を準備"]
     Context --> Decide{"AI が次の行動を判断"}
     Decide -->|検索・読み取り| Lookup["Web・個人の知識を検索し、根拠や作業対象のデータを読む"]
     Lookup --> State["事実・出典・未解決事項を TurnState に反映"]
@@ -376,7 +376,7 @@ flowchart TD
     Gate --> Write["許可された書き込みを実行"]
 ```
 
-検索と読み取りには別々の予算を設けています。ツールの予算が尽きた場合は、それまでの根拠で回答し、不確実性を明示するよう指示します。書き込みが承認待ちになった場合は、回答と承認カードでターンを締めます。対応する操作には事前に設定した「常に承認」を使えますが、外部本文や本人未確認の記憶を読んだターンでは自動実行を抑止します。生成 UI は、カード・図表・入力付き計算をネイティブ部品で描画し、自由なシミュレーションや3Dは従来の隔離 iframe で実行します。選択内容は入力欄で確認してから送信できます。
+検索と読み取りには別々の予算を設けています。ツールの予算が尽きた場合は、それまでの根拠で回答し、不確実性を明示するよう指示します。書き込みが承認待ちになった場合は、回答と承認カードでターンを締めます。対応する操作には事前に設定した「常に承認」を使えますが、外部本文や、検索で本人未確認の記憶を読んだターンでは自動実行を抑止します（毎ターン入れる記憶のまとめは本人由来の事実だけなので、抑止しません）。生成 UI は、カード・図表・入力付き計算をネイティブ部品で描画し、自由なシミュレーションや3Dは従来の隔離 iframe で実行します。選択内容は入力欄で確認してから送信できます。
 
 実装: [入力と文脈の準備](services/chat_use_case.py) · [Skill 選択](services/chat_skill_selection.py) · [AI の判断ループ](services/chat_generation_agent_loop.py) · [ツール実行](services/chat_generation_tools.py)
 
@@ -441,7 +441,7 @@ Redis はロック・再接続用の履歴・ワーカー間の配信と停止�
 | メモ | 一覧・検索・取得・作成・更新・追記 | 認証した本人のメモ。共有中のメモの変更には追加の許可が必要 |
 | 記憶（パーソナル・コンテキスト） | 種類別の概要取得、キーワード／意味検索、事実の保存・更新・無効化 | 認証した本人の事実 |
 
-記憶は、**好み・プロフィール・プロジェクト・意思決定・参考情報**の種類を持つ小さな事実として保存します。保存元のクライアント・版番号・本人の確認状態も管理します。MCP で保存した事実と、チャットから自動保存した事実（承認を待たず保存し、記憶の画面で確認・編集・無効化できる。上限では、手を入れていない自動保存分が無効化されて入れ替わる）は本人が確認済みとは扱わず、チャットで参照した際の自動書き込みを抑止する判断にも使います。
+記憶は、**好み・プロフィール・プロジェクト・意思決定・参考情報**の種類を持つ小さな事実として保存します。保存元のクライアント・版番号・本人の確認状態も管理します。MCP で保存した事実と、チャットから自動保存した事実（承認を待たず保存し、記憶の画面で確認・編集・無効化できる。上限では、手を入れていない自動保存分が無効化されて入れ替わる）は本人が確認済みとは扱わず、チャットで検索して参照した際の自動書き込みを抑止する判断にも使います。毎ターンの回答に入れる記憶のまとめは、本人由来の事実（本人が確認した事実とチャットから抽出した事実）だけで組み、MCP・インポートで入った未確認の事実は入れません。
 
 外部クライアントへは必要なデータをツールの結果として返します。クライアントの会話履歴全体を ChatCore のチャット履歴へ自動同期する方式ではありません。
 

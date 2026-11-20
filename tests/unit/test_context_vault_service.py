@@ -16,9 +16,11 @@ from services.context_vault_service import (
     build_digest,
     create_fact,
     get_fact,
+    get_memory_use_settings,
     list_facts,
     search_facts,
     update_fact,
+    update_memory_use_settings,
 )
 from services.request_models import (
     ContextFactCreateRequest,
@@ -289,6 +291,18 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([group.fact_type for group in digest.groups], ["preference", "project"])
         self.assertEqual(len(search.facts), 1)
         repo.text_search.assert_awaited_once()
+
+    async def test_memory_use_settings_return_the_stored_value(self):
+        repo = _repo()
+        repo.get_memory_use_enabled = AsyncMock(return_value=True)
+        repo.update_memory_use_enabled = AsyncMock(return_value=False)
+        with patch("services.context_vault_service._repository", return_value=repo):
+            current = await get_memory_use_settings(7, session=object())
+            updated = await update_memory_use_settings(7, False, session=object())
+
+        self.assertTrue(current.enabled)
+        self.assertFalse(updated.enabled)
+        repo.update_memory_use_enabled.assert_awaited_once_with(7, False)
 
     async def test_search_rejects_empty_query(self):
         with self.assertRaises(ApiServiceError):

@@ -100,6 +100,7 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
         self.assertFalse(User.generative_ui_skill_enabled.nullable)
         self.assertFalse(User.memo_tools_skill_enabled.nullable)
         self.assertFalse(User.prompt_tools_skill_enabled.nullable)
+        self.assertFalse(User.memory_use_enabled.nullable)
         # 承認カードは回答の保存まで回答 ID を持たない。期限は必ず持つ。
         # An approval card has no reply id until the reply is saved, but always has an expiry.
         self.assertTrue(ChatToolApproval.assistant_message_id.nullable)

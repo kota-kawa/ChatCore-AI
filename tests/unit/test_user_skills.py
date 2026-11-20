@@ -80,7 +80,6 @@ class UserSkillPromptTests(unittest.TestCase):
             user_profile_prompt=None,
             task_prompt=None,
             room_summary="",
-            memory_facts=[],
             recent_messages=[{"role": "user", "content": "diagram"}],
             user_skills_prompt=prompt,
             generative_ui_enabled=is_enabled,
@@ -252,7 +251,6 @@ class UserSkillPromptTests(unittest.TestCase):
             user_skills_prompt="<enabled_user_skills>skill</enabled_user_skills>",
             task_prompt="task",
             room_summary="",
-            memory_facts=[],
             recent_messages=[{"role": "user", "content": "question"}],
         )
         contents = [message["content"] for message in messages]

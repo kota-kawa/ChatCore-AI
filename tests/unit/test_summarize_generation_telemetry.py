@@ -131,6 +131,23 @@ class SummarizeGenerationTelemetryTestCase(unittest.TestCase):
         self.assertEqual(rates["untagged_turn_state_recoveries"]["turns"], 1)
         self.assertEqual(rates["untagged_turn_state_recoveries"]["rate"], 0.5)
 
+    def test_memory_summary_turns_are_reported_as_a_rate_and_a_token_median(self):
+        """
+        記憶のまとめを入れたターンの割合と、そのトークン数の中央値が集計されることを検証します。
+        Verify the share of turns that carried the memory summary and the median of its tokens are reported.
+        """
+        lines = [
+            *_completed_turn("req-1", user_memory_fact_count=5, user_memory_estimated_tokens=400),
+            *_completed_turn("req-2", user_memory_fact_count=3, user_memory_estimated_tokens=300),
+            *_completed_turn("req-3"),
+            *_completed_turn("req-4"),
+        ]
+
+        summary = self._summary_of(lines)
+
+        self.assertEqual(summary["occurrence_rates"]["user_memory_fact_count"], {"turns": 2, "rate": 0.5})
+        self.assertEqual(summary["medians"]["user_memory_estimated_tokens"], 150.0)
+
     def test_tool_call_rejections_are_counted_by_reason_and_tool(self):
         """
         ツール呼び出しの拒否が「理由:ツール名」で数えられ、引き直しが発生率に入ることを検証します。
