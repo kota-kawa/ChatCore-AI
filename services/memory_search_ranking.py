@@ -37,17 +37,21 @@ BM25_B = 0.75
 # list's first place can push aside the other list's evidence.
 RRF_K = 60
 
-# 語の一致を「証拠」として数えるのに必要な、検索語の証拠のトークン（_query_terms）が記憶に現れた割合。日本語は 2 文字連続（bigram）で
-# 索引するので、文の形の検索語は多くのトークンを持ち、無関係な記憶でも 1 つはたまたま一致する（「フォーマット」と「コミットメッセージ」が
-# 「ット」を共有する、など）。1 つだけの一致を語の一致にすると、そうした記憶が結果に混ざる。30% なら、証拠のトークンが 1〜3 個の短い
-# 検索語は 1 個の一致で通り、7 個の「犬の名前を教えて」は 3 個（「犬の」「の名」「名前」のようなまとまった一致）が要り、「犬の」だけの
-# 記憶は語の一致から外れる。外れた記憶も、意味の近さがしきい値以内なら意味の一覧から入る。
-# The share of the query's evidence tokens (_query_terms) a memory must contain for its word match to count as evidence.
-# Japanese is indexed as character bigrams, so a sentence-shaped query has many tokens and an unrelated memory shares one by
-# chance (the "ット" shared by フォーマット and コミットメッセージ). Counting a single shared token would let such memories in.
-# At 30%, a short query of 1-3 evidence tokens passes on one match, the 7-token 犬の名前を教えて needs 3 (a coherent run such as
-# 犬の / の名 / 名前), and a memory sharing only 犬の drops out of the word list. A dropped memory can still enter through the
-# semantic list when its distance is within the threshold.
+# 語の一致を「証拠」として数えるのに必要な、検索語の 1 語（空白で区切った語）の証拠のトークンが記憶に現れた割合。どれか 1 語が
+# この割合を満たせば、その記憶は語の一致の一覧に入る。日本語は 2 文字連続（bigram）で索引するので、無関係な記憶でも語の一部が
+# たまたま一致する（「フォーマット」と「コミットメッセージ」が「ット」を共有する、など。5 個中 1 個 = 20%）。30% なら、そうした
+# 語の一部だけの一致は外れ、証拠のトークンが 1〜3 個の短い語は 1 個の一致で通り、空白の無い文の形の検索語（「犬の名前を教えて」
+# = 7 個）は 3 個（「犬の」「の名」「名前」のようなまとまった一致）が要る。割合を検索語の全体ではなく語ごとに見るのは、モデルが
+# キーワードを並べた検索語（「犬 犬種 年齢 誕生日 プレゼント」）で、1 語だけが当たる関連する記憶を落とさないため（全体で見ると、
+# 語を足すほど 1 語の一致の割合が下がる）。外れた記憶も、意味の近さがしきい値以内なら意味の一覧から入る。
+# The share of one query word's evidence tokens (words are split on whitespace) a memory must contain for its word match to count.
+# A memory enters the word list when any one word reaches this share. Japanese is indexed as character bigrams, so an unrelated
+# memory shares part of a word by chance (the "ット" shared by フォーマット and コミットメッセージ: 1 of 5 = 20%). At 30% such
+# partial matches drop out, a short word of 1-3 evidence tokens passes on one match, and a sentence-shaped query without spaces
+# (犬の名前を教えて = 7 tokens) needs 3 (a coherent run such as 犬の / の名 / 名前). The share is taken per word, not over the
+# whole query, so that a keyword-list query from the model (犬 犬種 年齢 誕生日 プレゼント) keeps a related memory matching
+# only one of its words: over the whole query, every added keyword would lower the share of a single matching word.
+# A dropped memory can still enter through the semantic list when its distance is within the threshold.
 WORD_MATCH_MIN_COVERAGE = 0.3
 
 # 加点の上限。RRF の 1 位と 2 位の差は 1/60 - 1/61 ≒ 0.00027、10 位前後の隣り合う順位の差は 0.0002 前後で、
@@ -97,14 +101,22 @@ def _query_terms(query: str) -> list[str]:
     Words are split on whitespace because tokenize_bm25 joins characters across whitespace and would make a false pair out of
     separate keywords such as "犬 猫".
     """
-    terms: dict[str, None] = {}
+    return list(dict.fromkeys(token for word in _query_words(query) for token in word))
+
+
+def _query_words(query: str) -> list[list[str]]:
+    """検索語を空白で区切った語ごとに、証拠にしてよいトークンを重複なしで返す（証拠のトークンが無い語は除く）。
+
+    The evidence tokens of each whitespace-separated query word, distinct within the word; words with none are dropped.
+    """
+    words: list[list[str]] = []
     for word in str(query or "").split():
         tokens = list(dict.fromkeys(tokenize_bm25(word)))
         has_pair = any(len(token) == 2 and not token.isascii() for token in tokens)
-        for token in tokens:
-            if _is_word_match_evidence(token, word_has_pair=has_pair):
-                terms.setdefault(token, None)
-    return list(terms)
+        evidence = [token for token in tokens if _is_word_match_evidence(token, word_has_pair=has_pair)]
+        if evidence:
+            words.append(evidence)
+    return words
 
 
 def _document_tokens(fact: Mapping[str, Any]) -> list[str]:
@@ -143,13 +155,13 @@ def _bm25_scores(documents: Sequence[Sequence[str]], terms: Sequence[str]) -> li
     return scores
 
 
-def _covers_enough_terms(document: Sequence[str], terms: Sequence[str]) -> bool:
-    """記憶が、検索語の証拠のトークンを WORD_MATCH_MIN_COVERAGE 以上の割合で含むか。
+def _covers_a_query_word(document: Sequence[str], words: Sequence[Sequence[str]]) -> bool:
+    """記憶が、検索語のどれか 1 語について、その語の証拠のトークンを WORD_MATCH_MIN_COVERAGE 以上の割合で含むか。
 
-    Whether the memory contains at least WORD_MATCH_MIN_COVERAGE of the query's evidence tokens.
+    Whether the memory contains at least WORD_MATCH_MIN_COVERAGE of the evidence tokens of any one query word.
     """
     present = set(document)
-    return sum(1 for term in terms if term in present) / len(terms) >= WORD_MATCH_MIN_COVERAGE
+    return any(sum(1 for token in word if token in present) / len(word) >= WORD_MATCH_MIN_COVERAGE for word in words)
 
 
 def _ranks(ordered_ids: Sequence[int]) -> dict[int, int]:
@@ -182,7 +194,7 @@ def rank_memory_facts(
 
     各行は id、title、content、importance、last_confirmed_at、last_mentioned_at と、検索語の埋め込みとのコサイン距離 distance を持つ。
     distance が None の行は、ベクトルがまだ無い記憶、または埋め込みが使えなかったときの行で、語の一致だけで順位づける。
-    返す条件は、語の一致がある（検索語の証拠のトークンの WORD_MATCH_MIN_COVERAGE 以上が記憶に現れる）、または distance が
+    返す条件は、語の一致がある（検索語のどれか 1 語の証拠のトークンの WORD_MATCH_MIN_COVERAGE 以上が記憶に現れる）、または distance が
     max_distance（既定は意味検索のしきい値）以内であること。
     順位は、語の一致の一覧と意味の近さの一覧の RRF に小さな加点を足した点の降順で、同点は id の大きい順。
 
@@ -200,14 +212,15 @@ def rank_memory_facts(
         return []
     moment = now if now is not None else datetime.now(UTC)
     ceiling = get_semantic_max_distance() if max_distance is None else max_distance
-    terms = _query_terms(str(query or ""))
+    words = _query_words(str(query or ""))
+    terms = list(dict.fromkeys(token for word in words for token in word))
 
     documents = [_document_tokens(fact) for fact in facts]
     lexical_scores = _bm25_scores(documents, terms)
     lexical_matches = [
         (fact, score)
         for fact, score, document in zip(facts, lexical_scores, documents, strict=True)
-        if score > 0 and _covers_enough_terms(document, terms)
+        if score > 0 and _covers_a_query_word(document, words)
     ]
     # 同点は id の大きい順にして、同じ入力なら必ず同じ順位になるようにする。
     # Ties go to the larger id so the same input always gives the same order.

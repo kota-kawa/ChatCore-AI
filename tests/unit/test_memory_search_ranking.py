@@ -161,9 +161,9 @@ def _custom_rows(*memories, distances=None):
 
 
 class WordMatchCoverageTestCase(unittest.TestCase):
-    """語の一致は、証拠のトークンの一定割合が記憶に現れたときだけ数える。
+    """語の一致は、検索語のどれか 1 語の証拠のトークンの一定割合が記憶に現れたときだけ数える。
 
-    A word match counts only at a minimum share of the query's evidence tokens.
+    A word match counts only when a memory holds a minimum share of the evidence tokens of some one query word.
     """
 
     COMMIT = (1, "コミットメッセージ", "コミットメッセージは日本語と英語を併記する。")
@@ -204,13 +204,34 @@ class WordMatchCoverageTestCase(unittest.TestCase):
         english = _custom_rows((3, "Project", "The project is due Friday."))
         self.assertEqual(_ids(english, "project plan budget"), [3])
 
-    def test_a_longer_keyword_query_needs_the_share(self):
+    def test_a_keyword_list_keeps_a_memory_matching_only_one_of_its_words(self):
+        # 割合は語ごとに見る。キーワードを足しても、1 語だけが当たる関連する記憶は語の一致に残る。
+        # The share is taken per word, so adding keywords does not drop a related memory that matches only one of them.
         rows = _custom_rows((1, "Project", "The project plan is due Friday."), (2, "Budget", "The budget is fixed."))
 
-        # 5 語のうち 1 語（20%）だけの記憶は外れ、2 語（40%）の記憶は通る。
-        # One word of five (20%) drops out; two of five (40%) passes.
-        self.assertEqual(_ids(rows, "project plan budget deadline owner"), [1])
+        self.assertEqual(_ids(rows, "project plan budget deadline owner"), [1, 2])
         self.assertEqual(_ids(rows, "project plan budget"), [1, 2])
+
+    def test_a_keyword_list_from_the_model_finds_the_memory_and_skips_a_partial_word(self):
+        # モデルが実際に送った形の検索語（5 語）。「犬」だけが当たる飼い犬の記憶は入り、「プレゼント」と「ント」だけを
+        # 共有する無関係な記憶（4 個中 1 個 = 25%）は入らない。
+        # A five-keyword query as a model actually sent it: the dog memory matching only 犬 is found, and an unrelated memory
+        # sharing just ント with プレゼント (1 of 4 = 25%) is not.
+        dog = (1, "飼い犬", "柴犬のハチ（オス、3歳）を飼っている。散歩は朝。")
+        partial = (2, "レビュー", "コメントは短く書く。")
+        rows = _custom_rows(dog, partial)
+
+        self.assertEqual(_ids(rows, "犬 犬種 年齢 誕生日 プレゼント"), [1])
+
+    def test_a_sentence_query_with_one_content_word_misses_by_word_and_is_found_by_meaning(self):
+        # 既知の限界: 空白の無い文の形の検索語は 1 語として扱う。内容のある語が 1 つだけ一致する記憶（10 個中 2 個 = 20%）は
+        # 語の一致からは外れ、意味の近さがしきい値以内のときだけ入る。
+        # Known limit: a sentence-shaped query without spaces is one word. A memory matching only one content word (2 of 10 = 20%)
+        # is not a word match; it is found only when its meaning is within the threshold.
+        food = (1, "好きな食べ物", "ラーメンが好き。")
+
+        self.assertEqual(_ids(_custom_rows(food), "今日の食べ物は何がいい"), [])
+        self.assertEqual(_ids(_custom_rows(food, distances={1: 0.3}), "今日の食べ物は何がいい"), [1])
 
     def test_a_sentence_query_needs_a_coherent_run_not_one_bigram(self):
         # 「犬の名前を教えて」の証拠のトークンは 7 個。「犬の」「の名」「名前」が揃う記憶は通り、「犬の」だけの記憶は外れる。
@@ -232,6 +253,9 @@ class WordMatchCoverageTestCase(unittest.TestCase):
         rows = _custom_rows((1, "Coffee", "This is the best coffee in town."))
 
         self.assertEqual(_ids(rows, "what is the project plan"), [1])
+        # 語ごとに見るので、長い英文でも "the" 1 語の一致で入る。
+        # Taken per word, a long English sentence still matches on "the" alone.
+        self.assertEqual(_ids(rows, "tell me about the weather in the mountains"), [1])
 
 
 class MissingVectorTestCase(unittest.TestCase):
