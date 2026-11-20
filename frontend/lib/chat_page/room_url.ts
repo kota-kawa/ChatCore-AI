@@ -3,6 +3,8 @@
 // Builds the home-page URL that opens a given room, and consumes the room query when the page opens.
 // Ownership is checked by the server's history API, so this module only checks that the value is usable.
 
+import Router from "next/router";
+
 const ROOM_QUERY_PARAM = "room";
 // ルーム ID の上限。サーバーの MAX_CHAT_ROOM_ID_LENGTH（services/request_models.py）と揃える。
 // Upper bound for a room id; keep in step with the server's MAX_CHAT_ROOM_ID_LENGTH (services/request_models.py).
@@ -31,20 +33,42 @@ export function buildHomeRoomUrl(roomId: string): string {
   return `/?${params.toString()}`;
 }
 
+// room クエリを取り除いた URL へ置き換える。Next.js のルーターが動いているときはルーター経由（shallow）にする。
+// 履歴の state と router.asPath がルーターの持ち物で、history.replaceState だけで URL を変えると state の as/url と
+// asPath に ?room= が残り、別ページから戻ったときや router.replace(router.asPath) で room が復活するため。
+// ルーターが無い環境（単体テストなど）では history.replaceState にする。
+// Replaces the URL with one without the room query. When the Next.js router is running, go through it (shallow):
+// the history state and router.asPath belong to the router, and changing only the URL with history.replaceState leaves
+// ?room= in the state's as/url and in asPath, so the room would come back on returning from another page or on
+// router.replace(router.asPath). Without a router (unit tests, for example) fall back to history.replaceState.
+function replaceUrlWithoutRoom(): void {
+  try {
+    if (Router.router) {
+      const url = new URL(Router.asPath, window.location.origin);
+      url.searchParams.delete(ROOM_QUERY_PARAM);
+      void Router.replace(`${url.pathname}${url.search}${url.hash}`, undefined, { shallow: true, scroll: false }).catch(() => {});
+      return;
+    }
+  } catch {
+    // ルーターが使えないときは下の history.replaceState に任せる。
+    // Fall through to history.replaceState below when the router is unusable.
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.delete(ROOM_QUERY_PARAM);
+  window.history.replaceState(window.history.state, document.title, `${url.pathname}${url.search}${url.hash}`);
+}
+
 // URL の room クエリを取り除き、使える値ならルーム ID を返す。クエリが無い・使えない値なら null。
 // 取り除くのは履歴を汚さないため。ほかのクエリとハッシュは残す。
-// history.state は Next.js のルーターが戻る操作の復元に使うので、そのまま引き継ぐ。
 // Strips the room query from the URL and returns the room id when it is usable, or null when absent or unusable.
 // Stripping keeps the address bar clean; other query parameters and the hash stay.
-// history.state is carried over because Next.js's router relies on it to handle back navigation.
 export function consumeRoomIdFromUrl(): string | null {
   if (typeof window === "undefined") return null;
 
-  const url = new URL(window.location.href);
-  if (!url.searchParams.has(ROOM_QUERY_PARAM)) return null;
+  const params = new URL(window.location.href).searchParams;
+  if (!params.has(ROOM_QUERY_PARAM)) return null;
 
-  const roomId = normalizeRoomId(url.searchParams.get(ROOM_QUERY_PARAM));
-  url.searchParams.delete(ROOM_QUERY_PARAM);
-  window.history.replaceState(window.history.state, document.title, `${url.pathname}${url.search}${url.hash}`);
+  const roomId = normalizeRoomId(params.get(ROOM_QUERY_PARAM));
+  replaceUrlWithoutRoom();
   return roomId;
 }
