@@ -122,6 +122,31 @@ class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(prepared[0]["source_ref"], "room-123")
         self.assertEqual(len(prepared[0]["fingerprint"]), 64)
 
+    async def test_store_extracted_facts_passes_evidence_and_message_origin_to_the_repository(self):
+        repo = _repo()
+        repo.get_extraction_settings.return_value = True
+        repo.store_extracted.return_value = ExtractedStoreResult([], 0)
+        candidates = [
+            {"fact_type": "project", "title": "T", "content": "C", "evidence": "  I build T  "},
+            {"fact_type": "project", "title": "T2", "content": "C2", "evidence": "x" * 1500},
+            {"fact_type": "project", "title": "T3", "content": "C3"},
+        ]
+        with patch("services.context_vault_candidate_service._repository", return_value=repo):
+            await store_extracted_facts(
+                7,
+                candidates=candidates,
+                source_ref="chat:room-1:message:9",
+                room_id="room-1",
+                user_message_id=8,
+                session=object(),
+            )
+
+        prepared = repo.store_extracted.call_args.args[1]
+        # 長い引用は候補を落とさず 1000 文字で切り、前後の空白は除く。引用が無い候補は空のまま渡す。
+        # An overlong quote is cut to 1000 characters instead of dropping the candidate; a missing quote stays empty.
+        self.assertEqual([candidate["evidence"] for candidate in prepared], ["I build T", "x" * 1000, ""])
+        self.assertEqual(repo.store_extracted.call_args.kwargs, {"room_id": "room-1", "user_message_id": 8})
+
     async def test_store_extracted_facts_schedules_embedding_for_each_saved_fact_after_commit(self):
         saved = [_fact(id=31, revision=1), _fact(id=32, title="Second", content="Other", revision=1)]
         candidates = [{"fact_type": "project", "title": "T", "content": "C"}]

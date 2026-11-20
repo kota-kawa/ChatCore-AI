@@ -66,6 +66,7 @@ class SqlAlchemyModelMetadataTests(unittest.TestCase):
             "project_files",
             "context_facts",
             "context_fact_candidates",
+            "context_fact_sources",
             "prompt_resources",
             "guest_prompt_submissions",
             "prompt_view_counts",

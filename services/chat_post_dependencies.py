@@ -282,6 +282,7 @@ class ScheduleContextExtraction(Protocol):
         *,
         room_id: str,
         assistant_message_id: int,
+        user_message_id: int | None,
         user_message: str,
         assistant_response: str,
         locale: Any = None,

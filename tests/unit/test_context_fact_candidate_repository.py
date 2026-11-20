@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 from sqlalchemy.dialects.postgresql import dialect
+from sqlalchemy.exc import IntegrityError
 
 from services.api_errors import ApiServiceError
 from services.repositories.context_fact_candidate_repository import (
@@ -88,6 +89,7 @@ def _extracted(**overrides):
         "content": "Writes a compiler in Rust",
         "source_kind": "chat",
         "source_ref": "chat:room-1:message:9",
+        "evidence": "I write a compiler in Rust",
         "importance": 85,
         "confidence": 0.93,
         "fingerprint": "b" * 64,
@@ -99,18 +101,44 @@ def _extracted(**overrides):
 # 日本語: store_extracted が実行する SQL の順(ロック→既存の事実→既存の候補→挿入)に合わせたセッションのモックを作ります。
 # English: Build a session mock that follows the order of SQL store_extracted runs (lock, existing facts, existing
 # candidates, then inserts).
-def _store_session(*, active, pending, facts=(), fingerprint_hit=None, inserts):
+def _store_session(*, active, pending, facts=(), candidates=(), fingerprint_hit=None, fact_lock=None, inserts):
+    # 日本語: session.scalar は文の内容で振り分ける（件数 2 回→重複した事実のロック→fingerprint の照会）。
+    # English: session.scalar is answered by statement content (two counts, the lock on a duplicated fact, the fingerprint lookup).
+    async def scalar(statement):
+        sql = str(statement.compile(dialect=dialect()))
+        if "count(context_facts.id)" in sql:
+            return active
+        if "count(context_fact_candidates.id)" in sql:
+            return pending
+        if "FOR SHARE" in sql:
+            return fact_lock
+        return fingerprint_hit
+
     session = MagicMock()
-    session.scalar = AsyncMock(side_effect=[active, pending] + [fingerprint_hit] * 5)
+    session.scalar = AsyncMock(side_effect=scalar)
+    session.begin_nested = MagicMock(side_effect=lambda: _Savepoint())
     session.execute = AsyncMock(
         side_effect=[
             MagicMock(),
             iter(list(facts)),
-            iter([]),
+            iter(list(candidates)),
             *inserts,
         ]
     )
     return session
+
+
+# 日本語: session.begin_nested() の代わりに使う SAVEPOINT。中の例外は握りつぶさず、巻き戻したかを記録します。
+# English: Stand-in for session.begin_nested(): exceptions inside propagate, and it records whether it rolled back.
+class _Savepoint:
+    rolled_back = False
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, _exc, _tb):
+        self.rolled_back = exc_type is not None
+        return False
 
 
 # 日本語: AsyncSession をモックし、リポジトリが実行する SQL の内容を確認します。
@@ -177,6 +205,8 @@ class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         # 取り消し(deprecated)した事実は重複判定の比較対象に残るので、同じ内容は再び保存されない。
         # A deprecated (undone) fact stays in the duplicate-check corpus, so the same content is not saved again.
         undone = SimpleNamespace(
+            id=12,
+            revision=3,
             fact_type="project",
             title="Rust",
             content="Writes a compiler in Rust",
@@ -201,6 +231,189 @@ class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual((stored.saved_facts, stored.queued_count), ([], 0))
         self.assertEqual(session.execute.await_count, 3)
+
+    # 日本語: 事実テーブルの 1 行(重複判定の比較対象)を模した行を作ります。
+    # English: Build a row standing in for one fact-table row of the duplicate-check corpus.
+    @staticmethod
+    def _existing_fact(status="active"):
+        return SimpleNamespace(
+            id=12,
+            revision=3,
+            fact_type="project",
+            title="Rust",
+            content="Writes a compiler in Rust",
+            updated_at=None,
+            status=status,
+        )
+
+    @staticmethod
+    def _executed_sql(session):
+        return [str(call.args[0].compile(dialect=dialect())) for call in session.execute.await_args_list]
+
+    async def test_store_extracted_records_a_source_with_the_saved_fact(self):
+        session = _store_session(
+            active=3,
+            pending=0,
+            inserts=[_result(mapping=_fact(id=41)), _result(inserted_id=70), MagicMock()],
+        )
+
+        stored = await ContextFactCandidateRepository(session).store_extracted(
+            7, [_extracted()], room_id="room-1", user_message_id=8
+        )
+
+        self.assertEqual([fact["id"] for fact in stored.saved_facts], [41])
+        statements = self._executed_sql(session)
+        self.assertIn("INSERT INTO context_facts", statements[3])
+        self.assertIn("INSERT INTO context_fact_sources", statements[4])
+        self.assertIn("DELETE FROM context_fact_sources", statements[5])
+        source_params = session.execute.await_args_list[4].args[0].compile(dialect=dialect()).params
+        self.assertEqual(
+            {41, 7, "room-1", 8, "I write a compiler in Rust"},
+            set(source_params.values()),
+        )
+        # 同じトランザクションで作った事実なので、ロックも revision の確認もしない。
+        # The fact was created in this transaction, so no lock or revision check is needed.
+        self.assertFalse(any("FOR SHARE" in str(call.args[0].compile(dialect=dialect())) for call in session.scalar.await_args_list))
+
+    async def test_store_extracted_keeps_no_source_without_a_room_or_evidence(self):
+        for room_id, evidence in ((None, "quote"), ("room-1", "")):
+            with self.subTest(room_id=room_id, evidence=evidence):
+                session = _store_session(active=3, pending=0, inserts=[_result(mapping=_fact(id=41))])
+
+                await ContextFactCandidateRepository(session).store_extracted(
+                    7, [_extracted(evidence=evidence)], room_id=room_id, user_message_id=8
+                )
+
+                self.assertFalse(any("context_fact_sources" in sql for sql in self._executed_sql(session)))
+
+    async def test_store_extracted_adds_a_source_to_an_active_fact_without_updating_it(self):
+        session = _store_session(
+            active=3,
+            pending=0,
+            facts=[self._existing_fact("active")],
+            fact_lock=12,
+            inserts=[_result(inserted_id=70), MagicMock()],
+        )
+
+        stored = await ContextFactCandidateRepository(session).store_extracted(
+            7, [_extracted()], room_id="room-1", user_message_id=8
+        )
+
+        self.assertEqual((stored.saved_facts, stored.queued_count), ([], 0))
+        # 事実の行を FOR SHARE でロックし、重複を判定した時点の revision(3)・有効・本人の条件で確かめてから入れる。
+        # The fact row is locked FOR SHARE under the revision read at duplicate time (3), active and owned, before the insert.
+        lock = session.scalar.await_args_list[-1].args[0].compile(dialect=dialect())
+        self.assertIn("FOR SHARE", str(lock))
+        self.assertEqual({12, 7, 3, "active"}, set(lock.params.values()))
+        statements = self._executed_sql(session)
+        self.assertIn("INSERT INTO context_fact_sources", statements[3])
+        self.assertIn("DELETE FROM context_fact_sources", statements[4])
+        # 事実の行は更新しない(updated_at・revision を進めない)。
+        # The fact row is not updated, so updated_at and revision stay put.
+        self.assertFalse(any(sql.startswith(("UPDATE context_facts", "INSERT INTO context_facts")) for sql in statements))
+        source_params = session.execute.await_args_list[3].args[0].compile(dialect=dialect()).params
+        self.assertIn(12, source_params.values())
+
+    async def test_store_extracted_adds_no_source_when_the_fact_changed_after_the_duplicate_was_judged(self):
+        # 更新や無効化は revision を進める。ロックの再評価で revision が合わなければ DB は行を返さず、出典は入らない。
+        # An update or deprecation bumps the revision; when the lock's re-check no longer matches, no row comes back and no source goes in.
+        session = _store_session(
+            active=3,
+            pending=0,
+            facts=[self._existing_fact("active")],
+            fact_lock=None,
+            inserts=[],
+        )
+
+        stored = await ContextFactCandidateRepository(session).store_extracted(
+            7, [_extracted()], room_id="room-1", user_message_id=8
+        )
+
+        self.assertEqual((stored.saved_facts, stored.queued_count), ([], 0))
+        self.assertEqual(session.execute.await_count, 3)
+
+    async def test_store_extracted_still_saves_the_fact_when_its_source_cannot_be_stored(self):
+        # 回答の後の抽出の間にルームが消えると出典の INSERT が外部キー違反になる。事実の保存は巻き戻さず、出典だけ諦める。
+        # If the room is deleted while post-reply extraction runs, the source INSERT violates a foreign key; the fact stays saved.
+        savepoints = []
+        session = _store_session(
+            active=3,
+            pending=0,
+            inserts=[
+                _result(mapping=_fact(id=41)),
+                IntegrityError("INSERT INTO context_fact_sources", {}, Exception("foreign key violation")),
+            ],
+        )
+        session.begin_nested = MagicMock(side_effect=lambda: savepoints.append(_Savepoint()) or savepoints[-1])
+
+        stored = await ContextFactCandidateRepository(session).store_extracted(
+            7, [_extracted()], room_id="gone-room", user_message_id=8
+        )
+
+        self.assertEqual([fact["id"] for fact in stored.saved_facts], [41])
+        self.assertEqual(len(savepoints), 1)
+        self.assertTrue(savepoints[0].rolled_back)
+        # 失敗した出典の後に、刈り込みなどを続けない。
+        # Nothing more runs after the failed source write.
+        self.assertEqual(session.execute.await_count, 5)
+
+    async def test_store_extracted_adds_no_source_when_the_match_is_not_an_active_fact(self):
+        pending_candidate = SimpleNamespace(
+            fact_type="project",
+            title="Rust",
+            content="Writes a compiler in Rust",
+            updated_at=None,
+            status="pending",
+        )
+        rejected_candidate = SimpleNamespace(
+            fact_type="project",
+            title="Rust",
+            content="Writes a compiler in Rust",
+            updated_at=None,
+            status="rejected",
+        )
+        cases = {
+            "deprecated fact": {"facts": [self._existing_fact("deprecated")]},
+            "pending candidate": {"candidates": [pending_candidate]},
+            "rejected candidate": {"candidates": [rejected_candidate]},
+        }
+        for name, existing in cases.items():
+            with self.subTest(name):
+                session = _store_session(active=3, pending=0, inserts=[], **existing)
+
+                stored = await ContextFactCandidateRepository(session).store_extracted(
+                    7, [_extracted()], room_id="room-1", user_message_id=8
+                )
+
+                self.assertEqual((stored.saved_facts, stored.queued_count), ([], 0))
+                self.assertEqual(session.execute.await_count, 3)
+
+    async def test_store_extracted_adds_no_source_for_a_duplicate_inside_the_same_batch(self):
+        # 同じ発話から同じ内容が 2 件返っても、2 件目は先に保存した事実と重複するだけで出典は二重に入らない。
+        # Two identical results from one message: the second matches the first candidate, which has no fact id yet.
+        session = _store_session(
+            active=3,
+            pending=0,
+            inserts=[_result(mapping=_fact(id=41)), _result(inserted_id=70), MagicMock()],
+        )
+
+        stored = await ContextFactCandidateRepository(session).store_extracted(
+            7, [_extracted(), _extracted(fingerprint="c" * 64)], room_id="room-1", user_message_id=8
+        )
+
+        self.assertEqual(len(stored.saved_facts), 1)
+        sources = [sql for sql in self._executed_sql(session) if sql.startswith("INSERT INTO context_fact_sources")]
+        self.assertEqual(len(sources), 1)
+
+    async def test_store_extracted_keeps_no_source_for_candidates_queued_over_the_cap(self):
+        session = _store_session(active=MAX_ACTIVE_CONTEXT_FACTS, pending=0, inserts=[_result(inserted_id=5)])
+
+        stored = await ContextFactCandidateRepository(session).store_extracted(
+            7, [_extracted()], room_id="room-1", user_message_id=8
+        )
+
+        self.assertEqual(stored.queued_count, 1)
+        self.assertFalse(any("context_fact_sources" in sql for sql in self._executed_sql(session)))
 
     async def test_get_extraction_settings_is_disabled_when_the_user_row_cannot_be_read(self):
         # 列は NOT NULL。None は行が読めないときだけなので、有効扱いにせず抽出が走らない側へ倒す。

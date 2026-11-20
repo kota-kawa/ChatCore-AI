@@ -17,6 +17,7 @@ from sqlalchemy import (
     bindparam,
     case,
     column,
+    delete,
     exists,
     func,
     literal,
@@ -39,7 +40,7 @@ from services.error_messages import (
     ERROR_CONTEXT_FACT_NOT_FOUND,
     ERROR_CONTEXT_FACT_REVISION_CONFLICT,
 )
-from services.models import ContextFact
+from services.models import ContextFact, ContextFactSource
 from services.models.types import Vector
 from services.search_terms import build_like_pattern, split_search_terms
 
@@ -510,14 +511,18 @@ class ContextFactRepository:
         """revision による楽観ロックで事実を更新する。
 
         title・content・種類を実際に変えたときは、本人の操作なら last_confirmed_at を現在時刻にし、
-        それ以外(MCP クライアントの書き換え)なら NULL に戻す。同じ値の再送、状態変更、重要度の変更では確認状態を変えない。
+        それ以外(MCP クライアントの書き換え)なら NULL に戻し、出所(source_kind)を mcp にする。同時に、その事実の出典
+        (context_fact_sources)を同じトランザクションで消す(引用が新しい文面を裏づけなくなるため)。
+        同じ値の再送、状態変更、重要度の変更では確認状態・出所・出典を変えない。
 
         Update a fact under optimistic locking.
 
         Changing title, content, or type sets ``last_confirmed_at`` to now when the owner
-        made the change and clears it otherwise (an MCP client rewrote it and the owner has
-        not seen it). Re-sending unchanged fields, status changes, and importance changes
-        leave confirmation alone.
+        made the change; otherwise (an MCP client rewrote it and the owner has not seen it) it is
+        cleared and source_kind becomes mcp. Either way the fact's sources
+        (context_fact_sources) are deleted in the same transaction, since the quotes no longer back the
+        new wording. Re-sending unchanged fields, status changes, and importance changes
+        leave confirmation, provenance and sources alone.
         """
         # 日本語: deprecated などから active に戻すときだけ、有効件数の上限を確認する(既に active なら件数は増えない)。
         # English: The active-count cap is checked only when reactivating a non-active fact, since an already-active fact adds no count.
@@ -537,6 +542,7 @@ class ContextFactRepository:
                 raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
 
         changes: dict[str, Any] = {"revision": ContextFact.revision + 1}
+        content_will_change = False
         content_change_conditions = []
         if title is not None:
             changes["title"] = title
@@ -551,6 +557,24 @@ class ContextFactRepository:
         # English: Only when a value actually changes (IS DISTINCT FROM) is the embedding marked pending and confirmation updated.
         if content_change_conditions:
             content_changed = or_(*content_change_conditions)
+            # 日本語: 更新の前に事実の行を FOR UPDATE でロックし、更新と同じ revision で「実際に変わるか」を判定する。
+            # 出典の削除は更新の後（行ロックを持ったまま）に行うので、並行して出典を足す側（FOR SHARE で revision を確かめる）は
+            # 更新後の事実には入れず、更新前に入れた出典はこの削除で消える。
+            # English: The fact row is locked FOR UPDATE before the update, and the "actually changes" test runs under the
+            # update's own revision. Sources are deleted after the update while the row lock is still held, so a concurrent
+            # source writer (FOR SHARE, checking the revision) cannot add one to the updated fact, and one it added earlier is
+            # removed by this delete.
+            content_will_change = await self.session.scalar(
+                select(content_changed)
+                .where(
+                    ContextFact.id == fact_id,
+                    ContextFact.user_id == user_id,
+                    ContextFact.revision == expected_revision,
+                )
+                .with_for_update()
+            )
+            if not confirmed_by_owner:
+                changes["source_kind"] = case((content_changed, "mcp"), else_=ContextFact.source_kind)
             changes["embedding_status"] = case(
                 (content_changed, "pending"),
                 else_=ContextFact.embedding_status,
@@ -580,6 +604,8 @@ class ContextFactRepository:
         )
         row = (await self.session.execute(statement)).mappings().first()
         if row is not None:
+            if content_will_change:
+                await self.session.execute(delete(ContextFactSource).where(ContextFactSource.fact_id == fact_id))
             return self._serialize_row(row)
 
         # 日本語: 更新が 0 行のとき、事実が無い(404)のか revision の不一致(409)なのかを区別する。

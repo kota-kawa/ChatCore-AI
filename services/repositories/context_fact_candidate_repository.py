@@ -18,7 +18,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api_errors import ApiServiceError, ResourceNotFoundError
-from services.context_vault_bm25 import filter_bm25_duplicates
+from services.context_vault_bm25 import find_bm25_duplicates
 from services.datetime_serialization import serialize_datetime_iso
 from services.error_messages import (
     ERROR_CONTEXT_EXTRACTION_SETTINGS_NOT_FOUND,
@@ -28,6 +28,7 @@ from services.error_messages import (
 )
 from services.models import ContextFact, ContextFactCandidate, User
 from services.repositories.context_fact_repository import MAX_ACTIVE_CONTEXT_FACTS
+from services.repositories.context_fact_source_repository import ContextFactSourceRepository
 
 # 日本語: 承認待ち候補の 1 ユーザーあたり上限と、重複判定(BM25)に使う既存文書の最大件数。
 # English: Per-user cap on pending candidates, and the maximum number of existing documents used for BM25 duplicate detection.
@@ -169,15 +170,29 @@ class ContextFactCandidateRepository:
             select(func.pg_advisory_xact_lock(_CONTEXT_VAULT_LOCK_NAMESPACE, user_id))
         )
 
-    async def store_extracted(self, user_id: int, candidates: list[dict[str, Any]]) -> ExtractedStoreResult:
+    async def store_extracted(
+        self,
+        user_id: int,
+        candidates: list[dict[str, Any]],
+        *,
+        room_id: str | None = None,
+        user_message_id: int | None = None,
+    ) -> ExtractedStoreResult:
         """重複を除いた抽出結果を、有効件数に空きがある分は未確認の事実として保存し、空きが無い分は承認待ち候補へ入れる。
 
         重複判定は既存の事実(無効化済みを含む)・承認待ち・却下済みの候補との BM25 と、候補の fingerprint で行う。
         無効化(取り消し)された内容と同じものは再び保存されない。事実の有効件数と承認待ちの件数は、それぞれの上限を超えない。
+        room_id があり候補に evidence(本人発話の引用)があるときは出典行を残す。事実として直接保存した分には同じ
+        トランザクションで 1 件入れ、有効な事実と重複した分は、その事実へ出典を足す(事実の行は更新しない)。
+        無効化済みの事実・承認待ちや却下済みの候補と重複した分と、承認待ち候補へ回した分には出典を残さない。
 
         Save unique extracted content as unconfirmed facts while active slots remain, and queue the rest as
         pending candidates. Duplicates are judged against existing facts (deprecated included), pending and
         rejected candidates by BM25, and by candidate fingerprint, so content the owner undid is not saved again.
+        With a room_id and a candidate evidence quote, a source row is kept: one in the same transaction for a
+        directly saved fact, and one added to the matched fact when the content duplicates an active fact (the
+        fact row is not updated). Duplicates of deprecated facts or of pending/rejected candidates, and candidates
+        queued as pending, leave no source.
         """
         await self._lock_user(user_id)
         active_count = await self.session.scalar(
@@ -199,6 +214,8 @@ class ContextFactCandidateRepository:
 
         facts_result = await self.session.execute(
             select(
+                ContextFact.id,
+                ContextFact.revision,
                 ContextFact.fact_type,
                 ContextFact.title,
                 ContextFact.content,
@@ -225,6 +242,9 @@ class ContextFactCandidateRepository:
         # newer updates win within a rank.
         existing_documents = [
             {
+                "fact_id": int(row.id),
+                "fact_revision": int(row.revision),
+                "fact_status": str(row.status),
                 "fact_type": str(row.fact_type),
                 "title": str(row.title or ""),
                 "content": str(row.content or ""),
@@ -252,16 +272,31 @@ class ContextFactCandidateRepository:
                 ),
             )
         )
-        unique_candidates = filter_bm25_duplicates(
+        matches = find_bm25_duplicates(
             candidates,
             existing_documents[:MAX_CONTEXT_DEDUPLICATION_DOCUMENTS],
         )
 
         saved_facts: list[dict[str, Any]] = []
         queued_count = 0
-        for candidate in unique_candidates:
+        for candidate, match in zip(candidates, matches, strict=True):
+            if match is not None:
+                # 日本語: 有効な事実と重複した分は、その事実への再言及として出典だけを足す。一致相手が同一バッチの候補
+                # (fact_id なし)・無効化済みの事実・承認待ちや却下済みの候補のときは何も保存しない。
+                # English: A duplicate of an active fact is a repeat mention, so only a source is added to it. Nothing is
+                # saved when the match is a same-batch candidate (no fact_id), a deprecated fact, or a pending/rejected candidate.
+                if match.get("fact_status") == "active":
+                    await self._record_source(
+                        user_id,
+                        int(match["fact_id"]),
+                        candidate,
+                        room_id,
+                        user_message_id,
+                        expected_revision=int(match["fact_revision"]),
+                    )
+                continue
             if len(saved_facts) >= free_fact_slots and queued_count >= free_queue_slots:
-                break
+                continue
             # 日本語: 同じ fingerprint の候補(承認済み・却下済みを含む)がある内容は、事実としても候補としても入れない。
             # English: Content whose fingerprint already has a candidate (approved or rejected included) is neither saved nor queued.
             already_exists = await self.session.scalar(
@@ -273,10 +308,37 @@ class ContextFactCandidateRepository:
             if already_exists is not None:
                 continue
             if len(saved_facts) < free_fact_slots:
-                saved_facts.append(await self._insert_unconfirmed_fact(user_id, candidate))
+                fact = await self._insert_unconfirmed_fact(user_id, candidate)
+                saved_facts.append(fact)
+                await self._record_source(user_id, int(fact["id"]), candidate, room_id, user_message_id)
             elif queued_count < free_queue_slots and await self._insert_pending_candidate(user_id, candidate):
                 queued_count += 1
         return ExtractedStoreResult(saved_facts, queued_count)
+
+    # 日本語: 候補の evidence を出典として事実へ残す。部屋か evidence が無いとき(旧形式の呼び出し)は何もしない。
+    # expected_revision は既存の事実へ足すときの、重複を判定した時点の revision（新しく作った事実では None）。
+    # English: Keep the candidate's evidence as a source of the fact. Does nothing without a room or evidence (older callers).
+    # expected_revision is the revision read when the duplicate was judged, for an existing fact (None for a fact just created).
+    async def _record_source(
+        self,
+        user_id: int,
+        fact_id: int,
+        candidate: dict[str, Any],
+        room_id: str | None,
+        user_message_id: int | None,
+        expected_revision: int | None = None,
+    ) -> None:
+        evidence = str(candidate.get("evidence") or "")
+        if not room_id or not evidence:
+            return
+        await ContextFactSourceRepository(self.session).record_mention(
+            fact_id=fact_id,
+            user_id=user_id,
+            chat_room_id=room_id,
+            user_message_id=user_message_id,
+            evidence=evidence,
+            expected_revision=expected_revision,
+        )
 
     # 日本語: 抽出した内容を事実として挿入する。last_confirmed_at は書かず NULL(本人未確認)のまま、確信度は抽出時の値を残す。
     # 本人が Web UI で編集すれば確認済みになる(ADR 0016)。

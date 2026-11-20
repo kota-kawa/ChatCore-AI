@@ -22,21 +22,21 @@ def _document_text(document: dict[str, Any]) -> str:
     return f"{document.get('title', '')}\n{document.get('content', '')}"
 
 
-def _has_duplicate(
+def _find_duplicate(
     candidate: dict[str, Any],
     documents: list[dict[str, Any]],
-) -> bool:
+) -> dict[str, Any] | None:
     same_type_documents = [
         document
         for document in documents
         if document.get("fact_type") == candidate.get("fact_type")
     ]
     if not same_type_documents:
-        return False
+        return None
 
     query_tokens = tokenize_bm25(_document_text(candidate))
     if not query_tokens:
-        return False
+        return None
 
     corpus_tokens = [
         tokenize_bm25(_document_text(document)) for document in same_type_documents
@@ -47,7 +47,7 @@ def _has_duplicate(
         logger.warning(
             "rank_bm25 not installed; context candidate BM25 deduplication disabled."
         )
-        return False
+        return None
 
     scores = BM25L(corpus_tokens).get_scores(query_tokens).tolist()
     ranked_indexes = sorted(
@@ -65,21 +65,26 @@ def _has_duplicate(
             continue
         denominator = min(len(query_set), len(document_set))
         if denominator and shared_count / denominator >= BM25_DUPLICATE_TOKEN_OVERLAP:
-            return True
-    return False
+            return same_type_documents[index]
+    return None
 
 
-def filter_bm25_duplicates(
+def find_bm25_duplicates(
     candidates: list[dict[str, Any]],
     existing_documents: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    # 既存文書や同一バッチと類似重複する候補を除く。
-    """Drop candidates near-duplicating existing documents or the same batch."""
+) -> list[dict[str, Any] | None]:
+    # 各候補が類似重複している相手の文書を、候補と同じ並びで返す。重複していない候補は None。
+    # 相手は既存文書（渡した辞書のコピー）か、同一バッチで先に残った候補。
+    """For each candidate, return the document it near-duplicates, or None when it is unique.
+
+    The match is a copy of the existing document passed in, or an earlier candidate of the same batch.
+    """
     documents = [dict(document) for document in existing_documents]
-    accepted: list[dict[str, Any]] = []
+    matches: list[dict[str, Any] | None] = []
     for candidate in candidates:
-        if _has_duplicate(candidate, documents):
-            continue
-        accepted.append(candidate)
-        documents.append(candidate)
-    return accepted
+        match = _find_duplicate(candidate, documents)
+        matches.append(match)
+        if match is None:
+            documents.append(candidate)
+    return matches
+

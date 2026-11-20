@@ -168,6 +168,32 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
             ],
         )
 
+    # 日本語: 回答の保存後に予約される記憶の抽出へ、保存済みの利用者発話の ID が渡ります（ストリーム経路）。
+    # English: Extraction scheduled after the reply is saved receives the persisted user message's id (streaming path).
+    def test_streaming_reply_persistence_hands_the_user_message_id_to_extraction(self):
+        deps = self._build_deps(Mock())
+        deps.store_user_message_and_load_turn_context.side_effect = lambda _room_id, message, *_args, **_kwargs: {
+            "message_id": 11,
+            "parent_message_id": None,
+            "is_first_turn": False,
+            "messages": [{"role": "user", "content": message}],
+            "web_search_contexts": [],
+        }
+        deps.save_message_to_db.return_value = 22
+        deps.should_extract_context.return_value = True
+        deps.submit_background_task.side_effect = lambda task, *args: task(*args)
+
+        persist_response = self._run(
+            deps,
+            body_extra={},
+            session={"user_id": 42},
+            key="persist_response",
+        )
+        persist_response("assistant reply")
+
+        kwargs = deps.schedule_context_extraction.call_args.kwargs
+        self.assertEqual((kwargs["assistant_message_id"], kwargs["user_message_id"]), (22, 11))
+
     # 日本語: 未指定なら検索関数は渡さず、従来どおりの生成になります。
     # English: Without the flag, no lookup is wired up and generation is unchanged.
     def test_request_without_the_flag_passes_no_lookup(self):

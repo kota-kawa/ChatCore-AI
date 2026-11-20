@@ -1205,6 +1205,7 @@ class ChatPostUseCase:
                 room_mode=room_mode,
                 chat_room_id=chat_room_id,
                 assistant_message_id=assistant_message_id,
+                user_message_id=saved_user_message_id,
                 user_message=user_message,
                 assistant_response=response,
             )
@@ -1506,6 +1507,7 @@ class ChatPostUseCase:
             room_mode=turn.room_mode,
             chat_room_id=turn.chat_room_id,
             assistant_message_id=turn.saved_assistant_message_id,
+            user_message_id=turn.saved_user_message_id,
             user_message=turn.user_message,
             assistant_response=turn.bot_reply,
         )
@@ -1599,6 +1601,7 @@ class ChatPostUseCase:
         room_mode: str,
         chat_room_id: str,
         assistant_message_id: int | None,
+        user_message_id: int | None,
         user_message: str,
         assistant_response: str,
     ) -> None:
@@ -1615,6 +1618,7 @@ class ChatPostUseCase:
                 user_id,
                 room_id=chat_room_id,
                 assistant_message_id=assistant_message_id,
+                user_message_id=user_message_id,
                 user_message=user_message,
                 assistant_response=assistant_response,
                 locale=self.locale,
@@ -1633,6 +1637,7 @@ class ChatPostUseCase:
         room_mode: str,
         chat_room_id: str,
         assistant_message_id: int | None,
+        user_message_id: int | None,
         user_message: str,
         assistant_response: str,
     ) -> None:
@@ -1650,6 +1655,7 @@ class ChatPostUseCase:
                     room_mode=room_mode,
                     chat_room_id=chat_room_id,
                     assistant_message_id=assistant_message_id,
+                    user_message_id=user_message_id,
                     user_message=user_message,
                     assistant_response=assistant_response,
                 ),

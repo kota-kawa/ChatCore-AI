@@ -70,6 +70,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                     "fact_type": "preference",
                     "title": "Preferred editor",
                     "content": "The user prefers Vim.",
+                    "evidence": "I always use Vim",
                     "importance": 80,
                     "confidence": 0.95,
                 }
@@ -210,7 +211,40 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
             ),
         )
         self.assertEqual(len(supported), 1)
-        self.assertNotIn("evidence", supported[0])
+        # 照合に使った一節は、出典として保存できるようそのまま残る。
+        # The span used for the check stays on the candidate so it can be stored as the source.
+        self.assertEqual(supported[0]["evidence"], "深海魚って気になるんだけど、 どんな種類がいるの？")
+
+    def test_drops_a_candidate_whose_evidence_contains_a_secret(self):
+        # title / content に秘密が無くても、出典として保存される evidence に秘密があれば候補ごと落とす。
+        # A candidate is dropped when only its evidence (stored as the source) holds a secret.
+        user_message = "I always use Vim. My password is hunter2secret"
+        payload = {
+            "candidates": [
+                {
+                    "fact_type": "preference",
+                    "title": "Preferred editor",
+                    "content": "The user prefers Vim.",
+                    "evidence": "I always use Vim. My password is hunter2secret",
+                    "importance": 90,
+                    "confidence": 0.95,
+                },
+                {
+                    "fact_type": "preference",
+                    "title": "Preferred editor",
+                    "content": "The user prefers Vim.",
+                    "evidence": "I always use Vim",
+                    "importance": 90,
+                    "confidence": 0.95,
+                },
+            ]
+        }
+
+        accepted = extract_context_candidates(
+            user_message, "ok", llm_json_response=Mock(return_value=json.dumps(payload))
+        )
+
+        self.assertEqual([candidate["evidence"] for candidate in accepted], ["I always use Vim"])
 
     def test_bounds_source_text_before_calling_the_extraction_model(self):
         llm = Mock(return_value='{"candidates": []}')
@@ -287,6 +321,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                     "fact_type": "project",
                     "title": "Project",
                     "content": "Uses FastAPI",
+                    "evidence": "We use FastAPI.",
                     "importance": 60,
                     "confidence": 0.95,
                 }
@@ -302,6 +337,7 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                 42,
                 room_id="room-1",
                 assistant_message_id=9,
+                user_message_id=8,
                 user_message="We use FastAPI.",
                 assistant_response="Understood.",
                 locale="en",
@@ -320,6 +356,8 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
             42,
             candidates=extractor.return_value,
             source_ref="chat:room-1:message:9",
+            room_id="room-1",
+            user_message_id=8,
         )
 
     def test_background_extraction_errors_are_logged_and_not_raised(self):

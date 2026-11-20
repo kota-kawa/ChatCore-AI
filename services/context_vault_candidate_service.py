@@ -33,6 +33,7 @@ from services.repositories.context_fact_candidate_repository import (
 from services.request_models import (
     DEFAULT_CONTEXT_FACT_IMPORTANCE,
     MAX_CONTEXT_FACT_CONTENT_LENGTH,
+    MAX_CONTEXT_FACT_EVIDENCE_LENGTH,
     MAX_CONTEXT_FACT_TITLE_LENGTH,
     ContextFactCandidateStatus,
     ContextFactType,
@@ -61,6 +62,9 @@ class _ExtractedCandidateInput(BaseModel):
     fact_type: ContextFactType
     title: str = Field(min_length=1, max_length=MAX_CONTEXT_FACT_TITLE_LENGTH)
     content: str = Field(min_length=1, max_length=MAX_CONTEXT_FACT_CONTENT_LENGTH)
+    # 本人発話の引用。出典として残すため、長さの超過は候補を落とさず保存時に切り詰める。
+    # The owner's quoted words kept as the source; an overlong quote is truncated at storage, not a reason to drop the candidate.
+    evidence: str = ""
     importance: int = Field(default=DEFAULT_CONTEXT_FACT_IMPORTANCE, ge=0, le=100)
     confidence: float = Field(default=0, ge=0, le=1)
 
@@ -167,17 +171,21 @@ async def store_extracted_facts(
     *,
     candidates: list[dict[str, Any]],
     source_ref: str,
+    room_id: str | None = None,
+    user_message_id: int | None = None,
     session: AsyncSession | None = None,
 ) -> ExtractedStoreResult:
     """LLM が抽出した内容を検証し、抽出を許可しているユーザーの記憶として重複なく保存する。
     有効な事実に空きがある分は本人未確認の事実として直接保存し（保存後に埋め込みを予約する）、
     空きが無い分だけ承認待ち候補へ入れる。検証に通らない候補は黙って捨てる。
+    room_id があれば、候補の evidence（本人発話の引用）を出典として残す（user_message_id は引用元の発話）。
     session を渡した場合、埋め込みの予約はコミット後に呼び出し側が行う。
 
     Validate LLM-extracted content and store it as unique memory for an owner who has extraction enabled.
     What fits under the active-fact cap is saved directly as unconfirmed facts (embeddings are scheduled after
     the commit); only the overflow is queued as pending candidates. Invalid candidates are silently skipped.
-    With a caller-supplied session, the caller schedules embeddings after its own commit.
+    With a room_id, each candidate's evidence (the owner's quoted words) is kept as a source (user_message_id is
+    the message it came from). With a caller-supplied session, the caller schedules embeddings after its own commit.
     """
     normalized_source_ref = source_ref.strip()[:500] or None
     prepared: list[dict[str, Any]] = []
@@ -195,6 +203,7 @@ async def store_extracted_facts(
                 "content": candidate.content.strip(),
                 "source_kind": "chat",
                 "source_ref": normalized_source_ref,
+                "evidence": candidate.evidence[:MAX_CONTEXT_FACT_EVIDENCE_LENGTH].strip(),
                 "importance": candidate.importance,
                 "confidence": candidate.confidence,
                 "fingerprint": _fingerprint(candidate),
@@ -207,7 +216,7 @@ async def store_extracted_facts(
         repo = _repository(db)
         if not await repo.get_extraction_settings(user_id):
             return ExtractedStoreResult([], 0)
-        return await repo.store_extracted(user_id, prepared)
+        return await repo.store_extracted(user_id, prepared, room_id=room_id, user_message_id=user_message_id)
 
     result = await _transaction(session, operation)
     if session is None:
