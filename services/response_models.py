@@ -306,13 +306,48 @@ class ContextFactResponse(ResponsePayloadModel):
     updated_at: str | None = None
 
 
-# 日本語: 記憶の画面の一覧が返す 1 件の事実。AI に渡る応答（MCP・ダイジェスト・検索）の ContextFactResponse には無い、無効化した
-# 理由を持つ。capacity は上限での自動の入れ替え。None は本人が無効化した（この項目の追加前の記録を含む）か、有効な事実。
-# English: A fact as the memory screen's list returns it. Unlike ContextFactResponse (used by MCP, the digest and search,
-# which reach the AI), it carries why a fact was deprecated. capacity is the automatic replacement at the cap; None means
-# the owner deprecated it (including records from before this field), or the fact is active.
+# 日本語: 記憶の出典 1 件。本人の発話と照合した引用、その会話（ルーム）の ID、話題に出た時刻。
+# English: One source of a memory: the quote checked against the owner's words, the id of that conversation (room) and when
+# it was mentioned.
+class ContextFactSourceResponse(ResponsePayloadModel):
+    chat_room_id: str
+    evidence: str
+    observed_at: str | None = None
+
+
+# 日本語: 置き換えで無効化された記憶を置き換えた、新しい記憶。
+# English: The newer memory that replaced a memory deprecated by replacement.
+class ContextFactReplacedByResponse(ResponsePayloadModel):
+    id: int
+    title: str
+
+
+# 日本語: 有効な記憶が置き換えた、直近の古い記憶。「元に戻す」で有効へ戻る相手。
+# English: The most recent older memory an active memory replaced; the one that "undo" restores.
+class ContextFactReplacesResponse(ResponsePayloadModel):
+    id: int
+    title: str
+    content: str
+
+
+# 日本語: 記憶の画面の一覧が返す 1 件の事実。AI に渡る応答（MCP・ダイジェスト・検索）の ContextFactResponse には無い項目を持つ。
+# deprecated_reason は無効化した理由（capacity は上限での自動の入れ替え。None は本人が無効化した（この項目の追加前の記録を含む）か、
+# 有効な事実）。
+# 出典は件数と最後に話題に出た時刻（出典の observed_at の最大値）と、新しい順に最大 3 件。置き換えは、置き換えで無効化された記憶には
+# 置き換えた新しい記憶（その記憶が完全に削除されていれば None）、有効な記憶には置き換えた古い記憶（無ければ None）。
+# English: A fact as the memory screen's list returns it, with fields the AI-facing responses (MCP, the digest, search) of
+# ContextFactResponse do not carry. deprecated_reason is why a fact was deprecated (capacity is the automatic replacement at the
+# cap; None means the owner deprecated it, including records from before this field, or the fact is active). Sources are the
+# count, when it was last mentioned (the newest observed_at) and the newest three. For replacement, a fact deprecated by it
+# carries the newer memory that replaced it (None if that memory was deleted for good) and an active one the older memory it
+# replaced (None if none).
 class ContextFactListItemResponse(ContextFactResponse):
     deprecated_reason: Literal["user", "superseded", "merged", "capacity"] | None = None
+    source_count: int = Field(default=0, ge=0)
+    last_mentioned_at: str | None = None
+    sources: list[ContextFactSourceResponse] = Field(default_factory=list)
+    superseded_by: ContextFactReplacedByResponse | None = None
+    replaces: ContextFactReplacesResponse | None = None
 
 
 # 日本語: コンテキスト事実の一覧と keyset ページングカーソルを返す応答モデル。

@@ -24,6 +24,7 @@ from services.api_errors import ApiServiceError
 from services.context_vault_embeddings import schedule_embedding
 from services.db import is_retryable_db_error, session_scope
 from services.embeddings import embeddings_available, generate_embedding
+from services.repositories.context_fact_provenance_repository import ContextFactProvenanceRepository, FactProvenance
 from services.repositories.context_fact_repository import ContextFactRepository
 from services.request_models import (
     DEFAULT_CONTEXT_FACT_IMPORTANCE,
@@ -115,16 +116,21 @@ def _to_response(fact: dict[str, Any]) -> ContextFactResponse:
     )
 
 
-# 日本語: 記憶の画面の一覧用に、_to_response の内容へ無効化の理由を足す。旧バージョンのコードが復元した行は理由が残るので、
-# 有効な事実には返さない。MCP・ダイジェスト・検索は理由を持たない _to_response のまま使い、AI に渡る内容を変えない。
-# English: For the memory screen's list: _to_response plus the deprecation reason. An older code color leaves the reason when
-# it restores a fact, so an active fact never reports one. MCP, the digest and search keep using _to_response without it,
-# so what reaches the AI is unchanged.
-def _to_list_item_response(fact: dict[str, Any]) -> ContextFactListItemResponse:
+# 日本語: 記憶の画面の一覧用に、_to_response の内容へ無効化の理由と、出典・置き換えの関係を足す。旧バージョンのコードが復元した行は理由が
+# 残るので、有効な事実には返さない。MCP・ダイジェスト・検索は _to_response のまま使い、AI に渡る内容を変えない。
+# English: For the memory screen's list: _to_response plus the deprecation reason and the sources and replacement relations. An older
+# code color leaves the reason when it restores a fact, so an active fact never reports one. MCP, the digest and search keep using
+# _to_response, so what reaches the AI is unchanged.
+def _to_list_item_response(fact: dict[str, Any], provenance: FactProvenance) -> ContextFactListItemResponse:
     base = _to_response(fact)
     return ContextFactListItemResponse(
         **base.model_dump(),
         deprecated_reason=fact.get("deprecated_reason") if base.status == "deprecated" else None,
+        source_count=provenance.source_count,
+        last_mentioned_at=provenance.last_mentioned_at,
+        sources=provenance.sources,
+        superseded_by=provenance.superseded_by,
+        replaces=provenance.replaces,
     )
 
 
@@ -164,8 +170,9 @@ async def list_facts(
     cursor: str | None = None,
     session: AsyncSession | None = None,
 ) -> ContextFactListResponse:
-    # 1 件多く取得して次ページの有無を判定し、next_cursor を作る。
-    # Fetch one extra row to detect whether a next page exists, then build next_cursor.
+    # 1 件多く取得して次ページの有無を判定し、next_cursor を作る。出典と置き換えの関係は、返す行ぶんをまとめて読む(行ごとに問い合わせない)。
+    # Fetch one extra row to detect whether a next page exists, then build next_cursor. Sources and replacement relations are read
+    # for the returned rows together, not one query per row.
     async def operation(db: AsyncSession) -> ContextFactListResponse:
         safe_limit = _safe_list_limit(limit)
         decoded = _decode_cursor(cursor)
@@ -181,8 +188,9 @@ async def list_facts(
         if len(rows) > safe_limit:
             next_cursor = _encode_cursor(rows[safe_limit - 1])
             rows = rows[:safe_limit]
+        provenance = await ContextFactProvenanceRepository(db).load(user_id, rows)
         return ContextFactListResponse(
-            facts=[_to_list_item_response(row) for row in rows],
+            facts=[_to_list_item_response(row, provenance[int(row["id"])]) for row in rows],
             total_active=await _repository(db).count_active(user_id),
             next_cursor=next_cursor,
         )
