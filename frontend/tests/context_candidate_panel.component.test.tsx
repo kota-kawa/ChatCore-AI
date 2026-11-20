@@ -86,7 +86,7 @@ describe("ContextCandidatePanel", () => {
     const toggle = await screen.findByRole("switch", { name: "チャットからの自動保存" });
     await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
     expect(screen.getByRole("heading", { name: "承認待ちの提案" })).toBeInTheDocument();
-    expect(screen.getByText(/有効な記憶が上限（200件）に達していて保存できなかったものだけ/)).toBeInTheDocument();
+    expect(screen.getByText(/この画面で確認・編集・無効化できます。有効な記憶が上限（200件）に達していて保存できなかったものだけ/)).toBeInTheDocument();
   });
 
   it("shows a disabled setting as off and explicitly enables it", async () => {
@@ -103,7 +103,7 @@ describe("ContextCandidatePanel", () => {
     expect(toggle).toHaveAttribute("aria-checked", "false");
     expect(
       screen.getByText(
-        "有効にすると、チャットの内容から覚えておく価値のあるものを自動で記憶に保存し、チャット内でお知らせします。その場で取り消せます。有効な記憶が上限に達しているときは、保存せずに承認待ちになります",
+        "有効にすると、チャットの内容から覚えておく価値のあるものを自動で記憶に保存します。保存した内容はこの画面で確認・編集・無効化できます。有効な記憶が上限に達しているときだけ、保存せずに承認待ちになります",
       ),
     ).toBeInTheDocument();
 
