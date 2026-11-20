@@ -8,7 +8,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy.dialects import postgresql
 
@@ -242,6 +242,67 @@ class UsageSubjectPropagationTests(unittest.TestCase):
         )
 
         self.assertEqual(seen, ["user:5"])
+
+    # 日本語: 抽出後の保存は asyncio.run の中で動き、照合の埋め込みと LLM はそこから別スレッドへ出る。
+    # どちらも依頼した利用者の計上先を引き継ぐこと。
+    # English: The save after extraction runs inside asyncio.run, and the reconciliation embedding and LLM hop to another thread from
+    # there. Both must keep the requesting user's billing subject.
+    def test_reconciliation_embedding_and_llm_are_billed_to_the_requesting_user(self):
+        from services import context_vault_candidate_service as service
+        from services.context_vault_extraction import schedule_context_extraction
+
+        seen = {}
+
+        def fake_embedding(_text):
+            seen["embedding"] = current_usage_subject()
+            return [0.1] * 768
+
+        def fake_llm(_messages, _model):
+            seen["llm"] = current_usage_subject()
+            return '{"decisions": []}'
+
+        async def run_transaction(_session, operation):
+            return await operation(MagicMock())
+
+        repo = MagicMock()
+        repo.get_extraction_settings = AsyncMock(return_value=True)
+        repo.find_duplicate_matches = AsyncMock(return_value=[None])
+        repo.store_extracted = AsyncMock(return_value=[])
+        facts = MagicMock()
+        facts.find_reconcile_neighbors = AsyncMock(
+            return_value=[
+                {
+                    "id": 12,
+                    "revision": 1,
+                    "fact_type": "profile",
+                    "title": "Home",
+                    "content": "Lives in Tokyo",
+                    "status": "active",
+                    "last_mentioned": None,
+                }
+            ]
+        )
+        candidate = {"fact_type": "profile", "title": "Home", "content": "Lives in Osaka"}
+        with (
+            patch.object(service, "_transaction", new=run_transaction),
+            patch.object(service, "_repository", return_value=repo),
+            patch.object(service, "ContextFactRepository", return_value=facts),
+            patch.object(service, "embeddings_available", return_value=True),
+            patch.object(service, "generate_embedding", side_effect=fake_embedding),
+            patch.object(service, "get_llm_json_response", side_effect=fake_llm),
+        ):
+            self._run_on_fresh_background_pool(
+                lambda: schedule_context_extraction(
+                    5,
+                    room_id="room-1",
+                    assistant_message_id=1,
+                    user_message="message",
+                    assistant_response="response",
+                    extractor=lambda *_args, **_kwargs: [candidate],
+                )
+            )
+
+        self.assertEqual(seen, {"embedding": "user:5", "llm": "user:5"})
 
 
 # record_* が現在の計上先へ料金を付けて記録し、sink の失敗が呼び出し元へ伝わらないことを確かめる。

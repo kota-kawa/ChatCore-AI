@@ -45,6 +45,7 @@ from services.error_messages import (
 )
 from services.models import ContextFact, ContextFactSource, User
 from services.models.types import Vector
+from services.repositories.context_fact_source_repository import last_mentioned_at
 from services.search_terms import build_like_pattern, split_search_terms
 
 # 日本語: 有効(active)な事実の 1 ユーザーあたり上限。
@@ -53,6 +54,21 @@ MAX_ACTIVE_CONTEXT_FACTS = 200
 # 日本語: advisory lock の名前空間。候補リポジトリと同じ値で、同一ユーザーの事実/候補の書き込みを直列化する。
 # English: Advisory-lock namespace, shared with the candidate repository so one user's fact/candidate writes are serialized.
 _CONTEXT_FACT_LOCK_NAMESPACE = 1129601108  # ASCII "CTXT"
+
+
+# 日本語: 「再び覚えない」の比較対象になる事実の条件。有効な事実と、本人が無効化した事実(理由 user か未記録)。上限で外した事実(capacity)と
+# 新しい事実に置き換えた事実(superseded)は、本人が取り消したわけではないので含めない。理由が NULL の無効化済みの事実はこの列の追加前の
+# 記録で、本人が無効化したものとして扱う。重複判定と、照合で近い記憶を引く検索が同じ条件を使う。
+# English: The facts "do not remember again" compares against: active facts and facts the owner deprecated (reason user or unrecorded).
+# Facts the cap removed (capacity) and facts replaced by a newer one (superseded) are not something the owner undid, so they are left out.
+# A deprecated fact with a NULL reason predates the column and counts as the owner's. Duplicate detection and the nearby-memory search
+# of reconciliation use the same condition.
+def matchable_fact_clause():
+    return or_(
+        ContextFact.status == "active",
+        ContextFact.deprecated_reason.is_(None),
+        ContextFact.deprecated_reason == "user",
+    )
 
 _FACT_COLUMNS = (
     "id",
@@ -374,6 +390,61 @@ class ContextFactRepository:
         )
         return [self._serialize_row(fact) for fact in result.scalars().all()]
 
+    # 日本語: 照合に渡す事実の列。最後に話題に出た時刻(last_mentioned)も読む。
+    # English: The fact columns handed to reconciliation, including when each was last mentioned (last_mentioned).
+    @staticmethod
+    def _reconcile_columns():
+        return (
+            ContextFact.id,
+            ContextFact.revision,
+            ContextFact.fact_type,
+            ContextFact.title,
+            ContextFact.content,
+            ContextFact.status,
+            last_mentioned_at(ContextFact).label("last_mentioned"),
+        )
+
+    # 日本語: 照合のために、候補の埋め込みに意味が近い記憶を近い順に limit 件まで返す。対象は matchable_fact_clause の事実
+    # (有効な事実と本人が無効化した事実)で、埋め込みのある行だけ。距離は max_distance 以内。最後に話題に出た時刻(last_mentioned)も返す。
+    # English: For reconciliation, returns up to limit memories semantically close to the candidate's embedding, nearest first. Only
+    # facts matching matchable_fact_clause (active and owner-deprecated) that have an embedding, within max_distance. Also returns when
+    # each was last mentioned (last_mentioned).
+    async def find_reconcile_neighbors(
+        self,
+        user_id: int,
+        embedding: list[float],
+        *,
+        limit: int,
+        max_distance: float,
+    ) -> list[dict[str, Any]]:
+        distance = self._distance(embedding)
+        result = await self.session.execute(
+            select(*self._reconcile_columns())
+            .where(
+                ContextFact.user_id == user_id,
+                matchable_fact_clause(),
+                ContextFact.embedding_vector.is_not(None),
+                distance <= max_distance,
+            )
+            .order_by(distance)
+            .limit(limit)
+        )
+        return [dict(row) for row in result.mappings().all()]
+
+    # 日本語: 照合のために、指定した id の事実(matchable_fact_clause に合うもの)を読む。BM25 で一致した有効な記憶を、埋め込みの有無や
+    # 距離に関係なく近い記憶に入れるための読み取りで、読んだ時点の revision を判定の時点の revision として使う。
+    # English: For reconciliation, reads the given facts (those matching matchable_fact_clause). It brings the active memory BM25
+    # matched into the nearby memories regardless of embedding or distance; the revision read here is the one judged against.
+    async def get_reconcile_facts(self, user_id: int, fact_ids: list[int]) -> list[dict[str, Any]]:
+        result = await self.session.execute(
+            select(*self._reconcile_columns()).where(
+                ContextFact.user_id == user_id,
+                ContextFact.id.in_(fact_ids),
+                matchable_fact_clause(),
+            )
+        )
+        return [dict(row) for row in result.mappings().all()]
+
     # 日本語: 語ごとに title/content の部分一致(ILIKE)を AND で重ねる簡易検索。新しい更新順に返す。
     # English: Simple search that ANDs a title/content ILIKE match per term, newest update first.
     async def text_search(
@@ -647,13 +718,19 @@ class ContextFactRepository:
                 ),
                 else_=ContextFact.last_confirmed_at,
             )
-        # 日本語: 利用者・MCP による無効化は理由 user、有効へ戻すときは NULL にする。上限での自動の入れ替え(capacity)は
-        # 抽出の保存側(context_fact_candidate_repository)だけが書く。
-        # English: Deprecating through the owner or MCP records reason user; restoring clears it. The automatic replacement at
-        # the cap (capacity) is written only by the extraction store (context_fact_candidate_repository).
+        # 日本語: 利用者・MCP による無効化は理由 user、有効へ戻すときは理由 NULL にする。どちらも置き換え先(superseded_by_fact_id)は
+        # NULL に戻す(置き換えで無効化した事実を本人が改めて無効化したときに、「本人が無効化した」のに置き換え先を持つ行を残さない)。
+        # 上限での自動の入れ替え(capacity)と、新しい事実による置き換え(superseded)は抽出の保存側
+        # (context_fact_candidate_repository)だけが書く。
+        # English: Deprecating through the owner or MCP records reason user and restoring clears the reason; both clear the
+        # replacement link (superseded_by_fact_id), so a fact replaced by a newer one that the owner then deprecates again does not
+        # stay a row that is "deprecated by the owner" yet points at a replacement. The automatic replacement at the cap (capacity)
+        # and the replacement by a newer fact (superseded) are written only by the extraction store
+        # (context_fact_candidate_repository).
         if status is not None:
             changes["status"] = status
             changes["deprecated_reason"] = "user" if status == "deprecated" else None
+            changes["superseded_by_fact_id"] = None
         if importance is not None:
             changes["importance"] = importance
         changes["updated_at"] = func.current_timestamp()

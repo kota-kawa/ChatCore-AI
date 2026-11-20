@@ -10,8 +10,9 @@ Transaction ownership stays with the caller; used by services/repositories/conte
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import DateTime, cast, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,20 @@ logger = logging.getLogger(__name__)
 # 日本語: 1 つの事実に保つ出典の最大件数。超えた分は古いものから消す。
 # English: Maximum sources kept per fact; the oldest ones beyond it are deleted.
 MAX_SOURCES_PER_FACT = 20
+
+
+# 日本語: 事実が最後に話題に出た時刻の式。出典(observed_at)の最大値で、出典が無い事実は created_at。observed_at は timestamptz、
+# created_at はタイムゾーン無しなので、created_at を timestamptz へ明示的に変換して比べる（CURRENT_TIMESTAMP をセッションの
+# タイムゾーンの壁時計で保存した値で、変換も同じタイムゾーンで元の時刻に戻る）。fact は ContextFact かその別名。
+# English: The expression for when a fact was last mentioned: the newest source observed_at, or created_at when there is no
+# source. observed_at is timestamptz while created_at is timezone-less, so created_at is cast to timestamptz explicitly (it was
+# stored as the session-timezone wall clock of CURRENT_TIMESTAMP, and the cast reads it back in the same zone). fact is
+# ContextFact or an alias of it.
+def last_mentioned_at(fact: Any):
+    return func.coalesce(
+        select(func.max(ContextFactSource.observed_at)).where(ContextFactSource.fact_id == fact.id).scalar_subquery(),
+        cast(fact.created_at, DateTime(timezone=True)),
+    )
 
 
 class ContextFactSourceRepository:

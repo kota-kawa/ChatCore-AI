@@ -1,0 +1,310 @@
+{
+  "dataset_id": "context-reconcile-v1",
+  "cases": [
+    {
+      "id": "moved_city_update_en",
+      "description": "Same matter (home city), the candidate says the old fact no longer holds: the active memory is superseded at the revision that was read.",
+      "memories": [
+        {"label": "tokyo", "id": 101, "revision": 4, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka after moving last month.", "nearby": ["tokyo"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "update", "target": "tokyo"}]},
+      "expect": [{"candidate": 0, "action": "supersede", "target": "tokyo"}]
+    },
+    {
+      "id": "job_change_update_ja",
+      "description": "Japanese job change: the old workplace memory is superseded.",
+      "memories": [
+        {"label": "employer", "id": 102, "revision": 1, "status": "active", "fact_type": "profile", "title": "勤務先", "content": "株式会社青葉でデザイナーとして働いている。", "last_mentioned": "2026-08-12"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "働き方", "content": "転職して、現在はフリーランスのデザイナーとして働いている。", "nearby": ["employer"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "update", "target": "employer"}]},
+      "expect": [{"candidate": 0, "action": "supersede", "target": "employer"}]
+    },
+    {
+      "id": "extra_preference_add_ja",
+      "description": "An added preference that does not replace the nearby one stays a plain add.",
+      "memories": [
+        {"label": "review_language", "id": 103, "revision": 2, "status": "active", "fact_type": "preference", "title": "レビューの言語", "content": "コードレビューは日本語で書いてほしい。", "last_mentioned": "2026-10-02"}
+      ],
+      "candidates": [
+        {"fact_type": "preference", "title": "レビューの書き方", "content": "コードレビューでは指摘の理由も書いてほしい。", "nearby": ["review_language"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "add", "target_id": null}]},
+      "expect": [{"candidate": 0, "action": "add"}]
+    },
+    {
+      "id": "reworded_noop_active",
+      "description": "A rewording of an active memory only adds a source to it; no new memory is created.",
+      "memories": [
+        {"label": "fintech", "id": 104, "revision": 6, "status": "active", "fact_type": "profile", "title": "Job", "content": "Backend developer at a fintech firm.", "last_mentioned": "2026-10-20"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Occupation", "content": "Works as a backend engineer at a fintech company.", "nearby": ["fintech"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "noop", "target": "fintech"}]},
+      "expect": [{"candidate": 0, "action": "mention", "target": "fintech"}]
+    },
+    {
+      "id": "reworded_noop_deactivated",
+      "description": "A rewording of a memory the owner deactivated saves nothing, so it is not remembered again.",
+      "memories": [
+        {"label": "compiler", "id": 105, "revision": 3, "status": "deprecated", "fact_type": "project", "title": "自作コンパイラ", "content": "Rustで自作コンパイラを開発中。", "last_mentioned": "2026-07-01"}
+      ],
+      "candidates": [
+        {"fact_type": "project", "title": "コンパイラ開発", "content": "Rustでコンパイラを作っている。", "nearby": ["compiler"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "noop", "target": "compiler"}]},
+      "expect": [{"candidate": 0, "action": "skip", "target": "compiler"}]
+    },
+    {
+      "id": "update_against_deactivated_becomes_add",
+      "description": "An update whose target is a memory the owner deactivated cannot replace it; the content is added instead.",
+      "memories": [
+        {"label": "old_city", "id": 106, "revision": 2, "status": "deprecated", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-06-01"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["old_city"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "update", "target": "old_city"}]},
+      "expect": [{"candidate": 0, "action": "add"}]
+    },
+    {
+      "id": "different_matter_add_en",
+      "description": "Same topic, different matter: add.",
+      "memories": [
+        {"label": "japanese", "id": 107, "revision": 1, "status": "active", "fact_type": "project", "title": "Language study", "content": "Is learning Japanese for work.", "last_mentioned": "2026-10-10"}
+      ],
+      "candidates": [
+        {"fact_type": "project", "title": "Language study", "content": "Is learning Spanish for a trip to Mexico next spring.", "nearby": ["japanese"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "add", "target_id": null}]},
+      "expect": [{"candidate": 0, "action": "add"}]
+    },
+    {
+      "id": "target_not_in_the_list",
+      "description": "A target id that was never shown is rejected and the candidate is added.",
+      "memories": [
+        {"label": "tokyo", "id": 108, "revision": 1, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["tokyo"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "update", "target_id": 9999}]},
+      "expect": [{"candidate": 0, "action": "add"}]
+    },
+    {
+      "id": "target_from_another_candidates_list",
+      "description": "A memory that was nearby another candidate only cannot be the target of this one.",
+      "memories": [
+        {"label": "tokyo", "id": 109, "revision": 1, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"},
+        {"label": "editor", "id": 110, "revision": 1, "status": "active", "fact_type": "preference", "title": "Editor", "content": "Uses VS Code.", "last_mentioned": "2026-10-01"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["tokyo"]},
+        {"fact_type": "preference", "title": "Editor", "content": "Switched to Neovim.", "nearby": ["editor"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "update", "target": "tokyo"}, {"candidate": 1, "action": "update", "target": "tokyo"}]},
+      "expect": [{"candidate": 0, "action": "supersede", "target": "tokyo"}, {"candidate": 1, "action": "add"}]
+    },
+    {
+      "id": "two_updates_on_one_target",
+      "description": "Two candidates update the same memory: only the first by index supersedes it, the other is added.",
+      "memories": [
+        {"label": "tokyo", "id": 111, "revision": 5, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["tokyo"]},
+        {"fact_type": "profile", "title": "Home", "content": "Moved to Osaka last month.", "nearby": ["tokyo"]}
+      ],
+      "response": {"decisions": [{"candidate": 1, "action": "update", "target": "tokyo"}, {"candidate": 0, "action": "update", "target": "tokyo"}]},
+      "expect": [{"candidate": 0, "action": "supersede", "target": "tokyo"}, {"candidate": 1, "action": "add"}]
+    },
+    {
+      "id": "two_updates_on_two_targets",
+      "description": "Different targets are superseded independently.",
+      "memories": [
+        {"label": "tokyo", "id": 112, "revision": 1, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"},
+        {"label": "employer", "id": 113, "revision": 2, "status": "active", "fact_type": "profile", "title": "Employer", "content": "Works at Aoba Inc.", "last_mentioned": "2026-08-12"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["tokyo"]},
+        {"fact_type": "profile", "title": "Employer", "content": "Works at Minato Corp.", "nearby": ["employer"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "update", "target": "tokyo"}, {"candidate": 1, "action": "update", "target": "employer"}]},
+      "expect": [{"candidate": 0, "action": "supersede", "target": "tokyo"}, {"candidate": 1, "action": "supersede", "target": "employer"}]
+    },
+    {
+      "id": "mixed_actions_in_one_batch",
+      "description": "Update, noop and add decided together for three candidates.",
+      "memories": [
+        {"label": "tokyo", "id": 114, "revision": 3, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"},
+        {"label": "fintech", "id": 115, "revision": 1, "status": "active", "fact_type": "profile", "title": "Job", "content": "Backend developer at a fintech firm.", "last_mentioned": "2026-10-20"},
+        {"label": "rust", "id": 116, "revision": 1, "status": "active", "fact_type": "preference", "title": "Language", "content": "Prefers Rust for side projects.", "last_mentioned": "2026-10-21"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["tokyo"]},
+        {"fact_type": "profile", "title": "Occupation", "content": "Works as a backend engineer at a fintech company.", "nearby": ["fintech"]},
+        {"fact_type": "preference", "title": "Tooling", "content": "Wants code examples with type annotations.", "nearby": ["rust"]}
+      ],
+      "response": {"decisions": [
+        {"candidate": 0, "action": "update", "target": "tokyo"},
+        {"candidate": 1, "action": "noop", "target": "fintech"},
+        {"candidate": 2, "action": "add", "target_id": null}
+      ]},
+      "expect": [
+        {"candidate": 0, "action": "supersede", "target": "tokyo"},
+        {"candidate": 1, "action": "mention", "target": "fintech"},
+        {"candidate": 2, "action": "add"}
+      ]
+    },
+    {
+      "id": "response_not_json",
+      "description": "A response that is not JSON falls back to add for every candidate.",
+      "memories": [
+        {"label": "tokyo", "id": 117, "revision": 1, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["tokyo"]}
+      ],
+      "response": "The candidate replaces memory 117.",
+      "expect": [{"candidate": 0, "action": "add"}]
+    },
+    {
+      "id": "response_empty",
+      "description": "An empty response falls back to add.",
+      "memories": [
+        {"label": "tokyo", "id": 118, "revision": 1, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["tokyo"]}
+      ],
+      "response": "",
+      "expect": [{"candidate": 0, "action": "add"}]
+    },
+    {
+      "id": "response_with_unknown_top_level_key",
+      "description": "An envelope with an extra key is invalid as a whole, so everything is added.",
+      "memories": [
+        {"label": "tokyo", "id": 119, "revision": 1, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["tokyo"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "update", "target": "tokyo"}], "summary": "moved"},
+      "expect": [{"candidate": 0, "action": "add"}]
+    },
+    {
+      "id": "one_malformed_decision_does_not_spoil_the_other",
+      "description": "A decision with an unknown action or an extra key is dropped alone (it does not count as the candidate being decided); the valid decision for the other candidate, or a later valid one, still applies.",
+      "memories": [
+        {"label": "tokyo", "id": 120, "revision": 1, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"},
+        {"label": "fintech", "id": 121, "revision": 2, "status": "active", "fact_type": "profile", "title": "Job", "content": "Backend developer at a fintech firm.", "last_mentioned": "2026-10-20"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["tokyo"]},
+        {"fact_type": "profile", "title": "Occupation", "content": "Works as a backend engineer at a fintech company.", "nearby": ["fintech"]}
+      ],
+      "response": {"decisions": [
+        {"candidate": 0, "action": "merge", "target": "tokyo"},
+        {"candidate": 1, "action": "noop", "target": "fintech", "reason": "same job"},
+        {"candidate": 1, "action": "noop", "target": "fintech"}
+      ]},
+      "expect": [{"candidate": 0, "action": "add"}, {"candidate": 1, "action": "mention", "target": "fintech"}]
+    },
+    {
+      "id": "candidate_decided_twice",
+      "description": "Two decisions for one candidate are ambiguous, so the candidate is added.",
+      "memories": [
+        {"label": "tokyo", "id": 122, "revision": 1, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["tokyo"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "update", "target": "tokyo"}, {"candidate": 0, "action": "noop", "target": "tokyo"}]},
+      "expect": [{"candidate": 0, "action": "add"}]
+    },
+    {
+      "id": "update_or_noop_without_a_target",
+      "description": "An update or noop without a target, and an add that names one, are all rejected into adds.",
+      "memories": [
+        {"label": "tokyo", "id": 123, "revision": 1, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["tokyo"]},
+        {"fact_type": "profile", "title": "Home", "content": "Home is Osaka.", "nearby": ["tokyo"]},
+        {"fact_type": "profile", "title": "City", "content": "City: Osaka.", "nearby": ["tokyo"]}
+      ],
+      "response": {"decisions": [
+        {"candidate": 0, "action": "update", "target_id": null},
+        {"candidate": 1, "action": "noop"},
+        {"candidate": 2, "action": "add", "target": "tokyo"}
+      ]},
+      "expect": [{"candidate": 0, "action": "add"}, {"candidate": 1, "action": "add"}, {"candidate": 2, "action": "add"}]
+    },
+    {
+      "id": "string_target_id_is_not_coerced",
+      "description": "Types are strict: a target id sent as a string is rejected.",
+      "memories": [
+        {"label": "tokyo", "id": 124, "revision": 1, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["tokyo"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "update", "target_id": "124"}]},
+      "expect": [{"candidate": 0, "action": "add"}]
+    },
+    {
+      "id": "candidate_without_nearby_memory_stays_an_add",
+      "description": "A candidate with no nearby memory is not shown to the reconciler, and a stray decision for it is ignored.",
+      "memories": [
+        {"label": "tokyo", "id": 125, "revision": 1, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"}
+      ],
+      "candidates": [
+        {"fact_type": "preference", "title": "Notes", "content": "Wants answers in bullet points.", "nearby": []},
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["tokyo"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "update", "target": "tokyo"}, {"candidate": 1, "action": "update", "target": "tokyo"}]},
+      "expect": [{"candidate": 0, "action": "add"}, {"candidate": 1, "action": "supersede", "target": "tokyo"}]
+    },
+    {
+      "id": "noop_on_a_memory_superseded_in_the_same_batch_saves_nothing",
+      "description": "A noop and an update on one active memory in the same batch: the update supersedes it, and the noop saves nothing (no source is added to a memory that is being replaced).",
+      "memories": [
+        {"label": "tokyo", "id": 126, "revision": 8, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo.", "last_mentioned": "2026-09-30"}
+      ],
+      "candidates": [
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo, Japan.", "nearby": ["tokyo"]},
+        {"fact_type": "profile", "title": "Home city", "content": "Lives in Osaka.", "nearby": ["tokyo"]}
+      ],
+      "response": {"decisions": [{"candidate": 0, "action": "noop", "target": "tokyo"}, {"candidate": 1, "action": "update", "target": "tokyo"}]},
+      "expect": [{"candidate": 0, "action": "skip", "target": "tokyo"}, {"candidate": 1, "action": "supersede", "target": "tokyo"}]
+    },
+    {"id": "bm25_active_match_update_ja", "description": "BM25 calls 居住地の食い違い a duplicate of the active memory, but the LLM sees it as a contradiction: the active memory is superseded (no embedding neighbors, as when embeddings are unavailable).", "memories": [{"label": "tokyo", "id": 201, "revision": 3, "status": "active", "fact_type": "profile", "title": "居住地", "content": "東京に住んでいる", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "居住地", "content": "大阪に住んでいる", "nearby": [], "bm25_match": "tokyo"}], "response": {"decisions": [{"candidate": 0, "action": "update", "target": "tokyo"}]}, "expect": [{"candidate": 0, "action": "supersede", "target": "tokyo"}]},
+    {"id": "bm25_active_match_update_en", "description": "English contradiction BM25 calls a duplicate: superseded.", "memories": [{"label": "tokyo", "id": 202, "revision": 4, "status": "active", "fact_type": "profile", "title": "Residence", "content": "Lives in Tokyo", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "Residence", "content": "Lives in Osaka; moved there last month", "nearby": [], "bm25_match": "tokyo"}], "response": {"decisions": [{"candidate": 0, "action": "update", "target": "tokyo"}]}, "expect": [{"candidate": 0, "action": "supersede", "target": "tokyo"}]},
+    {"id": "bm25_active_match_add_keeps_the_new_preference", "description": "BM25 calls an added preference a duplicate; the LLM says add, so the new preference is saved instead of being lost as a re-mention.", "memories": [{"label": "review_language", "id": 203, "revision": 2, "status": "active", "fact_type": "preference", "title": "レビュー", "content": "コードレビューは日本語で書いてほしい", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "preference", "title": "レビュー", "content": "コードレビューでは指摘の理由も書いてほしい", "nearby": [], "bm25_match": "review_language"}], "response": {"decisions": [{"candidate": 0, "action": "add", "target_id": null}]}, "expect": [{"candidate": 0, "action": "add"}]},
+    {"id": "bm25_active_match_noop_adds_a_source", "description": "A real rewording the LLM confirms as noop adds a source to the matched memory, as before reconciliation existed.", "memories": [{"label": "fintech", "id": 204, "revision": 6, "status": "active", "fact_type": "profile", "title": "Job", "content": "Backend developer at a fintech firm", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "Job", "content": "Works as a backend engineer at a fintech company", "nearby": [], "bm25_match": "fintech"}], "response": {"decisions": [{"candidate": 0, "action": "noop", "target": "fintech"}]}, "expect": [{"candidate": 0, "action": "mention", "target": "fintech"}]},
+    {"id": "bm25_active_match_llm_failure_falls_back_to_a_re_mention", "description": "The LLM call failed: a candidate BM25 matched to an active memory falls back to the earlier behavior, a re-mention.", "memories": [{"label": "tokyo", "id": 205, "revision": 5, "status": "active", "fact_type": "profile", "title": "居住地", "content": "東京に住んでいる", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "居住地", "content": "大阪に住んでいる", "nearby": [], "bm25_match": "tokyo"}], "response": null, "expect": [{"candidate": 0, "action": "mention", "target": "tokyo"}]},
+    {"id": "bm25_active_match_empty_response_falls_back_to_a_re_mention", "description": "An empty response is no decision: re-mention.", "memories": [{"label": "tokyo", "id": 206, "revision": 2, "status": "active", "fact_type": "profile", "title": "居住地", "content": "東京に住んでいる", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "居住地", "content": "大阪に住んでいる", "nearby": [], "bm25_match": "tokyo"}], "response": "", "expect": [{"candidate": 0, "action": "mention", "target": "tokyo"}]},
+    {"id": "bm25_active_match_invalid_response_falls_back_to_a_re_mention", "description": "A response that is not JSON is no decision: re-mention.", "memories": [{"label": "tokyo", "id": 207, "revision": 2, "status": "active", "fact_type": "profile", "title": "居住地", "content": "東京に住んでいる", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "居住地", "content": "大阪に住んでいる", "nearby": [], "bm25_match": "tokyo"}], "response": "The candidate replaces memory 207.", "expect": [{"candidate": 0, "action": "mention", "target": "tokyo"}]},
+    {"id": "bm25_active_match_invalid_target_falls_back_to_a_re_mention", "description": "A decision naming an id that was never shown is dropped, so the candidate has no decision: re-mention (not add).", "memories": [{"label": "tokyo", "id": 208, "revision": 2, "status": "active", "fact_type": "profile", "title": "居住地", "content": "東京に住んでいる", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "居住地", "content": "大阪に住んでいる", "nearby": [], "bm25_match": "tokyo"}], "response": {"decisions": [{"candidate": 0, "action": "update", "target_id": 9999}]}, "expect": [{"candidate": 0, "action": "mention", "target": "tokyo"}]},
+    {"id": "bm25_active_match_missing_decision_falls_back_for_that_candidate_only", "description": "Only the candidate without a decision falls back to a re-mention; the other keeps its decision.", "memories": [{"label": "tokyo", "id": 209, "revision": 2, "status": "active", "fact_type": "profile", "title": "居住地", "content": "東京に住んでいる", "last_mentioned": "2026-10-01"}, {"label": "editor", "id": 210, "revision": 2, "status": "active", "fact_type": "preference", "title": "Editor", "content": "Uses VS Code", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "居住地", "content": "大阪に住んでいる", "nearby": [], "bm25_match": "tokyo"}, {"fact_type": "preference", "title": "Editor", "content": "Switched to Neovim", "nearby": [], "bm25_match": "editor"}], "response": {"decisions": [{"candidate": 1, "action": "update", "target": "editor"}]}, "expect": [{"candidate": 0, "action": "mention", "target": "tokyo"}, {"candidate": 1, "action": "supersede", "target": "editor"}]},
+    {"id": "bm25_active_match_with_a_different_target_from_embedding_neighbors", "description": "The matched memory and a nearby memory are both shown; the LLM may pick the nearby one as the target (the id only has to be in the candidate's list).", "memories": [{"label": "tokyo", "id": 211, "revision": 2, "status": "active", "fact_type": "profile", "title": "居住地", "content": "東京に住んでいる", "last_mentioned": "2026-10-01"}, {"label": "home_city", "id": 212, "revision": 2, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo, Japan", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "居住地", "content": "大阪に住んでいる", "nearby": ["home_city"], "bm25_match": "tokyo"}], "response": {"decisions": [{"candidate": 0, "action": "update", "target": "home_city"}]}, "expect": [{"candidate": 0, "action": "supersede", "target": "home_city"}]},
+    {"id": "bm25_active_match_update_on_a_deactivated_neighbor_is_an_add", "description": "An update naming a deactivated neighbor reads as an add (a decision was made, so there is no fallback to a re-mention).", "memories": [{"label": "tokyo", "id": 213, "revision": 2, "status": "active", "fact_type": "profile", "title": "居住地", "content": "東京に住んでいる", "last_mentioned": "2026-10-01"}, {"label": "old_city", "id": 214, "revision": 2, "status": "deprecated", "fact_type": "profile", "title": "Home city", "content": "Lives in Kyoto", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "居住地", "content": "大阪に住んでいる", "nearby": ["old_city"], "bm25_match": "tokyo"}], "response": {"decisions": [{"candidate": 0, "action": "update", "target": "old_city"}]}, "expect": [{"candidate": 0, "action": "add"}]},
+    {"id": "bm25_active_match_noop_on_a_deactivated_neighbor_saves_nothing", "description": "The LLM says the candidate rewords a memory the owner deactivated: nothing is saved and no source is added to the matched active memory.", "memories": [{"label": "tokyo", "id": 215, "revision": 2, "status": "active", "fact_type": "profile", "title": "居住地", "content": "東京に住んでいる", "last_mentioned": "2026-10-01"}, {"label": "old_city", "id": 216, "revision": 2, "status": "deprecated", "fact_type": "profile", "title": "Home city", "content": "Lives in Osaka", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "居住地", "content": "大阪に住んでいる", "nearby": ["old_city"], "bm25_match": "tokyo"}], "response": {"decisions": [{"candidate": 0, "action": "noop", "target": "old_city"}]}, "expect": [{"candidate": 0, "action": "skip", "target": "old_city"}]},
+    {"id": "bm25_active_match_two_candidates_update_and_noop_the_same_memory", "description": "One candidate updates the matched memory and another (also matched to it) is a noop on it: the first supersedes, the noop saves nothing.", "memories": [{"label": "tokyo", "id": 217, "revision": 7, "status": "active", "fact_type": "profile", "title": "居住地", "content": "東京に住んでいる", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "居住地", "content": "東京に住んでいる（日本）", "nearby": [], "bm25_match": "tokyo"}, {"fact_type": "profile", "title": "居住地", "content": "大阪に住んでいる", "nearby": [], "bm25_match": "tokyo"}], "response": {"decisions": [{"candidate": 0, "action": "noop", "target": "tokyo"}, {"candidate": 1, "action": "update", "target": "tokyo"}]}, "expect": [{"candidate": 0, "action": "skip", "target": "tokyo"}, {"candidate": 1, "action": "supersede", "target": "tokyo"}]},
+    {"id": "mixed_bm25_matched_and_unique_candidates", "description": "A matched candidate with an update, a unique candidate without nearby memory (never shown, so a plain add) and a unique one with an add decision.", "memories": [{"label": "tokyo", "id": 218, "revision": 2, "status": "active", "fact_type": "profile", "title": "居住地", "content": "東京に住んでいる", "last_mentioned": "2026-10-01"}, {"label": "rust", "id": 219, "revision": 2, "status": "active", "fact_type": "preference", "title": "Language", "content": "Prefers Rust", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "居住地", "content": "大阪に住んでいる", "nearby": [], "bm25_match": "tokyo"}, {"fact_type": "preference", "title": "Notes", "content": "Wants bullet points", "nearby": []}, {"fact_type": "preference", "title": "Tooling", "content": "Wants type annotations", "nearby": ["rust"]}], "response": {"decisions": [{"candidate": 0, "action": "update", "target": "tokyo"}, {"candidate": 2, "action": "add", "target_id": null}]}, "expect": [{"candidate": 0, "action": "supersede", "target": "tokyo"}, {"candidate": 1, "action": "add"}, {"candidate": 2, "action": "add"}]},
+    {"id": "unique_candidate_with_a_failed_llm_is_a_plain_add", "description": "A candidate BM25 did not match, with nearby memory by embedding, whose LLM call failed: a plain add as before.", "memories": [{"label": "tokyo", "id": 220, "revision": 2, "status": "active", "fact_type": "profile", "title": "Home city", "content": "Lives in Tokyo", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "Residence", "content": "Moved to Osaka", "nearby": ["tokyo"]}], "response": null, "expect": [{"candidate": 0, "action": "add"}]},
+    {"id": "bm25_active_and_removed_duplicate_add", "description": "A decision of add would save content that duplicates a memory the owner deactivated (BM25 returns only the best match, the active one): it becomes a re-mention of the active memory.", "memories": [{"label": "interests", "id": 310, "revision": 3, "status": "active", "fact_type": "profile", "title": "Programming interests", "content": "Likes Python scripting, Rust compiler building, and Go tooling", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "Programming interests", "content": "Likes Python scripting and Rust compiler building and builds a Rust compiler", "nearby": [], "bm25_match": "interests", "duplicates_owner_removed": true}], "response": {"decisions": [{"candidate": 0, "action": "add", "target_id": null}]}, "expect": [{"candidate": 0, "action": "mention", "target": "interests"}]},
+    {"id": "bm25_active_and_removed_duplicate_update", "description": "An update would save a replacement that duplicates removed content: it becomes a re-mention, and the active memory is not replaced.", "memories": [{"label": "interests", "id": 311, "revision": 3, "status": "active", "fact_type": "profile", "title": "Programming interests", "content": "Likes Python scripting, Rust compiler building, and Go tooling", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "Programming interests", "content": "Likes Python scripting and Rust compiler building and builds a Rust compiler", "nearby": [], "bm25_match": "interests", "duplicates_owner_removed": true}], "response": {"decisions": [{"candidate": 0, "action": "update", "target": "interests"}]}, "expect": [{"candidate": 0, "action": "mention", "target": "interests"}]},
+    {"id": "bm25_active_and_removed_duplicate_noop", "description": "A noop is unchanged: a re-mention of the active memory.", "memories": [{"label": "interests", "id": 312, "revision": 3, "status": "active", "fact_type": "profile", "title": "Programming interests", "content": "Likes Python scripting, Rust compiler building, and Go tooling", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "Programming interests", "content": "Likes Python scripting and Rust compiler building and builds a Rust compiler", "nearby": [], "bm25_match": "interests", "duplicates_owner_removed": true}], "response": {"decisions": [{"candidate": 0, "action": "noop", "target": "interests"}]}, "expect": [{"candidate": 0, "action": "mention", "target": "interests"}]},
+    {"id": "bm25_active_and_removed_duplicate_llm_failure", "description": "The LLM call failed: the earlier re-mention, never a new memory.", "memories": [{"label": "interests", "id": 313, "revision": 3, "status": "active", "fact_type": "profile", "title": "Programming interests", "content": "Likes Python scripting, Rust compiler building, and Go tooling", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "Programming interests", "content": "Likes Python scripting and Rust compiler building and builds a Rust compiler", "nearby": [], "bm25_match": "interests", "duplicates_owner_removed": true}], "response": null, "expect": [{"candidate": 0, "action": "mention", "target": "interests"}]},
+    {"id": "bm25_active_and_removed_duplicate_invalid_response", "description": "An invalid response is no decision: the earlier re-mention.", "memories": [{"label": "interests", "id": 314, "revision": 3, "status": "active", "fact_type": "profile", "title": "Programming interests", "content": "Likes Python scripting, Rust compiler building, and Go tooling", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "Programming interests", "content": "Likes Python scripting and Rust compiler building and builds a Rust compiler", "nearby": [], "bm25_match": "interests", "duplicates_owner_removed": true}], "response": "not json", "expect": [{"candidate": 0, "action": "mention", "target": "interests"}]},
+    {"id": "bm25_active_and_removed_duplicate_noop_on_the_deactivated_neighbor_saves_nothing", "description": "A noop on the deactivated memory the candidate also duplicates saves nothing (unchanged by the new rule).", "memories": [{"label": "interests", "id": 320, "revision": 3, "status": "active", "fact_type": "profile", "title": "Programming interests", "content": "Likes Python scripting, Rust compiler building, and Go tooling", "last_mentioned": "2026-10-01"}, {"label": "compiler", "id": 321, "revision": 2, "status": "deprecated", "fact_type": "profile", "title": "Rust compiler", "content": "builds a Rust compiler", "last_mentioned": "2026-07-01"}], "candidates": [{"fact_type": "profile", "title": "Programming interests", "content": "Likes Python scripting and Rust compiler building and builds a Rust compiler", "nearby": ["compiler"], "bm25_match": "interests", "duplicates_owner_removed": true}], "response": {"decisions": [{"candidate": 0, "action": "noop", "target": "compiler"}]}, "expect": [{"candidate": 0, "action": "skip", "target": "compiler"}]},
+    {"id": "bm25_active_and_removed_duplicate_only_the_flagged_candidate_is_blocked", "description": "Two candidates matched the same kind of active memory; only the one that also duplicates removed content is blocked, the other keeps its add.", "memories": [{"label": "interests", "id": 322, "revision": 3, "status": "active", "fact_type": "profile", "title": "Programming interests", "content": "Likes Python scripting, Rust compiler building, and Go tooling", "last_mentioned": "2026-10-01"}, {"label": "review", "id": 323, "revision": 2, "status": "active", "fact_type": "preference", "title": "レビュー", "content": "コードレビューは日本語で書いてほしい", "last_mentioned": "2026-10-01"}], "candidates": [{"fact_type": "profile", "title": "Programming interests", "content": "Likes Python scripting and Rust compiler building and builds a Rust compiler", "nearby": [], "bm25_match": "interests", "duplicates_owner_removed": true}, {"fact_type": "preference", "title": "レビュー", "content": "コードレビューでは指摘の理由も書いてほしい", "nearby": [], "bm25_match": "review"}], "response": {"decisions": [{"candidate": 0, "action": "add", "target_id": null}, {"candidate": 1, "action": "add", "target_id": null}]}, "expect": [{"candidate": 0, "action": "mention", "target": "interests"}, {"candidate": 1, "action": "add"}]}
+  ]
+}
