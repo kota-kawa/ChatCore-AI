@@ -81,6 +81,7 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
             get_user_by_id=Mock(return_value={}),
             build_user_profile_prompt=Mock(return_value=None),
             get_room_summary=Mock(return_value={"summary": ""}),
+            load_user_memory_summary=AsyncMock(return_value=None),
             rename_chat_room_if_current_title_in=Mock(return_value=False),
             load_project_context=Mock(return_value=None),
             build_context_messages=lambda **kwargs: kwargs["recent_messages"],

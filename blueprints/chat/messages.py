@@ -135,6 +135,7 @@ from services.llm_daily_limit import (
 from services.personal_knowledge import search_personal_knowledge_for_tool
 from services.shared_prompt_lookup import search_shared_prompts_for_tool
 from services.usage_limits import check_usage_limit
+from services.user_memory import load_user_memory_summary
 from services.user_skills import (
     build_enabled_user_skills_prompt,
 )
@@ -715,6 +716,7 @@ def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
                 save_message_to_db=save_message_to_db,
                 store_user_message_and_load_turn_context=store_user_message_and_load_turn_context,
                 get_room_summary=get_room_summary,
+                load_user_memory_summary=load_user_memory_summary,
                 rename_chat_room_if_current_title_in=rename_chat_room_if_current_title_in,
                 rebuild_room_summary=rebuild_room_summary,
                 cleanup_unanswered_user_messages=_cleanup_unanswered_user_messages,
@@ -800,6 +802,7 @@ async def chat(
 _REGENERATE_LOG_MESSAGES = ChatRegenerationLogMessages(
     user_profile_load_failed="Failed to load user profile context for regenerate; proceeding without it.",
     room_summary_load_failed="Failed to load room summary for regenerate; proceeding without it.",
+    user_memory_load_failed="Failed to load user memory for regenerate; proceeding without it (%s).",
     room_summary_rebuild_failed="Failed to rebuild room summary after regeneration for %s.",
 )
 
@@ -808,6 +811,7 @@ _REGENERATE_LOG_MESSAGES = ChatRegenerationLogMessages(
 _EDIT_AND_REGENERATE_LOG_MESSAGES = ChatRegenerationLogMessages(
     user_profile_load_failed="Failed to load user profile for edit_and_regenerate; proceeding without it.",
     room_summary_load_failed="Failed to load room summary for edit_and_regenerate; proceeding without it.",
+    user_memory_load_failed="Failed to load user memory for edit_and_regenerate; proceeding without it (%s).",
     room_summary_rebuild_failed="Failed to rebuild room summary after edit_and_regenerate for %s.",
 )
 
@@ -829,6 +833,7 @@ def _build_regeneration_dependencies() -> ChatRegenerationDependencies:
         list_enabled_user_skills=list_enabled_user_skills,
         get_user_by_id=get_user_by_id,
         get_room_summary=get_room_summary,
+        load_user_memory_summary=load_user_memory_summary,
         get_room_web_search_contexts=get_room_web_search_contexts,
         consume_llm_daily_quota=consume_llm_daily_quota,
         check_usage_limit=check_usage_limit,

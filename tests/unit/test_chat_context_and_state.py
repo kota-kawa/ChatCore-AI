@@ -5,6 +5,7 @@ import unittest
 
 from services.chat_context import (
     CONTEXT_TOKEN_BUDGET,
+    USER_MEMORY_TOKEN_BUDGET,
     build_context_messages,
     build_room_summary,
     estimate_token_count,
@@ -71,6 +72,63 @@ class ChatContextAndStateTestCase(unittest.TestCase):
             context_messages[contract_index]["content"],
         )
         self.assertEqual(context_messages[-1]["content"], "third")
+
+    # 日本語: 記憶のまとめは、プロフィールの直後・プロジェクト指示やタスク・要約より前・履歴より前の固定側に入ります（ADR 0025）。
+    # English: The memory summary sits on the fixed side right after the profile and before project, task, summary and history.
+    def test_user_memory_follows_the_profile_and_precedes_the_rest_of_the_fixed_context(self):
+        context_messages = build_context_messages(
+            base_system_prompt="base",
+            user_profile_prompt="profile",
+            task_prompt="task",
+            room_summary="summary text",
+            recent_messages=[
+                {"role": "user", "content": "first"},
+                {"role": "assistant", "content": "second"},
+                {"role": "user", "content": "third"},
+            ],
+            project_instructions="project",
+            user_memory_prompt="<user_memory>\nmemory\n</user_memory>",
+            generative_ui_enabled=False,
+        )
+
+        contents = [message["content"] for message in context_messages]
+        self.assertEqual(contents[:3], ["base", "profile", "<user_memory>\nmemory\n</user_memory>"])
+        self.assertIn("project", contents[3])
+        self.assertEqual(contents[4], "task")
+        self.assertIn("summary text", contents[5])
+        self.assertEqual(contents[6:8], ["first", "second"])
+        self.assertEqual(context_messages[2]["role"], "system")
+
+    def test_without_a_user_memory_prompt_no_memory_message_is_added(self):
+        for memory in (None, ""):
+            with self.subTest(memory=memory):
+                context_messages = build_context_messages(
+                    base_system_prompt="base",
+                    user_profile_prompt="profile",
+                    task_prompt=None,
+                    room_summary="",
+                    recent_messages=[{"role": "user", "content": "question"}],
+                    user_memory_prompt=memory,
+                    generative_ui_enabled=False,
+                )
+                self.assertFalse(any("user_memory" in message["content"] for message in context_messages))
+
+    # 日本語: 長すぎるまとめでも、予算を超えて他の文脈や直近の履歴を押し出しません。
+    # English: An oversized summary is cut to its budget and cannot push out other context or the recent history.
+    def test_user_memory_is_cut_to_its_budget_and_keeps_the_recent_history(self):
+        context_messages = build_context_messages(
+            base_system_prompt=_build_base_system_prompt(),
+            user_profile_prompt="profile",
+            task_prompt=None,
+            room_summary="",
+            recent_messages=[{"role": "user", "content": "最新の質問"}],
+            user_memory_prompt="memory " * 5000,
+            generative_ui_enabled=False,
+        )
+
+        memory = next(message for message in context_messages if message["content"].startswith("memory"))
+        self.assertLessEqual(estimate_token_count(memory["content"]), USER_MEMORY_TOKEN_BUDGET)
+        self.assertEqual(context_messages[-1]["content"], "最新の質問")
 
     def test_build_context_messages_omits_ui_contract_when_skill_is_disabled(self):
         context_messages = build_context_messages(

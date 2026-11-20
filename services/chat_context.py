@@ -78,6 +78,9 @@ SUMMARY_TOKEN_BUDGET = 2000
 RECENT_HISTORY_TOKEN_BUDGET = 7400
 PROJECT_INSTRUCTIONS_TOKEN_BUDGET = 2600
 USER_PROFILE_TOKEN_BUDGET = 2200
+# 利用者の記憶のまとめ（説明文を含む `<user_memory>` 全体）の上限。services/user_memory.py がこの範囲に収めて組む。
+# Cap for the whole `<user_memory>` block, instructions included; services/user_memory.py builds it within this.
+USER_MEMORY_TOKEN_BUDGET = 700
 TASK_PROMPT_TOKEN_BUDGET = 2600
 FOLLOW_UP_CONTINUITY_TOKEN_BUDGET = 180
 RECENT_HISTORY_MAX_MESSAGES = 16
@@ -541,6 +544,7 @@ def build_context_messages(
     project_instructions: str | None = None,
     user_skills_prompt: str | None = None,
     generative_ui_enabled: bool = True,
+    user_memory_prompt: str | None = None,
 ) -> list[dict[str, str]]:
     mandatory_messages = [{"role": "system", "content": base_system_prompt}]
     if generative_ui_enabled:
@@ -586,6 +590,12 @@ def build_context_messages(
     # ユーザープロフィールプロンプトを追加
     # Add user profile prompt if specified
     append_optional_system_message(user_profile_prompt, USER_PROFILE_TOKEN_BUDGET)
+
+    # 利用者の記憶のまとめ（services/user_memory.py が組む）は、プロフィールの直後の固定側に置く。記憶が変わらない限り文面は
+    # 変わらないので、履歴より前でもプロンプトキャッシュを壊さない（ADR 0011）。
+    # The user's memory summary (built by services/user_memory.py) sits right after the profile on the fixed side. Its text
+    # does not change while the memory does not, so placing it before the history keeps the prompt cache intact (ADR 0011).
+    append_optional_system_message(user_memory_prompt, USER_MEMORY_TOKEN_BUDGET)
 
     # プロジェクト固有のカスタム指示を追加（タスク指示より前に置き全会話で優先）
     # Add project custom instructions (before task prompt; applies to all chats in the project)

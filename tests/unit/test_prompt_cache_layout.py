@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 from services import llm
 from services.chat_agent_budget import AgentStepBudget
+from services.chat_context import build_context_messages
 from services.chat_generation import ChatGenerationJob
 from services.chat_prompt import insert_before_latest_user_message
 from services.chat_turn_state import TURN_LOOP_SYSTEM_PROMPT, build_turn_loop_messages
@@ -93,6 +94,70 @@ class DynamicContextPlacementTests(unittest.TestCase):
         self.assertEqual(contents[-2], TURN_LOOP_SYSTEM_PROMPT)
         self.assertEqual(contents[-1], "latest question")
         self.assertEqual(contents[3], "earlier answer")
+
+
+# 記憶のまとめ（`<user_memory>`）が、履歴より前の固定側（プロフィールの直後）に置かれ、記憶が変わらない限り
+# ターンをまたいで 1 文字も変わらないことを検証するテストクラス（ADR 0011・0025）。
+# Test class verifying that the memory summary sits on the fixed side before the history, right after the profile, and is
+# byte-identical across turns while the memory does not change (ADR 0011, 0025).
+class UserMemoryPlacementTests(unittest.TestCase):
+    _MEMORY = "\n".join(
+        [
+            "<user_memory>",
+            "These are things this user told you.",
+            "- [preference] (last mentioned 2026-11-18) 形式: 箇条書き",
+            "</user_memory>",
+        ]
+    )
+    _HISTORY = (
+        {"role": "user", "content": "q1"},
+        {"role": "assistant", "content": "a1"},
+        {"role": "user", "content": "q2"},
+    )
+
+    def _context(self, history, *, memory=_MEMORY):
+        return build_context_messages(
+            base_system_prompt="base prompt",
+            user_profile_prompt="<user_profile_context>profile</user_profile_context>",
+            task_prompt=None,
+            room_summary="",
+            recent_messages=history,
+            user_memory_prompt=memory,
+            generative_ui_enabled=False,
+        )
+
+    def test_the_summary_follows_the_profile_and_precedes_the_history(self):
+        messages = self._context(list(self._HISTORY))
+
+        contents = [str(message["content"]) for message in messages]
+        self.assertEqual(contents[0], "base prompt")
+        self.assertTrue(contents[1].startswith("<user_profile_context>"))
+        self.assertEqual(contents[2], self._MEMORY)
+        self.assertEqual(contents[3:5], ["q1", "a1"])
+
+    def test_the_prefix_before_the_history_is_identical_from_turn_to_turn(self):
+        turn_one = self._context([{"role": "user", "content": "first question"}])
+        turn_two = self._context(
+            [
+                {"role": "user", "content": "first question"},
+                {"role": "assistant", "content": "first answer"},
+                {"role": "user", "content": "second question"},
+            ]
+        )
+
+        self.assertEqual(turn_one[:3], turn_two[:3])
+
+    def test_claude_sends_the_summary_in_the_cached_system_group_and_openai_never_marks_it(self):
+        messages = self._context(list(self._HISTORY))
+
+        system_blocks, _ = llm._prepare_claude_messages(messages)
+        self.assertEqual([block["text"] for block in system_blocks][:3], ["base prompt", messages[1]["content"], self._MEMORY])
+        self.assertIn("cache_control", system_blocks[0])
+        self.assertNotIn("cache_control", system_blocks[2])
+
+        marked = llm._with_openai_cache_breakpoints(llm.GPT_6_LUNA_MODEL, messages, responses_api=False)
+        self.assertIsInstance(marked[2]["content"], str)
+        self.assertEqual(marked[2]["content"], self._MEMORY)
 
 
 # 検索ツールの有無と読み取り予算に応じて、読み取りツールをいつ提示し、いつ引っ込めるかを検証するテストクラス。

@@ -99,6 +99,7 @@ from services.selected_reference_context import (
 from services.selected_reference_sources import DeduplicatedLookup, build_selected_reference_searchers
 from services.structured_ui_citations import resolve_message_part_citations
 from services.usage_limits import usage_limit_message
+from services.user_memory import UserMemorySummary, is_memory_use_enabled
 from services.user_skills import ChatSkillsContext, build_chat_skills_context
 from services.web_search import (
     WebSearchResult,
@@ -211,6 +212,12 @@ class _ChatPostTurn:
     prompt_tools_enabled: bool = False
     project_instructions: str | None = None
     room_summary: str = ""
+    # 日本語: ユーザー行が読めて記憶の利用の設定が有効か。読めないときは使わない側（False）に倒す。
+    # English: Whether the user row was read and memory use is on; an unreadable row counts as off.
+    memory_use_enabled: bool = False
+    # 日本語: このターンの文脈へ入れる記憶のまとめ。入れないターンは None。
+    # English: The memory summary put into this turn's context; None when none is.
+    user_memory: UserMemorySummary | None = None
     conversation_messages: list[dict[str, Any]] = field(default_factory=list)
     # 日本語: 通常ルームでは、発話保存と同じルームツリー読み出しから得た過去ターンの
     #         検索結果。改めて DB を読まないための引き渡し先。
@@ -707,10 +714,11 @@ class ChatPostUseCase:
     # フェーズ5: プロンプト文脈の読み込み / Phase 5: loading prompt context
     # ------------------------------------------------------------------
     async def _load_prompt_context(self, turn: _ChatPostTurn) -> None:
-        """タスク定義・スキル・プロジェクト・要約をまとめて読み込みます / Load task, skills, project context and the room summary."""
+        """タスク・スキル・プロジェクト・記憶・要約をまとめて読み込みます / Load task, skills, project context, memory and room summary."""
         await self._load_task_prompt(turn)
         await self._load_user_skills_and_profile(turn)
         await self._load_project_instructions(turn)
+        await self._load_user_memory(turn)
         await self._load_room_summary(turn)
 
     async def _load_task_prompt(self, turn: _ChatPostTurn) -> None:
@@ -750,6 +758,7 @@ class ChatPostUseCase:
                 turn.user_profile_prompt = deps.prompts.build_user_profile_prompt(user)
             except Exception:
                 deps.logger.warning("Failed to load user profile context; proceeding without it.")
+            turn.memory_use_enabled = is_memory_use_enabled(user)
 
         skills_context = build_chat_skills_context(
             enabled_user_skills,
@@ -784,6 +793,24 @@ class ChatPostUseCase:
         except Exception:
             deps.logger.warning("Failed to load project context; proceeding without it.")
 
+    async def _load_user_memory(self, turn: _ChatPostTurn) -> None:
+        """
+        ログイン中の利用者の通常ルームで、記憶の利用が有効なときだけ、記憶のまとめを読み込む（1 回の DB 読み取り）。
+        新しいルームの最初のターンでも入れる。一時チャットとゲストでは読まない。読み込みに失敗しても回答は続ける。
+        For a signed-in user's normal room with memory use on, load the memory summary (one DB read), including on a new
+        room's first turn. Temporary chats and guests never read it, and a failed read does not stop the answer.
+        """
+        deps = self.deps
+
+        if turn.user_id is None or not turn.targets_normal_room() or not turn.memory_use_enabled:
+            return
+        try:
+            turn.user_memory = await _maybe_await(deps.persistence.load_user_memory_summary(turn.user_id))
+        except Exception as exc:
+            # 記憶の文面が載りうる例外メッセージは出さず、種類だけ残す。
+            # Log only the exception type: its message could carry memory text.
+            deps.logger.warning("Failed to load user memory; proceeding without it (%s).", type(exc).__name__)
+
     async def _load_room_summary(self, turn: _ChatPostTurn) -> None:
         """
         通常のユーザーセッションの場合、ルームの要約を読み込む（最初のターンには要約が無いので読まない）
@@ -815,6 +842,7 @@ class ChatPostUseCase:
             project_instructions=turn.project_instructions,
             user_skills_prompt=turn.user_skills_prompt,
             generative_ui_enabled=turn.generative_ui_selected,
+            user_memory_prompt=turn.user_memory.block if turn.user_memory else None,
         )
 
     async def _load_prior_web_search_results(self, turn: _ChatPostTurn) -> None:

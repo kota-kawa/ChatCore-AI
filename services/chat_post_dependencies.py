@@ -42,6 +42,7 @@ from services.chat_workspace_tools.registry import ChatWorkspaceToolbox
 from services.ephemeral_store import EphemeralChatStore
 from services.generative_ui import GenerativeUiMode
 from services.selected_reference_context import SelectedReferenceLookupTrace
+from services.user_memory import UserMemorySummary
 from services.user_skills import ChatSkillsContext, build_enabled_user_skills_prompt
 from services.web_search import WebSearchResult
 
@@ -169,6 +170,7 @@ class BuildContextMessages(Protocol):
         project_instructions: str | None = None,
         user_skills_prompt: str | None = None,
         generative_ui_enabled: bool = True,
+        user_memory_prompt: str | None = None,
     ) -> list[dict[str, Any]]: ...
 
 
@@ -309,7 +311,7 @@ class ChatPostRoomDependencies:
 
 @dataclass(frozen=True)
 class ChatPostPersistenceDependencies:
-    """メッセージ・要約のDB境界 / DB boundaries for messages and summaries."""
+    """メッセージ・要約・記憶のまとめのDB境界 / DB boundaries for messages, summaries and the memory summary."""
 
     save_message_to_db: SaveMessageToDb
     # 日本語: 発話の保存と、そのターンに要る文脈（履歴・過去の検索結果）の読み出しは
@@ -321,6 +323,9 @@ class ChatPostPersistenceDependencies:
     #          get_room_web_search_contexts boundaries each re-read the same tree.
     store_user_message_and_load_turn_context: StoreUserMessageAndLoadTurnContext
     get_room_summary: Callable[[str], MaybeAwaitable[dict[str, Any] | None]]
+    # 日本語: 毎ターン文脈に入れる記憶のまとめ。1 回の DB 読み取りで、記憶が無ければ None。
+    # English: The memory summary put into the context every turn: one DB read, None when there is no memory.
+    load_user_memory_summary: Callable[[int], MaybeAwaitable[UserMemorySummary | None]]
     rename_chat_room_if_current_title_in: RenameChatRoomIfCurrentTitleIn
     rebuild_room_summary: RebuildRoomSummary
     cleanup_unanswered_user_messages: CleanupUnansweredUserMessages

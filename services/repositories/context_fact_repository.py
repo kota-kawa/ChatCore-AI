@@ -13,9 +13,11 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    DateTime,
     and_,
     bindparam,
     case,
+    cast,
     column,
     delete,
     exists,
@@ -214,6 +216,44 @@ class ContextFactRepository:
             .limit(MAX_ACTIVE_CONTEXT_FACTS)
         )
         return [self._serialize_row(fact) for fact in result.scalars().all()]
+
+    # 日本語: 毎ターン文脈へ入れる記憶のまとめ用に、有効で本人由来の事実を 1 回の読み取りで返す。
+    # 本人由来とは、本人が確認した事実(last_confirmed_at が非 NULL)と、チャットから抽出した事実(source_kind が chat)。
+    # MCP・取り込みで入って本人が確認していない事実は返さない(ADR 0025)。MCP 向けの list_active_for_digest とは別の問い合わせで、
+    # 順序は重要度の高い順、同じなら最後に話題に出た(出典 context_fact_sources.observed_at の最大値、出典が無ければ updated_at)が新しい順、
+    # それも同じなら id の大きい順。observed_at は timestamptz、updated_at はタイムゾーン無しなので、updated_at を timestamptz へ
+    # 明示的に変換して揃える(候補リポジトリの入れ替え判定と同じ扱い)。
+    # English: One read of the active, owner-originated facts for the per-turn memory summary. Owner-originated means confirmed by
+    # the owner (last_confirmed_at is not NULL) or extracted from chat (source_kind is chat); unconfirmed facts that arrived through
+    # MCP or import are not returned (ADR 0025). This is a separate query from list_active_for_digest, which serves MCP. Order:
+    # importance descending, then the most recently mentioned (newest context_fact_sources.observed_at, or updated_at without a
+    # source), then id descending. observed_at is timestamptz while updated_at is timezone-less, so updated_at is cast to
+    # timestamptz explicitly, as the candidate repository does when it picks a fact to replace.
+    async def list_owner_facts_for_memory_summary(self, user_id: int) -> list[dict[str, Any]]:
+        last_mentioned = func.coalesce(
+            select(func.max(ContextFactSource.observed_at))
+            .where(ContextFactSource.fact_id == ContextFact.id)
+            .scalar_subquery(),
+            cast(ContextFact.updated_at, DateTime(timezone=True)),
+        ).label("last_mentioned_at")
+        result = await self.session.execute(
+            select(
+                ContextFact.id,
+                ContextFact.fact_type,
+                ContextFact.title,
+                ContextFact.content,
+                ContextFact.importance,
+                last_mentioned,
+            )
+            .where(
+                ContextFact.user_id == user_id,
+                ContextFact.status == "active",
+                or_(ContextFact.last_confirmed_at.is_not(None), ContextFact.source_kind == "chat"),
+            )
+            .order_by(ContextFact.importance.desc(), last_mentioned.desc().nulls_last(), ContextFact.id.desc())
+            .limit(MAX_ACTIVE_CONTEXT_FACTS)
+        )
+        return [dict(row) for row in result.mappings().all()]
 
     async def list_all_facts(
         self,

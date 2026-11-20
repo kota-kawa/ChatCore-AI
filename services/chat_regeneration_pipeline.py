@@ -81,6 +81,7 @@ from services.selected_reference_context import (
 )
 from services.selected_reference_sources import DeduplicatedLookup, build_selected_reference_searchers
 from services.usage_limits import UsageLimitBlock, usage_limit_message
+from services.user_memory import UserMemorySummary, is_memory_use_enabled
 from services.user_skills import build_chat_skills_context
 from services.web_search import (
     deserialize_web_search_results,
@@ -185,6 +186,7 @@ class ChatRegenerationLogMessages:
 
     user_profile_load_failed: str
     room_summary_load_failed: str
+    user_memory_load_failed: str
     room_summary_rebuild_failed: str
 
 
@@ -199,6 +201,7 @@ class ChatRegenerationDependencies:
     list_enabled_user_skills: Callable[[int], Awaitable[Sequence[dict[str, Any]]]]
     get_user_by_id: Callable[[int], Awaitable[dict[str, Any] | None]]
     get_room_summary: Callable[[str], Awaitable[dict[str, Any] | None]]
+    load_user_memory_summary: Callable[[int], Awaitable[UserMemorySummary | None]]
     get_room_web_search_contexts: Callable[[str], Awaitable[list[dict[str, Any]]]]
     consume_llm_daily_quota: ConsumeLlmDailyQuota
     check_usage_limit: CheckUsageLimit
@@ -394,6 +397,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     task_prompt = build_task_prompt(prompt_data) if prompt_data else None
     enabled_user_skills: list[dict[str, Any]] = []
     room_summary = ""
+    user_memory: UserMemorySummary | None = None
     user = None
     user_profile_prompt = None
 
@@ -421,6 +425,16 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     project_instructions = await deps.load_project_context_for_room(
         user_id, room_mode, chat_room_id
     )
+
+    # 通常ルームの再生成でも、送信時と同じ条件で記憶のまとめを入れる（ログイン中・通常ルーム・設定が有効）。
+    # 読み込みに失敗しても再生成は続ける。例外の種類だけをログに残し、記憶の文面は出さない。
+    # Regeneration puts the memory summary in on the same terms as a send (signed in, normal room, setting on). A failed
+    # read does not stop it; only the exception type is logged, never memory text.
+    if user_id is not None and is_normal_user_room and is_memory_use_enabled(user):
+        try:
+            user_memory = await deps.load_user_memory_summary(user_id)
+        except Exception as exc:
+            logger.warning(log_messages.user_memory_load_failed, type(exc).__name__)
 
     if user_id is not None and room_mode == "normal":
         try:
@@ -488,6 +502,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
         project_instructions=project_instructions,
         user_skills_prompt=skills_context.prompt,
         generative_ui_enabled=skills_context.generative_ui_selected,
+        user_memory_prompt=user_memory.block if user_memory else None,
     )
 
     selected_references = build_selected_reference_searchers(
