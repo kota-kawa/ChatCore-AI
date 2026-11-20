@@ -15,6 +15,7 @@ import type {
   ContextFactCreateInput,
   ContextFactListPayload,
   ContextFactMutationPayload,
+  ContextFactMutationResult,
   ContextFactStatus,
   ContextFactType,
   ContextFactUpdateInput,
@@ -122,7 +123,7 @@ export async function loadContextFacts(params: {
 
 // 記憶を新規作成する。
 // Create a new context fact.
-export async function createContextFact(input: ContextFactCreateInput): Promise<ContextFact> {
+export async function createContextFact(input: ContextFactCreateInput): Promise<ContextFactMutationResult> {
   const { payload } = await memoFetchJsonOrThrow<ContextFactMutationPayload>(
     "/api/context-facts",
     {
@@ -133,7 +134,7 @@ export async function createContextFact(input: ContextFactCreateInput): Promise<
     },
     { defaultMessage: "記憶の保存に失敗しました。", hasApplicationError: (d) => !d.fact },
   );
-  return payload.fact as ContextFact;
+  return payload.fact as ContextFactMutationResult;
 }
 
 // 記憶を更新する（無効化・復元も status で行う）。
@@ -141,7 +142,7 @@ export async function createContextFact(input: ContextFactCreateInput): Promise<
 export async function updateContextFact(
   factId: number,
   input: ContextFactUpdateInput,
-): Promise<ContextFact> {
+): Promise<ContextFactMutationResult> {
   const { payload } = await memoFetchJsonOrThrow<ContextFactMutationPayload>(
     `/api/context-facts/${factId}`,
     {
@@ -152,7 +153,7 @@ export async function updateContextFact(
     },
     { defaultMessage: "記憶の更新に失敗しました。", hasApplicationError: (d) => !d.fact },
   );
-  return payload.fact as ContextFact;
+  return payload.fact as ContextFactMutationResult;
 }
 
 // 会話からの記憶の自動保存の設定（初期値は有効）を取得する。

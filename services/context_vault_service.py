@@ -36,6 +36,7 @@ from services.request_models import (
 from services.response_models import (
     ContextDigestGroup,
     ContextDigestResponse,
+    ContextFactListItemResponse,
     ContextFactListResponse,
     ContextFactResponse,
 )
@@ -97,23 +98,32 @@ async def _transaction(
 # English: Map a DB row to the API response, filling missing values with defaults and clamping importance to 0-100.
 def _to_response(fact: dict[str, Any]) -> ContextFactResponse:
     importance = fact.get("importance")
-    status = str(fact.get("status") or "active")
     return ContextFactResponse(
         id=int(fact["id"]),
         fact_type=str(fact["fact_type"]),
         title=str(fact.get("title") or ""),
         content=str(fact.get("content") or ""),
-        status=status,
+        status=str(fact.get("status") or "active"),
         revision=max(int(fact.get("revision") or 1), 1),
         source_kind=str(fact.get("source_kind") or "manual"),
         importance=max(0, min(int(importance if importance is not None else 50), 100)),
         confidence=fact.get("confidence"),
         last_confirmed_at=fact.get("last_confirmed_at"),
-        # 旧バージョンのコードが復元した行は理由が残るので、有効な事実には返さない。
-        # An older code color leaves the reason when it restores a fact, so an active fact never reports one.
-        deprecated_reason=fact.get("deprecated_reason") if status == "deprecated" else None,
         created_at=fact.get("created_at"),
         updated_at=fact.get("updated_at"),
+    )
+
+
+# 日本語: 記憶の画面の一覧用に、_to_response の内容へ無効化の理由を足す。旧バージョンのコードが復元した行は理由が残るので、
+# 有効な事実には返さない。MCP・ダイジェスト・検索は理由を持たない _to_response のまま使い、AI に渡る内容を変えない。
+# English: For the memory screen's list: _to_response plus the deprecation reason. An older code color leaves the reason when
+# it restores a fact, so an active fact never reports one. MCP, the digest and search keep using _to_response without it,
+# so what reaches the AI is unchanged.
+def _to_list_item_response(fact: dict[str, Any]) -> ContextFactListItemResponse:
+    base = _to_response(fact)
+    return ContextFactListItemResponse(
+        **base.model_dump(),
+        deprecated_reason=fact.get("deprecated_reason") if base.status == "deprecated" else None,
     )
 
 
@@ -171,7 +181,7 @@ async def list_facts(
             next_cursor = _encode_cursor(rows[safe_limit - 1])
             rows = rows[:safe_limit]
         return ContextFactListResponse(
-            facts=[_to_response(row) for row in rows],
+            facts=[_to_list_item_response(row) for row in rows],
             total_active=await _repository(db).count_active(user_id),
             next_cursor=next_cursor,
         )

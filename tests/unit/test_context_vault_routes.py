@@ -21,6 +21,7 @@ from blueprints.context_vault.routes import (
 from services.api_errors import ApiServiceError
 from services.response_models import (
     ContextExtractionSettingsResponse,
+    ContextFactListItemResponse,
     ContextFactListResponse,
     ContextFactResponse,
 )
@@ -64,7 +65,9 @@ class ContextVaultRouteTestCase(unittest.TestCase):
         request = build_request(
             method="GET", path="/api/context-facts", session={"user_id": 7}
         )
-        result = ContextFactListResponse(facts=[_fact()], total_active=1, next_cursor=None)
+        result = ContextFactListResponse(
+            facts=[ContextFactListItemResponse(**_fact().model_dump())], total_active=1, next_cursor=None
+        )
         service = AsyncMock(return_value=result)
         with patch("blueprints.context_vault.routes.list_facts", new=service):
             response = asyncio.run(api_list_context_facts(request, limit=20))
@@ -149,8 +152,8 @@ class ContextVaultRouteTestCase(unittest.TestCase):
         request = build_request(method="GET", path="/api/context-facts", session={"user_id": 7})
         result = ContextFactListResponse(
             facts=[
-                _fact(id=4, status="deprecated", deprecated_reason="capacity"),
-                _fact(id=3, status="deprecated"),
+                ContextFactListItemResponse(**_fact(id=4, status="deprecated").model_dump(), deprecated_reason="capacity"),
+                ContextFactListItemResponse(**_fact(id=3, status="deprecated").model_dump()),
             ],
             total_active=1,
             next_cursor=None,
