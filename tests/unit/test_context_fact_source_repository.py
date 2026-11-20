@@ -24,7 +24,7 @@ class _Savepoint:
     async def __aenter__(self):
         return self
 
-    async def __aexit__(self, exc_type, exc, traceback):
+    async def __aexit__(self, exc_type, _exc, _tb):
         self.rolled_back = exc_type is not None
         return False
 
