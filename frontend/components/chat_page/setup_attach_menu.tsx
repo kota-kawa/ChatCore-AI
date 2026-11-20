@@ -11,7 +11,7 @@ type SetupAttachMenuProps = {
   disabled: boolean;
   // 添付上限に達した場合はファイル添付の項目だけを無効化する / Only the file item is disabled once the attachment limit is reached
   fileItemDisabled: boolean;
-  // メモ/マイコンテキスト参照が有効か / Whether the memo & My Context lookup is on
+  // メモの参照が有効か / Whether the memo lookup is on
   memoLookupEnabled: boolean;
   // 自分のメモは本人しか読めないため、未ログインでは選べない / Memos are owner-only, so the item is unavailable when logged out
   memoItemDisabled: boolean;
@@ -97,8 +97,8 @@ export function SetupAttachMenu({
         role="menu"
         aria-hidden={isOpen ? "false" : "true"}
       >
-        {/* メモは参照モードのトグル。オンの間だけ回答がメモ/マイコンテキストを検索する。 */}
-        {/* Memo toggles the lookup mode: while it is on, answers search the memos and My Context. */}
+        {/* メモは参照モードのトグル。オンの間だけ回答がメモを検索する。記憶はトグルに関係なく、モデルが必要なときに引く。 */}
+        {/* Memo toggles the lookup mode: while it is on, answers search the memos. Memory is not behind this toggle; the model reads it when needed. */}
         <button
           type="button"
           className={`setup-attach-menu__item ${memoLookupEnabled ? "is-active" : ""}`.trim()}

@@ -104,8 +104,8 @@ function interpretSharedPromptSearchEvent(
   return null;
 }
 
-// メモ・記憶の検索イベントを、思考中ステータスの文言へ変換する。対象外のイベントなら null。
-// Converts memo / Memory search events into thinking-status text; null for other events.
+// メモの検索イベントを、思考中ステータスの文言へ変換する。対象外のイベントなら null。記憶の検索は interpretMemorySearchEvent。
+// Converts memo search events into thinking-status text; null for other events. Memory search is interpretMemorySearchEvent.
 function interpretPersonalKnowledgeSearchEvent(
   event: string,
   data: Record<string, unknown>,
@@ -113,7 +113,7 @@ function interpretPersonalKnowledgeSearchEvent(
 ): GenerationStreamAction | null {
   if (event === "personal_knowledge_search_started") {
     return thinkingStatus(
-      localize("メモと記憶を検索しています", "Searching your memos and Memory"),
+      localize("メモを検索しています", "Searching your memos"),
       "web-search",
     );
   }
@@ -125,7 +125,7 @@ function interpretPersonalKnowledgeSearchEvent(
         "web-search",
       );
     }
-    const matchCount = readNumberField(data, "memo_count") + readNumberField(data, "context_fact_count");
+    const matchCount = readNumberField(data, "memo_count");
     return thinkingStatus(
       matchCount > 0
         ? localize("見つかったメモを読み込んでいます", "Reading the notes that matched")
@@ -137,6 +137,43 @@ function interpretPersonalKnowledgeSearchEvent(
   if (event === "personal_knowledge_search_failed") {
     return thinkingStatus(
       localize("メモの検索に失敗しました。思考中", "Note search failed. Preparing an answer"),
+      "generating",
+    );
+  }
+
+  return null;
+}
+
+// モデルが呼ぶ記憶の検索ツールのイベントを、思考中ステータスの文言へ変換する。対象外のイベントなら null。
+// Converts the model-called memory search tool's events into thinking-status text; null for other events.
+function interpretMemorySearchEvent(
+  event: string,
+  data: Record<string, unknown>,
+  localize: StreamLocalize,
+): GenerationStreamAction | null {
+  if (event === "memory_search_started") {
+    return thinkingStatus(localize("記憶を検索しています", "Searching your Memory"), "web-search");
+  }
+
+  if (event === "memory_search_completed") {
+    if (isAlreadySearched(data)) {
+      return thinkingStatus(
+        localize("取得済みの記憶を読み込んでいます", "Reading the Memory already retrieved"),
+        "web-search",
+      );
+    }
+    const matchCount = readNumberField(data, "memory_count");
+    return thinkingStatus(
+      matchCount > 0
+        ? localize("見つかった記憶を読み込んでいます", "Reading the Memory that matched")
+        : localize("該当する記憶はありませんでした。思考中", "No Memory matched. Preparing an answer"),
+      matchCount > 0 ? "web-search" : "generating",
+    );
+  }
+
+  if (event === "memory_search_failed") {
+    return thinkingStatus(
+      localize("記憶の検索に失敗しました。思考中", "Memory search failed. Preparing an answer"),
       "generating",
     );
   }
@@ -360,6 +397,7 @@ export function interpretGenerationStreamEvent(
   const progressStatus =
     interpretSharedPromptSearchEvent(parsed.event, data, localize) ??
     interpretPersonalKnowledgeSearchEvent(parsed.event, data, localize) ??
+    interpretMemorySearchEvent(parsed.event, data, localize) ??
     interpretWebSearchEvent(parsed.event, data, localize) ??
     interpretWorkspaceToolEvent(parsed.event, data, localize);
   if (progressStatus) return progressStatus;

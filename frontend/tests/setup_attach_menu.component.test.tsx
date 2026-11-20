@@ -187,7 +187,7 @@ describe("SetupAttachMenu", () => {
       />,
     );
 
-    expect(screen.getByText("メモ・記憶を参照")).toBeInTheDocument();
+    expect(screen.getByText("メモを参照")).toBeInTheDocument();
     expect(screen.getByText("共有プロンプトを参照")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "メモの参照をやめる" }));
     fireEvent.click(screen.getByRole("button", { name: "共有プロンプトの参照をやめる" }));

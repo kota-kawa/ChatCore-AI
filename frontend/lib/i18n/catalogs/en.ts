@@ -40,7 +40,7 @@ export const enMessages = {
   "home.attachMenu.pasteEmpty": "There is no text or image to paste.",
   "home.attachMenu.pasteUnsupported": "This format cannot be pasted. Copy text or a PNG, JPEG, WebP, or GIF image, or use Attach files.",
   "home.attachMenu.pasteUnavailable": "Could not read the clipboard. Touch and hold the input to paste text, or use Attach files to select an image.",
-  "home.attachMenu.memoActive": "Using your memos & Memory",
+  "home.attachMenu.memoActive": "Using your memos",
   "home.attachMenu.memoTurnOff": "Stop using your memos", "home.attachMenu.memoLoginRequired": "Log in to use your own memos",
   "home.attachMenu.sharedPromptActive": "Using shared prompts",
   "home.attachMenu.sharedPromptTurnOff": "Stop using shared prompts",
