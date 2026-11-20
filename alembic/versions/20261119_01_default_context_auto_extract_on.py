@@ -5,8 +5,8 @@ Revises: 20261028_01
 Create Date: 2026-11-19
 
 Extraction used to queue candidates for the owner's approval, so it was opt-in (default FALSE).
-Extracted content is now saved directly as unconfirmed memory (ADR 0023), and the owner is told
-in the chat and can undo it. The product decision is that the feature starts on, including for
+Extracted content is now saved directly as unconfirmed memory (ADR 0023), and the owner reviews,
+edits, and disables it on the memory screen. The product decision is that the feature starts on, including for
 users who had turned it off, so the existing rows are set to TRUE as well. The previous
 per-user values are not kept anywhere, so a downgrade cannot restore them.
 

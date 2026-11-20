@@ -1,8 +1,8 @@
-"""記憶の自動抽出サービス（保存の設定確認、保存した事実の埋め込み予約、自動保存した事実の一覧、候補の一覧のカーソル、
+"""記憶の自動抽出サービス（保存の設定確認、保存した事実の埋め込み予約、候補の一覧のカーソル、
 承認時の埋め込みスケジュール、却下）を検証するテスト。
 
 Tests the memory auto-extraction service: the setting check on store, embedding scheduling for saved facts,
-listing auto-saved facts, candidate list cursors, scheduling embeddings on approval, and rejection.
+candidate list cursors, scheduling embeddings on approval, and rejection.
 """
 
 import unittest

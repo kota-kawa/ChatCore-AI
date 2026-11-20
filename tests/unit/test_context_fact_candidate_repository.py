@@ -1,7 +1,7 @@
-"""ContextFactCandidateRepository（自動抽出の保存、自動保存した事実の一覧、候補の承認・却下）が発行する SQL と、
+"""ContextFactCandidateRepository（自動抽出の保存、候補の承認・却下）が発行する SQL と、
 リビジョンによる楽観的排他を検証するテスト。
 
-Tests the SQL emitted by ContextFactCandidateRepository (storing extractions, listing auto-saved facts,
+Tests the SQL emitted by ContextFactCandidateRepository (storing extractions,
 approving and rejecting candidates) and its optimistic revision checks.
 """
 

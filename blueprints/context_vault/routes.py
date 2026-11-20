@@ -1,6 +1,6 @@
-"""記憶（パーソナル・コンテキスト金庫）の事実・自動保存した事実・承認待ち候補・インポート/エクスポートの HTTP API（/api/context-facts）。
+"""記憶（パーソナル・コンテキスト金庫）の事実・承認待ち候補・インポート/エクスポートの HTTP API（/api/context-facts）。
 
-HTTP API for memory (the personal context vault): facts, auto-saved facts, pending candidates, and import/export (/api/context-facts).
+HTTP API for memory (the personal context vault): facts, pending candidates, and import/export (/api/context-facts).
 """
 from __future__ import annotations
 
