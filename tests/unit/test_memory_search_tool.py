@@ -5,6 +5,7 @@ Tests the model-called memory_search tool (ADR 0025): its definition, result sha
 (budget, de-duplication, evidence, answer steps and trust).
 """
 
+import contextlib
 import json
 import unittest
 from datetime import UTC, datetime
@@ -283,6 +284,48 @@ class ToolCallTestCase(unittest.TestCase):
 
         (step,) = running
         self.assertEqual((step.title, step.status, step.query), ("記憶を検索", "running", ""))
+
+    def test_progress_events_carry_no_query(self):
+        # 検索語は記憶の内容から作られうるので、開始・完了・失敗のどのイベントにも載せない（回答までのステップと同じ）。
+        # The query can be built from memory content, so no started/completed/failed event carries it (as the answer steps do).
+        async def failing(user_id, query):
+            return build_memory_search_tool_payload(query, None)
+
+        async def raising(user_id, query):
+            raise RuntimeError("down")
+
+        cases = ((_ok(_fact(content=_SECRET)), "completed", False), (failing, "failed", True), (raising, "failed", True))
+        for search, outcome, logs_error in cases:
+            with self.subTest(outcome=outcome, logs_error=logs_error):
+                with self.assertLogs(level="WARNING") if logs_error else contextlib.nullcontext():
+                    _, _, events = self._dispatch(
+                        DeduplicatedLookup(_bound(search), source_label="memory"), _tool_call(f"犬 {_SECRET}")
+                    )
+                memory_events = [(name, payload) for name, payload in events if name.startswith("memory_search")]
+                self.assertEqual([name for name, _ in memory_events], ["memory_search_started", f"memory_search_{outcome}"])
+                for name, payload in memory_events:
+                    self.assertNotIn("query", payload, name)
+                    self.assertNotIn(_SECRET, json.dumps(payload, ensure_ascii=False))
+
+    def test_memo_and_shared_prompt_events_keep_the_query(self):
+        for name, event_prefix in (("personal_knowledge_search", "personal_knowledge_search"), ("shared_prompt_search", "shared_prompt_search")):
+            with self.subTest(name):
+                job, events = _job()
+                state = job._build_turn_run_state()
+                job._run_lookup_tool_call(
+                    _tool_call("沖縄", name=name),
+                    tool_name=name,
+                    search=lambda query: {"status": "ok", "memo_count": 1, "prompt_count": 1},
+                    event_prefix=event_prefix,
+                    result_counts=("memo_count", "prompt_count"),
+                    failure_log_message="failed",
+                    failure_tool_message="failed",
+                    current_messages=state.current_messages,
+                    budget=state.budget,
+                    turn_state=state.turn_state,
+                    evidence_store=state.evidence_store,
+                )
+                self.assertEqual([payload["query"] for event, payload in events if event.startswith(event_prefix)], ["沖縄", "沖縄"])
 
     def test_a_failed_search_publishes_the_failure_and_tells_the_model(self):
         async def failing(user_id, query):

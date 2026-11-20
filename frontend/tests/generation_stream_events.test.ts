@@ -313,11 +313,11 @@ test("memo search results count memos only, whatever else an older server report
 });
 
 test("memory search events show their own wording, apart from the memo search", () => {
-  assert.deepEqual(interpret("memory_search_started", { query: "犬" }), {
-    kind: "thinking_status",
-    text: "記憶を検索しています",
-    phase: "web-search",
-  });
+  // サーバーは記憶の検索の検索語をイベントに載せない。載せていても（過去の形）文言は変わらない。
+  // The server no longer sends the memory query in these events; a payload that still carries one reads the same.
+  const started = { kind: "thinking_status", text: "記憶を検索しています", phase: "web-search" };
+  assert.deepEqual(interpret("memory_search_started", { step: 1, max_steps: 5 }), started);
+  assert.deepEqual(interpret("memory_search_started", { query: "犬", step: 1, max_steps: 5 }), started);
   const hit = interpret("memory_search_completed", { memory_count: 2 });
   const nothing = interpret("memory_search_completed", { memory_count: 0 });
   const repeated = interpret("memory_search_completed", { status: "already_searched" });

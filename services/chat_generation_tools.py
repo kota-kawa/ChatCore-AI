@@ -84,6 +84,16 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
             return MEMORY_SEARCH_SOURCE
         return PERSONAL_KNOWLEDGE_SOURCE if event_prefix == "personal_knowledge_search" else SHARED_PROMPT_SOURCE
 
+    # 検索の進行イベントの本文。記憶の検索の検索語は記憶の内容から作られうるので載せない（回答までのステップで伏せているのと同じ）。
+    # メモ・共有プロンプトの検索は検索語を載せる。
+    # The body of a lookup progress event. The memory tool's query can be built from memory content, so it is left out (as the answer
+    # steps already do); memo and shared-prompt lookups keep their query.
+    @staticmethod
+    def _lookup_event_payload(event_prefix: str, query: str, fields: dict[str, Any]) -> dict[str, Any]:
+        if event_prefix == MEMORY_SEARCH_TOOL_NAME:
+            return fields
+        return {"query": query, **fields}
+
     @classmethod
     def _lookup_trace_step(
         cls,
@@ -162,7 +172,7 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
             return None
         self._publish(
             f"{event_prefix}_started",
-            {"query": query, "step": step, "max_steps": budget.max_steps},
+            self._lookup_event_payload(event_prefix, query, {"step": step, "max_steps": budget.max_steps}),
         )
         return step, query
 
@@ -226,7 +236,7 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
             logger.exception(failure_log_message)
             self._publish(
                 f"{event_prefix}_failed",
-                {"query": query, "step": step, "max_steps": budget.max_steps},
+                self._lookup_event_payload(event_prefix, query, {"step": step, "max_steps": budget.max_steps}),
             )
             current_messages.append(
                 _tool_result_message(
@@ -268,7 +278,7 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
             logger.warning("%s (status=failed)", failure_log_message)
             self._publish(
                 f"{event_prefix}_failed",
-                {"query": query, "step": step, "max_steps": budget.max_steps},
+                self._lookup_event_payload(event_prefix, query, {"step": step, "max_steps": budget.max_steps}),
             )
             current_messages.append(_tool_result_message(tool_call, format_result(payload) if format_result else payload))
             if trace_steps is not None and running is not None:
@@ -277,13 +287,16 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
 
         self._publish(
             f"{event_prefix}_completed",
-            {
-                "query": query,
-                "status": status,
-                **{key: int(payload.get(key) or 0) for key in result_counts},
-                "step": step,
-                "max_steps": budget.max_steps,
-            },
+            self._lookup_event_payload(
+                event_prefix,
+                query,
+                {
+                    "status": status,
+                    **{key: int(payload.get(key) or 0) for key in result_counts},
+                    "step": step,
+                    "max_steps": budget.max_steps,
+                },
+            ),
         )
         current_messages.append(_tool_result_message(tool_call, format_result(payload) if format_result else payload))
         if trace_steps is not None and running is not None:
