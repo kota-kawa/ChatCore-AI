@@ -42,34 +42,42 @@ class ContextCandidatePromotionMigrationTestCase(unittest.TestCase):
         self.assertEqual(migration.revision, "20261120_03")
         self.assertEqual(migration.down_revision, "20261120_02")
 
-    def test_upgrade_locks_each_owner_before_counting_free_slots(self):
-        lock, move = _upgrade_statements()
+    def test_upgrade_locks_the_table_with_a_bounded_wait_before_counting_free_slots(self):
+        set_timeout, lock, move, reset_timeout = _upgrade_statements()
 
-        # 件数を数える文より前に、アプリが使うものと同じ利用者単位のロック(名前空間と user_id)を取る。
-        # The per-user lock the app uses (namespace and user_id) is taken before the statement that counts free slots.
-        self.assertIn("pg_advisory_xact_lock(1129601108, owner.user_id)", lock)
-        self.assertIn("status = 'pending'", lock)
-        self.assertNotIn("INSERT", lock)
+        # 件数を数える文より前に、context_facts を 1 回だけ表ロックする。利用者ごとの advisory lock は、承認待ちを持つ利用者の
+        # 数だけロックを持ってロック表を使い切り得るので使わない。待ち時間には上限を付け、移行の後の文へ持ち越さない。
+        # The table is locked once before the statement that counts free slots. Per-user advisory locks are not used: they
+        # hold one lock per user and can exhaust the lock table. The wait is bounded and not carried past this revision.
+        self.assertEqual(set_timeout, "SET LOCAL lock_timeout = '5s'")
+        self.assertEqual(lock, "LOCK TABLE context_facts IN SHARE ROW EXCLUSIVE MODE")
         self.assertIn("INSERT INTO context_facts", move)
+        self.assertEqual(reset_timeout, "SET LOCAL lock_timeout TO DEFAULT")
+        self.assertFalse(any("advisory" in sql for sql in (set_timeout, lock, move, reset_timeout)))
+
+    def test_pending_candidates_are_row_locked_before_facts_are_made_from_them(self):
+        _, _, move, _ = _upgrade_statements()
+
+        self.assertRegex(move, r"WITH pending AS \(.*WHERE candidate.status = 'pending' FOR UPDATE \)")
 
     def test_free_slots_use_the_app_cap_and_active_facts_only(self):
-        _, move = _upgrade_statements()
+        move = _upgrade_statements()[2]
 
         self.assertEqual(MAX_ACTIVE_CONTEXT_FACTS, 200)
         self.assertIn("ranked.position <= 200 - ( SELECT count(*) FROM context_facts AS fact", move)
         self.assertIn("fact.user_id = ranked.user_id AND fact.status = 'active'", move)
 
     def test_candidates_are_ranked_by_importance_then_confidence_then_id_per_user(self):
-        _, move = _upgrade_statements()
+        move = _upgrade_statements()[2]
 
-        self.assertIn("WHERE candidate.status = 'pending'", move)
+        self.assertIn("FROM pending AS candidate", move)
         self.assertIn(
             "PARTITION BY candidate.user_id ORDER BY candidate.importance DESC, candidate.confidence DESC, candidate.id ASC",
             move,
         )
 
     def test_moved_facts_look_like_unconfirmed_chat_saves(self):
-        _, move = _upgrade_statements()
+        move = _upgrade_statements()[2]
 
         insert = re.search(r"INSERT INTO context_facts \((.*?)\) SELECT (.*?) FROM selected", move)
         assert insert is not None
@@ -98,12 +106,13 @@ class ContextCandidatePromotionMigrationTestCase(unittest.TestCase):
         self.assertNotIn("context_fact_sources", move)
 
     def test_moved_candidates_are_linked_to_their_facts_with_the_same_ids(self):
-        _, move = _upgrade_statements()
+        move = _upgrade_statements()[2]
 
         self.assertIn("nextval(pg_get_serial_sequence('context_facts', 'id')) AS fact_id", move)
         self.assertIn(
             "UPDATE context_fact_candidates AS candidate SET status = 'approved', promoted_fact_id = selected.fact_id, "
-            "revision = candidate.revision + 1 FROM selected WHERE candidate.id = selected.candidate_id",
+            "revision = candidate.revision + 1 FROM selected WHERE candidate.id = selected.candidate_id "
+            "AND candidate.status = 'pending'",
             move,
         )
 

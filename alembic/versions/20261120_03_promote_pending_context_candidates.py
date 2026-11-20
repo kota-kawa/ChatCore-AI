@@ -17,8 +17,12 @@ Pending candidates that did not fit stay as they are: this revision is expand-on
 rejects DELETE), the new code never reads pending candidates, and the revision that drops the table removes them.
 
 # migration-review: approved-data-backfill
-Every pending candidate is read once and at most (200 - active facts) per user are inserted; context_facts is
-capped per user, so the statement stays small. Candidates are updated only to link them to the new facts.
+Every pending candidate is read once, and per user at most (200 - active facts) rows are inserted, so no user ends
+above the cap. The number of users holding pending candidates is not bounded, so the statement is one set-based
+INSERT, not a per-user loop. Candidates are updated only to link them to the new facts (status 'pending' only: one
+the older code rejected in the meantime is left alone). context_facts is locked in SHARE ROW EXCLUSIVE mode first:
+reads continue, writes wait for the commit, and the wait is bounded by lock_timeout (the revision fails and can be
+rerun rather than stalling every write behind it).
 """
 
 from collections.abc import Sequence
@@ -32,32 +36,49 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # 旧バージョンのコードは同時に動いていて、事実を足すときに利用者単位の advisory lock（第 1 キー 1129601108、第 2 キー user_id）を取る。
-    # 同じロックを取ってから件数を数えるので、空きの計算と挿入の間に旧コードが事実を足して上限を超えることがない。
-    # 旧コードは 1 トランザクションに 1 つしかロックを取らないため、ここで複数のロックを持っても循環待ちにならない。
-    # The older code color keeps running and takes the per-user advisory lock (first key 1129601108, second key
-    # user_id) when it adds facts. Taking the same lock before counting means it cannot add a fact between the free-slot
-    # count and the insert and overshoot the cap. The older code holds one lock per transaction, so holding several here
-    # cannot form a wait cycle.
-    op.execute(
-        """
-        SELECT pg_advisory_xact_lock(1129601108, owner.user_id)
-          FROM (
-              SELECT DISTINCT user_id
-                FROM context_fact_candidates
-               WHERE status = 'pending'
-          ) AS owner
-        """
-    )
+    # 旧バージョンのコードは同時に動いていて、事実を足すと有効な件数が変わる。空きの計算と挿入の間に旧コードが足すと上限を超えるので、
+    # context_facts を SHARE ROW EXCLUSIVE で表ロックし、読み取りは通したまま、書き込みはこのトランザクションの終了まで待たせる。
+    # 利用者単位の advisory lock は、承認待ちを持つ利用者の数だけロックを持つことになり、ロック表（max_locks_per_transaction ×
+    # max_connections）を使い切って失敗し得るので使わない。表ロックは 1 つで利用者数に依らない。
+    # 長いトランザクションの後ろで待ち続けると全ての書き込みが止まるため、待ち時間に上限を付ける。取れなければ revision は失敗し、
+    # 何も変わらないので、書き込みの少ない時間に再実行できる。上限は後続の文（行ロックの待ち）にも効く。
+    # 旧コードの承認・却下が候補の行を持ったまま事実の挿入を待つ場合も、この上限か PostgreSQL のデッドロック検出で失敗して再実行になる。
+    # The older code color keeps running, and adding a fact changes the active count. If it added one between the
+    # free-slot count and the insert, a user would end above the cap, so context_facts is locked in SHARE ROW EXCLUSIVE
+    # mode: reads continue and writes wait until this transaction ends. A per-user advisory lock is not used: it would
+    # hold one lock per user with pending candidates and can exhaust the lock table (max_locks_per_transaction x
+    # max_connections). One table lock does not depend on the number of users.
+    # Waiting behind a long transaction would stall every write, so the wait is bounded. If the lock cannot be taken the
+    # revision fails with nothing changed and can be rerun at a quieter time. The bound also covers row-lock waits in the
+    # later statements; an older approve or reject that holds a candidate row while waiting to insert a fact ends in
+    # this timeout or in PostgreSQL's deadlock detection, and the revision is rerun.
+    op.execute("SET LOCAL lock_timeout = '5s'")
+    op.execute("LOCK TABLE context_facts IN SHARE ROW EXCLUSIVE MODE")
 
     # 空きは利用者ごとに 200（アプリの上限 MAX_ACTIVE_CONTEXT_FACTS）から有効な事実の数を引いた数。位置が空き以下の候補を移す。
+    # 候補は先に FOR UPDATE で行ロックして取り、旧コードが同時に却下・承認した候補（行ロックの再評価で外れる）から事実を作らない。
     # 事実の id は先に nextval で決め、同じ値で候補の promoted_fact_id を埋める。nextval は位置で絞った後の行にだけ評価される。
     # The free slots per user are 200 (the app's MAX_ACTIVE_CONTEXT_FACTS) minus the active facts; candidates whose position
-    # is within it move. Fact ids are drawn with nextval first so the same value fills promoted_fact_id. nextval is
-    # evaluated only for the rows that survive the position filter.
+    # is within it move. Candidates are first read with FOR UPDATE row locks, so a candidate the older code rejects or approves
+    # meanwhile (dropped by the lock's re-check) never produces a fact. Fact ids are drawn with nextval first so the same
+    # value fills promoted_fact_id. nextval is evaluated only for the rows that survive the position filter.
     op.execute(
         """
-        WITH ranked AS (
+        WITH pending AS (
+            SELECT candidate.id,
+                   candidate.user_id,
+                   candidate.fact_type,
+                   candidate.title,
+                   candidate.content,
+                   candidate.source_ref,
+                   candidate.importance,
+                   candidate.confidence,
+                   candidate.created_at
+              FROM context_fact_candidates AS candidate
+             WHERE candidate.status = 'pending'
+               FOR UPDATE
+        ),
+        ranked AS (
             SELECT candidate.id,
                    candidate.user_id,
                    candidate.fact_type,
@@ -71,8 +92,7 @@ def upgrade() -> None:
                        PARTITION BY candidate.user_id
                        ORDER BY candidate.importance DESC, candidate.confidence DESC, candidate.id ASC
                    ) AS position
-              FROM context_fact_candidates AS candidate
-             WHERE candidate.status = 'pending'
+              FROM pending AS candidate
         ),
         selected AS (
             SELECT ranked.id AS candidate_id,
@@ -109,8 +129,12 @@ def upgrade() -> None:
                revision = candidate.revision + 1
           FROM selected
          WHERE candidate.id = selected.candidate_id
+           AND candidate.status = 'pending'
         """
     )
+    # この revision のあとに同じトランザクションで走る文へ、短い待ち時間を引き継がない。
+    # Do not carry the short wait limit into statements that run after this revision in the same transaction.
+    op.execute("SET LOCAL lock_timeout TO DEFAULT")
 
 
 def downgrade() -> None:
