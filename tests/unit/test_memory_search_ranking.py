@@ -173,8 +173,10 @@ class WordMatchCoverageTestCase(unittest.TestCase):
         self.assertEqual(WORD_MATCH_MIN_COVERAGE, 0.3)
 
     def test_a_single_shared_bigram_is_not_a_word_match(self):
-        # 「フォーマット」と「コミットメッセージ」が共有するのは「ット」だけ（「フォーマット」の証拠のトークン 4 個のうち 1 個 = 25%。長音は索引で落ちる）。
-        # フォーマット and コミットメッセージ share only "ット" (1 of 5 evidence tokens).
+        # 「フォーマット」と「コミットメッセージ」が共有するのは「ット」だけ。「フォーマット」の証拠のトークンは 4 個
+        # （長音は索引で落ちる）なので、1 個の一致は 25%。
+        # フォーマット and コミットメッセージ share only "ット": 1 of the 4 evidence tokens of フォーマット (the long-vowel
+        # mark is dropped by the index), which is 25%.
         rows = _custom_rows(self.COMMIT, self.REPORT)
 
         self.assertEqual(_ids(rows, "週報 フォーマット"), [2])
