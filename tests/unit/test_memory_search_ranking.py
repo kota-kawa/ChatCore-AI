@@ -110,6 +110,25 @@ class FloorTestCase(unittest.TestCase):
         self.assertEqual(_ids(_rows(), "の は が"), [])
         self.assertEqual(_ids(_rows(), "s"), [])
 
+    def test_one_shared_character_is_not_a_word_match_when_the_query_has_a_pair(self):
+        # 「犬の名前」の「前」は「以前」の「前」と一致するが、関係はない。2 文字連続（犬の・名前）が合う記憶だけが語の一致になる。
+        # The 前 of 犬の名前 matches the 前 of 以前, which means nothing: only a memory sharing a pair (犬の, 名前) is a word match.
+        rows = _rows()
+        rows[4]["content"] = "以前は株式会社サンプルに勤務。"
+
+        self.assertEqual(_ids(rows, "犬の名前"), [4])
+        self.assertNotIn(5, _ids(rows, "犬の名前"))
+        self.assertEqual(_ids(_rows(), "今日の食べ物は何がいい"), [2])
+
+    def test_a_query_too_short_to_make_a_pair_still_matches_by_its_single_kanji(self):
+        self.assertEqual(_ids(_rows(), "犬"), [4])
+        self.assertEqual(_ids(_rows(), "犬 猫"), [4])
+
+    def test_a_digit_counts_as_a_word_even_alone(self):
+        rows = [{**_rows()[0], "id": 51, "title": "年数", "content": "勤続 5 年"}, {**_rows()[0], "id": 52, "content": "別の話"}]
+
+        self.assertEqual(_ids(rows, "5"), [51])
+
     def test_an_empty_query_or_no_memory_gives_nothing(self):
         self.assertEqual(_ids(_rows(), ""), [])
         self.assertEqual(_ids([], "犬"), [])

@@ -55,24 +55,43 @@ RECENCY_HALF_LIFE_DAYS = 180.0
 _SECONDS_PER_DAY = 86_400.0
 
 
-def _is_uninformative_single_character(token: str) -> bool:
-    """ひらがな・カタカナ 1 文字と英字 1 文字は、どの文にも現れて語の一致の証拠にならない。
+def _is_kana(token: str) -> bool:
+    return "\u3040" <= token <= "\u30ff"
 
-    A single kana or a single Latin letter appears in nearly any sentence and is no evidence of a word match.
-    """
+
+def _is_word_match_evidence(token: str, *, word_has_pair: bool) -> bool:
     if len(token) != 1:
-        return False
-    return "\u3040" <= token <= "\u30ff" or "a" <= token <= "z"
+        return True
+    if token.isascii():
+        return token.isdigit()
+    return not _is_kana(token) and not word_has_pair
 
 
 def _query_terms(query: str) -> list[str]:
-    # 検索語のトークンを重複なしで、出現順に返す。
-    # The query's distinct tokens in order of first appearance.
-    seen: dict[str, None] = {}
-    for token in tokenize_bm25(query):
-        if not _is_uninformative_single_character(token):
-            seen.setdefault(token, None)
-    return list(seen)
+    """検索語のトークンのうち、語の一致の証拠にしてよいものを、重複なしで出現順に返す。空白で区切った語ごとに判定する。
+
+    1 文字のトークンは、どの文にも現れるので原則として証拠にしない。英字 1 文字（"s" など）とかな 1 文字は常に除く。
+    漢字 1 文字は、その語に 2 文字連続（bigram）が 1 つでもあれば除く（「犬の名前」の「前」が「以前」と一致しても関係はない）。
+    「犬」のように 2 文字連続が作れない短い語のときだけ、漢字 1 文字も使う。数字は 1 文字でも使う。
+    空白で区切るのは、tokenize_bm25 が空白をまたいで文字を連結し、別々のキーワード（「犬 猫」）から偽の 2 文字連続を作るため。
+
+    The query's tokens that may count as word-match evidence, distinct and in order of first appearance, judged per
+    whitespace-separated word.
+
+    A single-character token appears in nearly any sentence, so it is not evidence by default. A single Latin letter ("s") and a
+    single kana are always dropped. A single kanji is dropped when its word has any two-character pair (the 前 of 犬の名前 matching
+    the 前 of 以前 means nothing); it is used only when the word is too short to make a pair, such as 犬. A digit counts even alone.
+    Words are split on whitespace because tokenize_bm25 joins characters across whitespace and would make a false pair out of
+    separate keywords such as "犬 猫".
+    """
+    terms: dict[str, None] = {}
+    for word in str(query or "").split():
+        tokens = list(dict.fromkeys(tokenize_bm25(word)))
+        has_pair = any(len(token) == 2 and not token.isascii() for token in tokens)
+        for token in tokens:
+            if _is_word_match_evidence(token, word_has_pair=has_pair):
+                terms.setdefault(token, None)
+    return list(terms)
 
 
 def _document_tokens(fact: Mapping[str, Any]) -> list[str]:
