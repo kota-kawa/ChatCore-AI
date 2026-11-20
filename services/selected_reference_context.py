@@ -52,6 +52,10 @@ MAX_SELECTED_REFERENCE_FAILURE_RETRIES = 1
 _WHITESPACE_PATTERN = re.compile(r"\s+")
 
 PERSONAL_KNOWLEDGE_SOURCE = "personal_knowledge_search"
+# 事前に選ばれる参照元ではなく、モデルが呼ぶ記憶の検索ツール（services/memory_search.py）の識別子。回答までのステップと根拠の種類で使う。
+# Not a source the user selects beforehand: the identifier of the memory_search tool the model calls (services/memory_search.py),
+# used for the answer-step trace and the evidence type.
+MEMORY_SEARCH_SOURCE = "memory_search"
 PERSONAL_OVERVIEW_TAG = "personal_overview_result"
 SHARED_PROMPT_SOURCE = "shared_prompt_search"
 _SOURCE_LABELS = {
@@ -182,7 +186,7 @@ class CandidateQueryPlan:
                     return
 
 
-def _safe_json(payload: dict[str, Any]) -> str:
+def safe_json(payload: dict[str, Any]) -> str:
     # 日本語: メモやプロンプトの本文は利用者が書くので、& < > をエスケープし、system 側の区切りタグを偽装できないようにする。
     # English: System-level delimiters must not be forgeable by user-authored memo/prompt bodies.
     return (
@@ -469,7 +473,7 @@ def _build_overview_block(overview: dict[str, Any]) -> tuple[str, dict[str, Any]
     payload = {"status": "overview", **overview}
     return (
         f'<{PERSONAL_OVERVIEW_TAG} encoding="json">'
-        f"{_safe_json(payload)}"
+        f"{safe_json(payload)}"
         f"</{PERSONAL_OVERVIEW_TAG}>",
         payload,
     )
@@ -586,7 +590,7 @@ def augment_messages_with_selected_references(
 
     result_blocks = [
         f'<{_SOURCE_RESULT_TAGS[source]} encoding="json">'
-        f"{_safe_json(payload)}"
+        f"{safe_json(payload)}"
         f"</{_SOURCE_RESULT_TAGS[source]}>"
         for (source, _), payload in zip(lookups, payloads, strict=True)
     ]
@@ -672,7 +676,7 @@ async def augment_messages_with_selected_references_async(
 
     result_blocks = [
         f'<{_SOURCE_RESULT_TAGS[source]} encoding="json">'
-        f"{_safe_json(payload)}"
+        f"{safe_json(payload)}"
         f"</{_SOURCE_RESULT_TAGS[source]}>"
         for (source, _), payload in zip(lookups, payloads, strict=True)
     ]

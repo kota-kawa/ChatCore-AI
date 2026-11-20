@@ -232,6 +232,7 @@ class StartGenerationJob(Protocol):
         pasted_url_pages: Sequence[PastedUrlPage] = (),
         earlier_pasted_urls: Sequence[str] = (),
         personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
+        memory_search: Callable[[str], dict[str, Any]] | None = None,
         shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
         selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
         ui_mode: GenerativeUiMode | str | None = None,
@@ -379,6 +380,7 @@ class ChatPostGenerationDependencies:
     select_chat_skills: SelectChatSkills
     is_retryable_llm_error: Callable[[BaseException], bool]
     search_personal_knowledge: Callable[[int, str], Awaitable[dict[str, Any]]]
+    search_memory: Callable[[int, str], Awaitable[dict[str, Any]]]
     search_shared_prompts: Callable[[str], Awaitable[dict[str, Any]]]
 
 

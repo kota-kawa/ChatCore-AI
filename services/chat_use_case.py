@@ -96,10 +96,10 @@ from services.selected_reference_context import (
     SelectedReferenceLookupTrace,
     augment_messages_with_selected_references_async,
 )
-from services.selected_reference_sources import DeduplicatedLookup, build_selected_reference_searchers
+from services.selected_reference_sources import DeduplicatedLookup, build_memory_searcher, build_selected_reference_searchers
 from services.structured_ui_citations import resolve_message_part_citations
 from services.usage_limits import usage_limit_message
-from services.user_memory import UserMemorySummary, is_memory_use_enabled
+from services.user_memory import UserMemorySummary, should_use_user_memory
 from services.user_skills import ChatSkillsContext, build_chat_skills_context
 from services.web_search import (
     WebSearchResult,
@@ -212,9 +212,11 @@ class _ChatPostTurn:
     prompt_tools_enabled: bool = False
     project_instructions: str | None = None
     room_summary: str = ""
-    # 日本語: ユーザー行が読めて記憶の利用の設定が有効か。読めないときは使わない側（False）に倒す。
-    # English: Whether the user row was read and memory use is on; an unreadable row counts as off.
-    memory_use_enabled: bool = False
+    # 日本語: このターンで記憶を読んでよいか（ログイン中・通常ルーム・設定が有効。services/user_memory.py の should_use_user_memory）。
+    # `<user_memory>` と記憶の検索ツールが同じ値を使う。ユーザー行が読めないときは使わない側（False）に倒す。
+    # English: Whether this turn may read memory (signed in, normal room, setting on: should_use_user_memory in
+    # services/user_memory.py). `<user_memory>` and the memory search tool use this one value. An unreadable user row counts as off.
+    uses_user_memory: bool = False
     # 日本語: このターンの文脈へ入れる記憶のまとめ。入れないターンは None。
     # English: The memory summary put into this turn's context; None when none is.
     user_memory: UserMemorySummary | None = None
@@ -240,6 +242,9 @@ class _ChatPostTurn:
     generation_key: str = ""
     personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None
     shared_prompt_search: Callable[[str], dict[str, Any]] | None = None
+    # 日本語: モデルが呼ぶ記憶の検索ツール。記憶を読んでよいターンだけ。「＋→メモ」のトグルとは無関係。
+    # English: The model-called memory search tool, set only on a turn that may read memory; independent of the "+ -> Memo" toggle.
+    memory_search: Callable[[str], dict[str, Any]] | None = None
     selected_reference_trace: list[SelectedReferenceLookupTrace] = field(default_factory=list)
     ui_metrics: list[dict[str, Any]] = field(default_factory=list)
     ui_mode: GenerativeUiMode | None = None
@@ -758,7 +763,8 @@ class ChatPostUseCase:
                 turn.user_profile_prompt = deps.prompts.build_user_profile_prompt(user)
             except Exception:
                 deps.logger.warning("Failed to load user profile context; proceeding without it.")
-            turn.memory_use_enabled = is_memory_use_enabled(user)
+
+        turn.uses_user_memory = should_use_user_memory(user_id=turn.user_id, room_mode=turn.room_mode, user=user)
 
         skills_context = build_chat_skills_context(
             enabled_user_skills,
@@ -802,7 +808,7 @@ class ChatPostUseCase:
         """
         deps = self.deps
 
-        if turn.user_id is None or not turn.targets_normal_room() or not turn.memory_use_enabled:
+        if turn.user_id is None or not turn.uses_user_memory:
             return
         try:
             turn.user_memory = await _maybe_await(deps.persistence.load_user_memory_summary(turn.user_id))
@@ -946,6 +952,13 @@ class ChatPostUseCase:
         )
         turn.personal_knowledge_search = selected_references.personal_knowledge
         turn.shared_prompt_search = selected_references.shared_prompt
+        # 記憶の検索ツールは「＋→メモ」のトグルに関係なく、記憶を読んでよいターンで毎回渡す。事前の検索はしない。
+        # The memory search tool is offered every turn that may read memory, regardless of the "+ -> Memo" toggle. Nothing is prefetched.
+        turn.memory_search = build_memory_searcher(
+            user_id=turn.user_id,
+            memory_enabled=turn.uses_user_memory,
+            search_memory=deps.generation.search_memory,
+        )
         turn.selected_reference_trace = []
         turn.conversation_messages = await augment_messages_with_selected_references_async(
             turn.conversation_messages,
@@ -1050,6 +1063,7 @@ class ChatPostUseCase:
                 earlier_pasted_urls=turn.earlier_pasted_urls,
                 personal_knowledge_search=turn.personal_knowledge_search,
                 shared_prompt_search=turn.shared_prompt_search,
+                memory_search=turn.memory_search,
                 selected_reference_trace=turn.selected_reference_trace,
                 ui_mode=turn.ui_mode,
                 explicit_ui_opt_out=turn.explicit_ui_opt_out,

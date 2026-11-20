@@ -95,7 +95,7 @@ class ChatSkillSelectionIntegrationTests(unittest.TestCase):
             get_room_web_search_contexts=AsyncMock(return_value=[]),
             consume_llm_daily_quota=Mock(return_value=(True, 1, 300)), check_usage_limit=AsyncMock(return_value=None),
             is_streaming_model=Mock(return_value=streaming),
-            search_personal_knowledge=AsyncMock(), search_shared_prompts=AsyncMock(),
+            search_personal_knowledge=AsyncMock(), search_memory=AsyncMock(), search_shared_prompts=AsyncMock(),
             get_llm_response=Mock(return_value="answer"), save_message_to_db=AsyncMock(return_value=1),
             get_chat_room_messages=AsyncMock(return_value=[]), rebuild_room_summary=AsyncMock(),
             cleanup_unanswered_user_messages=AsyncMock(),

@@ -22,7 +22,7 @@ from .chat_workspace_tools.prompts import (
     SHARED_PROMPT_READ_TOOL_NAME,
 )
 from .memory_trust import contains_non_owner_unconfirmed_memory
-from .selected_reference_context import PERSONAL_KNOWLEDGE_SOURCE
+from .selected_reference_context import MEMORY_SEARCH_SOURCE, PERSONAL_KNOWLEDGE_SOURCE
 from .shared_prompt_lookup import SHARED_PROMPT_TOOL_NAME
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ _EXTERNAL_CONTENT_TOOL_NAMES = frozenset(
 # reading external content. prompts covers the user's own Task/Skill listings; shared_prompts
 # (public posts) is deliberately excluded.
 _OWN_DATA_EVIDENCE_TYPES = frozenset(
-    {"memo", PERSONAL_KNOWLEDGE_SOURCE, PROMPTS_TOOL_FAMILY, PROFILE_TOOL_FAMILY}
+    {"memo", PERSONAL_KNOWLEDGE_SOURCE, MEMORY_SEARCH_SOURCE, PROMPTS_TOOL_FAMILY, PROFILE_TOOL_FAMILY}
 )
 
 

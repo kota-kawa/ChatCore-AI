@@ -150,6 +150,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             check_usage_limit=AsyncMock(return_value=None),
             is_streaming_model=Mock(return_value=False),
             search_personal_knowledge=Mock(return_value={"status": "no_results"}),
+            search_memory=Mock(return_value={"status": "no_results"}),
             search_shared_prompts=Mock(return_value={"status": "no_results"}),
             start_generation_job=Mock(),
             build_llm_stream_response=Mock(),

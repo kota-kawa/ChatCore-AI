@@ -6,12 +6,53 @@ suppressing duplicate queries, binding to the user, and handling sources unavail
 """
 
 import unittest
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 from services.selected_reference_sources import (
     DeduplicatedLookup,
     build_selected_reference_searchers,
 )
+
+
+# 日本語: 非同期の検索（本番の DB 検索）でも同じクエリを止められることを検証するテストクラス。
+# 以前は結果が awaitable のまま記録されず、止まらなかった。
+# English: Verifies repeated queries are stopped for an async search (the production database lookups) too. The result used to stay an
+# awaitable and was never recorded, so nothing was stopped.
+class AsyncDeduplicatedLookupTestCase(unittest.IsolatedAsyncioTestCase):
+    async def test_repeated_query_is_not_forwarded_to_an_async_search(self):
+        search = AsyncMock(return_value={"status": "ok", "memory_count": 1})
+        lookup = DeduplicatedLookup(search, source_label="memory")
+
+        first = await lookup("犬の名前")
+        second = lookup("  犬の名前 ")
+
+        search.assert_awaited_once_with("犬の名前")
+        self.assertEqual(first["status"], "ok")
+        self.assertEqual(second["status"], "already_searched")
+
+    async def test_a_failed_or_raising_async_query_can_be_retried(self):
+        search = AsyncMock(side_effect=[{"status": "failed"}, RuntimeError("boom"), {"status": "ok"}])
+        lookup = DeduplicatedLookup(search, source_label="memory")
+
+        self.assertEqual((await lookup("犬"))["status"], "failed")
+        with self.assertRaises(RuntimeError):
+            await lookup("犬")
+        self.assertEqual((await lookup("犬"))["status"], "ok")
+        self.assertEqual(search.await_count, 3)
+
+    async def test_the_query_is_recorded_only_once_the_result_is_in(self):
+        search = AsyncMock(return_value={"status": "ok"})
+        lookup = DeduplicatedLookup(search, source_label="memory")
+
+        pending = lookup("犬")
+        concurrent = lookup("犬")
+        # まだ結果が出ていないので、同じクエリでも「検索済み」にはならない（どちらも検索する）。
+        # No result yet, so the same query is not reported as already searched (both search).
+        await pending
+        await concurrent
+
+        self.assertEqual(search.await_count, 2)
+        self.assertEqual(lookup("犬")["status"], "already_searched")
 
 
 # 日本語: 同じクエリを再送せず、失敗したクエリだけ再試行できることを検証するテストクラス。

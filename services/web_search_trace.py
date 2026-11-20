@@ -24,6 +24,7 @@ from .answer_trace import (
     normalize_answer_trace,
 )
 from .selected_reference_context import (
+    MEMORY_SEARCH_SOURCE,
     PERSONAL_KNOWLEDGE_SOURCE,
     SelectedReferenceLookupTrace,
 )
@@ -257,6 +258,7 @@ def review_step(result: WebSearchResult | None, *, reused: bool = False) -> Trac
 # 実行中のステップと結果のステップは同じ題名を使う。同じ ID のまま状態だけが変わったように見せるため。
 # A running step and its result share one title, so the step appears to change only its status under the same id.
 _PERSONAL_KNOWLEDGE_STEP_TITLE = "メモと記憶を検索"
+_MEMORY_STEP_TITLE = "記憶を検索"
 _SHARED_PROMPT_STEP_TITLE = "共有プロンプトを検索"
 _KNOWN_PAGE_READ_STEP_TITLE = "参照先のページ本文を確認"
 # 打ち切られて実行中のまま残ったステップに付ける説明。
@@ -284,6 +286,11 @@ def running_search_step(query: str, *, additional: bool = False) -> TraceStep:
 def running_reference_step(source: str, query: str) -> TraceStep:
     # メモ／記憶、または共有プロンプトを検索している間のステップ
     # The step shown while memos/Memory or shared prompts are being searched.
+    if source == MEMORY_SEARCH_SOURCE:
+        # 記憶の検索では、モデルが記憶の内容から作った検索語になりうるので、検索語を載せない（共有リンクやルームの複製にも残るため）。
+        # The model's memory query can be built from memory content, so it is not shown
+        # (the step also survives in shared links and room copies).
+        return running_step(_MEMORY_STEP_TITLE, "保存済みの記憶を検索しています。", kind="knowledge")
     if source == PERSONAL_KNOWLEDGE_SOURCE:
         return running_step(
             _PERSONAL_KNOWLEDGE_STEP_TITLE, "保存済みのメモと記憶を検索しています。", kind="knowledge", query=query
@@ -410,7 +417,20 @@ def selected_reference_step(
             ),
         )
 
-    if source == PERSONAL_KNOWLEDGE_SOURCE:
+    if source == MEMORY_SEARCH_SOURCE:
+        # 記憶の検索は、件数とラベルだけを残す。検索語も記憶の文面も載せない。
+        # The memory step keeps only the count and a label: neither the query nor any memory text.
+        total = int(payload.get("memory_count") or 0)
+        resolved_query = ""
+        title = _MEMORY_STEP_TITLE
+        kind = "knowledge"
+        chips = (f"記憶 {total}件",) if total else ()
+        success_detail = (
+            f"保存済みの記憶から、回答に関連するものを{total}件読み込みました。"
+            if total
+            else "保存済みの記憶を検索しましたが、該当するものはありませんでした。"
+        )
+    elif source == PERSONAL_KNOWLEDGE_SOURCE:
         memo_count = int(payload.get("memo_count") or 0)
         fact_count = int(payload.get("context_fact_count") or 0)
         total = memo_count + fact_count
@@ -542,7 +562,8 @@ def _summary_detail(steps: Sequence[TraceStep], source_total: int) -> str:
     search_count = sum(1 for step in steps if step.kind in {"search", "reuse"})
     read_count = sum(1 for step in steps if step.kind == "read")
     follow_count = sum(1 for step in steps if step.kind == "follow")
-    knowledge_count = sum(1 for step in steps if step.kind == "knowledge")
+    memory_count = sum(1 for step in steps if step.kind == "knowledge" and step.title == _MEMORY_STEP_TITLE)
+    knowledge_count = sum(1 for step in steps if step.kind == "knowledge") - memory_count
     prompt_count = sum(1 for step in steps if step.kind == "prompt")
     parts: list[str] = []
     if search_count:
@@ -555,6 +576,8 @@ def _summary_detail(steps: Sequence[TraceStep], source_total: int) -> str:
         parts.append("リンク深掘りあり")
     if knowledge_count:
         parts.append("メモ検索あり")
+    if memory_count:
+        parts.append("記憶検索あり")
     if prompt_count:
         parts.append("共有プロンプト検索あり")
     return " · ".join(parts)

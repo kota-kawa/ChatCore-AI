@@ -132,6 +132,7 @@ from services.llm_daily_limit import (
     get_llm_daily_limit_service,
     get_seconds_until_daily_reset,
 )
+from services.memory_search import search_memory_for_tool
 from services.personal_knowledge import search_personal_knowledge_for_tool
 from services.shared_prompt_lookup import search_shared_prompts_for_tool
 from services.usage_limits import check_usage_limit
@@ -753,6 +754,7 @@ def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
                 select_chat_skills=select_chat_skills,
                 is_retryable_llm_error=is_retryable_llm_error,
                 search_personal_knowledge=search_personal_knowledge_for_tool,
+                search_memory=search_memory_for_tool,
                 search_shared_prompts=search_shared_prompts_for_tool,
             ),
             background=ChatPostBackgroundDependencies(
@@ -839,6 +841,7 @@ def _build_regeneration_dependencies() -> ChatRegenerationDependencies:
         check_usage_limit=check_usage_limit,
         is_streaming_model=is_streaming_model,
         search_personal_knowledge=search_personal_knowledge_for_tool,
+        search_memory=search_memory_for_tool,
         search_shared_prompts=search_shared_prompts_for_tool,
         get_llm_response=get_llm_response,
         save_message_to_db=save_message_to_db,

@@ -131,6 +131,7 @@ class ChatGenerationJobBase:
         earlier_pasted_urls: Sequence[str] = (),
         is_cancel_requested: Callable[[], bool] | None = None,
         personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
+        memory_search: Callable[[str], dict[str, Any]] | None = None,
         shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
         selected_reference_trace: list[SelectedReferenceLookupTrace] | None = None,
         ui_mode: GenerativeUiMode | str | None = None,
@@ -171,6 +172,11 @@ class ChatGenerationJobBase:
         # Memo / My Context lookup. The caller passes a closure already bound to a user id, so the
         # job stays free of session and database concerns. None means the feature is off.
         self._personal_knowledge_search = personal_knowledge_search
+        # 記憶の検索。呼び出し側が記憶を読んでよいと判断したターン（services/user_memory.py の should_use_user_memory）だけ受け取る。
+        # ユーザーIDに束ねたクロージャで、None のときはツールそのものを出さない。
+        # Memory lookup, received only on a turn the caller judged may read memory (should_use_user_memory in
+        # services/user_memory.py). A closure bound to a user id; None means the tool is not offered at all.
+        self._memory_search = memory_search
         # 公開プロンプト検索。公開データなので未ログインでも渡せる。None のときは無効。
         # Public prompt lookup. The data is public, so guests can have it too; None means off.
         self._shared_prompt_search = shared_prompt_search
