@@ -282,19 +282,20 @@ class ContextFactCandidateRepository:
     # 選択と無効化は 1 文で行い、対象の条件を更新側にも繰り返す。選んだ後に本人が編集した行は条件に合わなくなり、無効化されない。
     # 選ぶ側は FOR UPDATE SKIP LOCKED で、別のトランザクションが編集中（未コミット）の行を飛ばして次の候補を選ぶ。飛ばさないと、
     # 編集の確定後に更新が 0 行になり、ほかに入れ替えられる事実があっても新しい内容を捨ててしまう。
-    # English: At the cap, deprecate one active fact that was auto-saved and never touched by the owner, record reason capacity,
-    # and return whether one was replaced. Only facts with source_kind chat, a NULL last_confirmed_at and no update at all
+    # English: At the cap, deprecate one active fact that was auto-saved and never touched by the owner, record reason capacity, and
+    # return whether one was replaced. Only facts with source_kind chat, a NULL last_confirmed_at and no update at all
     # (revision still at its initial 1) qualify (the owner's manual, edited and approved facts, MCP and imports are never
     # removed). Restoring, changing importance and deprecating leave last_confirmed_at alone (ADR 0016) but advance the
-    # revision, so a fact the owner touched drops out here; storing an embedding does not advance it. The fact last mentioned longest ago goes first,
-    # then the lower importance, then the smaller id. Last mention is the newest context_fact_sources.observed_at, or created_at
-    # when there is no source. observed_at is timestamptz while created_at is timezone-less, so created_at is cast to timestamptz
-    # explicitly: it was stored as the session-timezone wall clock of CURRENT_TIMESTAMP, and the cast reads it back in the same
-    # zone, so the comparison does not rely on an implicit conversion. Choosing and deprecating happen in one statement and the
-    # eligibility is repeated on the update, so a fact the owner edits in between is no longer eligible and is left alone.
-    # The choosing side uses FOR UPDATE SKIP LOCKED, so a row another transaction is editing (uncommitted) is skipped and the
-    # next candidate is chosen; otherwise the update would hit zero rows once the edit commits and the new content would be
-    # dropped even though other facts could be replaced.
+    # revision, so a fact the owner touched drops out here; storing an embedding does not advance it. The fact last
+    # mentioned longest ago goes first, then the lower importance, then the smaller id. Last mention is the newest
+    # context_fact_sources.observed_at, or created_at when there is no source. observed_at is timestamptz while created_at
+    # is timezone-less, so created_at is cast to timestamptz explicitly: it was stored as the session-timezone wall clock of
+    # CURRENT_TIMESTAMP, and the cast reads it back in the same zone, so the comparison does not rely on an implicit
+    # conversion. Choosing and deprecating happen in one statement and the eligibility is repeated on the update, so a fact
+    # the owner edits in between is no longer eligible and is left alone. The choosing side uses FOR UPDATE SKIP LOCKED, so
+    # a row another transaction is editing (uncommitted) is skipped and the next candidate is chosen; otherwise the update
+    # would hit zero rows once the edit commits and the new content would be dropped even though other facts could be
+    # replaced.
     async def _deprecate_replaceable_fact(self, user_id: int, protected_fact_ids: set[int]) -> bool:
         replaceable = aliased(ContextFact)
 
