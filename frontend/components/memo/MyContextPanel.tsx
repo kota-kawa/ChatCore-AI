@@ -28,6 +28,10 @@ import {
   type ContextExtractionApi,
 } from "./ContextExtractionSetting";
 import {
+  ContextMemoryUseSetting,
+  type ContextMemoryUseApi,
+} from "./ContextMemoryUseSetting";
+import {
   ContextPortabilityModal,
   type ContextPortabilityApi,
 } from "./ContextPortabilityModal";
@@ -46,6 +50,7 @@ type MyContextPanelProps = {
   isLoggedIn: boolean;
   api?: Partial<ContextApi>;
   extractionApi?: Partial<ContextExtractionApi>;
+  memoryUseApi?: Partial<ContextMemoryUseApi>;
   portabilityApi?: Partial<ContextPortabilityApi>;
 };
 
@@ -73,12 +78,13 @@ const EMPTY_EDITOR: EditorState = {
   content: "",
 };
 
-// 事実の一覧（状態・種類で絞り込み、カーソルで続きを読み込む）と、追加・編集モーダル、自動保存の設定を束ねる。
-// Combines the fact list (filtered by status and type, with cursor-based "load more"), the add/edit modal, and the auto-save setting.
+// 事実の一覧（状態・種類で絞り込み、カーソルで続きを読み込む）と、追加・編集モーダル、自動保存と回答への利用の設定を束ねる。
+// Combines the fact list (filtered by status and type, with cursor-based "load more"), the add/edit modal, and the auto-save and use-in-answers settings.
 export function MyContextPanel({
   isLoggedIn,
   api,
   extractionApi,
+  memoryUseApi,
   portabilityApi,
 }: MyContextPanelProps) {
   const { t } = useTranslation();
@@ -315,7 +321,10 @@ export function MyContextPanel({
         api={portabilityApi}
       />
 
-      <ContextExtractionSetting api={extractionApi} />
+      <div className="memo-context-settings">
+        <ContextExtractionSetting api={extractionApi} />
+        <ContextMemoryUseSetting api={memoryUseApi} />
+      </div>
 
       <div className="memo-context__filters">
         <MemoSelect
