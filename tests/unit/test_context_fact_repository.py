@@ -286,6 +286,62 @@ class ContextFactConfirmationTestCase(unittest.IsolatedAsyncioTestCase):
         )
         self.assertNotIn("last_confirmed_at", _sql(session.execute.await_args.args[0]))
 
+    # 日本語: 更新で実行された SQL を、更新文(最後)の前から順に返します。
+    # English: Return the SQL a content update executed, in order, with the UPDATE last.
+    async def _update_statements(self, **kwargs):
+        session = MagicMock()
+        session.execute = AsyncMock(return_value=_result(mapping=_fact_row(revision=2)))
+        await ContextFactRepository(session).update_fact(7, 10, expected_revision=1, **kwargs)
+        return [call.args[0] for call in session.execute.await_args_list]
+
+    async def test_content_edit_deletes_the_fact_sources_before_the_update(self):
+        for kwargs in ({"content": "New"}, {"title": "New"}, {"fact_type": "profile"}, {"content": "New", "confirmed_by_owner": True}):
+            with self.subTest(kwargs=kwargs):
+                statements = await self._update_statements(**kwargs)
+
+                self.assertEqual(len(statements), 2)
+                delete_sql = _sql(statements[0])
+                self.assertTrue(delete_sql.startswith("DELETE FROM context_fact_sources WHERE"))
+                self.assertIn("context_fact_sources.fact_id =", delete_sql)
+                # 更新と同じ所有者・revision・「実際に変わった」条件のときだけ消す。
+                # Deleted only under the update's own owner, revision and "actually changed" condition.
+                self.assertIn("context_facts.user_id =", delete_sql)
+                self.assertIn("context_facts.revision =", delete_sql)
+                self.assertIn("IS DISTINCT FROM", delete_sql)
+                self.assertTrue(_sql(statements[1]).startswith("UPDATE context_facts"))
+
+    async def test_edits_that_do_not_change_the_wording_keep_the_fact_sources(self):
+        for kwargs in (
+            {"importance": 90},
+            {"status": "deprecated"},
+            {"importance": 90, "confirmed_by_owner": True},
+        ):
+            with self.subTest(kwargs=kwargs):
+                statements = await self._update_statements(**kwargs)
+
+                self.assertEqual(len(statements), 1)
+                self.assertNotIn("context_fact_sources", _sql(statements[0]))
+
+        session = MagicMock()
+        session.execute = AsyncMock()
+        await ContextFactRepository(session).store_embedding(10, [0.1, 0.2], expected_revision=1)
+        self.assertNotIn("context_fact_sources", _sql(session.execute.await_args.args[0]))
+
+    async def test_mcp_content_edit_marks_the_fact_as_mcp_sourced(self):
+        sql, params = await self._update(content="New")
+
+        self.assertIn("source_kind=CASEWHEN(context_facts.contentISDISTINCTFROM", sql.replace(" ", ""))
+        self.assertIn("mcp", params.values())
+        self.assertIn("ELSEcontext_facts.source_kindEND", sql.replace(" ", ""))
+
+    async def test_owner_edit_and_non_content_edits_keep_the_source_kind(self):
+        for kwargs in ({"content": "New", "confirmed_by_owner": True}, {"importance": 90}, {"status": "deprecated"}):
+            with self.subTest(kwargs=kwargs):
+                sql, params = await self._update(**kwargs)
+
+                self.assertNotIn("source_kind", sql)
+                self.assertNotIn("mcp", params.values())
+
     async def test_store_embedding_leaves_confirmation_alone(self):
         session = MagicMock()
         session.execute = AsyncMock()
