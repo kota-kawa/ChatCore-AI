@@ -153,8 +153,12 @@ describe("MyContextPanel replacement history", () => {
 
     const replaced = screen.getByText("旧住所").closest("article") as HTMLElement;
     expect(replaced).toHaveTextContent("新しい記憶に置き換え済み：新住所");
+    // 復元すると新しい記憶と両方が有効になる（片方が無効化されるわけではない）ことを、復元の前に伝える。
+    // It says before restoring that both this and the newer memory become active (neither is deactivated).
+    expect(replaced).toHaveTextContent("「復元」すると、新しい記憶と両方が有効になります。");
     expect(within(replaced).getByRole("button", { name: "復元" })).toBeInTheDocument();
     expect(screen.getByText("消された置き換え先").closest("article")).toHaveTextContent("新しい記憶に置き換え済み（置き換えた記憶は削除されました）");
+    expect(screen.getByText("消された置き換え先").closest("article")).not.toHaveTextContent("両方が有効");
     expect(screen.getByText("上限で外れた").closest("article")).toHaveTextContent("上限のため自動で無効化");
     expect(screen.getByText("上限で外れた").closest("article")).not.toHaveTextContent("置き換え済み");
     expect(screen.getByText("自分で無効化").closest("article")).not.toHaveTextContent("置き換え済み");
@@ -351,8 +355,11 @@ describe("MyContextPanel delete all", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "すべての記憶を削除…" }));
     const dialog = await screen.findByRole("dialog", { name: "すべての記憶を削除しますか？" });
-    expect(dialog).toHaveTextContent("有効な記憶7件と、無効化済みの記憶、それぞれの出典をすべて消します。この操作は取り消せません。");
+    expect(dialog).toHaveTextContent("有効な記憶7件と、無効化済みの記憶、それぞれの出典、あなたが却下した候補をすべて消します。この操作は取り消せません。");
     expect(dialog).toHaveTextContent("「チャットから自動で記憶する」と「記憶を回答に使う」の設定は変わりません");
+    // 無効化や却下で「再び覚えない」ことにしていた内容も、削除すれば再び覚えうることを伝える。
+    // It says that what was deactivated or rejected so it would not be remembered again can be remembered again after deleting.
+    expect(dialog).toHaveTextContent("無効化や却下で「再び覚えない」ことにしていた内容も、削除後にチャットでまた話すと、もう一度覚えることがあります");
 
     const confirm = within(dialog).getByRole("button", { name: "すべて削除" });
     expect(confirm).toBeDisabled();

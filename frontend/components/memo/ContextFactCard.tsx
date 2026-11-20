@@ -67,7 +67,7 @@ export function ContextFactCard({ fact, busy, onEdit, onToggleStatus, onRevert, 
           <i className="bi bi-arrow-repeat" aria-hidden="true"></i>
           <span>
             {fact.superseded_by
-              ? t("memo.supersededBy", { title: fact.superseded_by.title })
+              ? `${t("memo.supersededBy", { title: fact.superseded_by.title })} ${t("memo.supersededRestoreHint")}`
               : t("memo.supersededByDeleted")}
           </span>
         </p>
