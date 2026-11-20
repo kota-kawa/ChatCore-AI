@@ -11,6 +11,7 @@ from services.llm_tool_schema import (
     prepare_provider_tools,
     relax_tool_parameters_schema,
 )
+from services.memory_search import get_memory_search_tool_definition
 from services.personal_knowledge import get_personal_knowledge_tool_definition
 from services.shared_prompt_lookup import get_shared_prompt_tool_definition
 from services.web_search import get_web_search_tool_definition
@@ -93,6 +94,7 @@ class LlmToolSchemaTests(unittest.TestCase):
         definitions = [
             get_web_search_tool_definition(),
             get_personal_knowledge_tool_definition(),
+            get_memory_search_tool_definition(),
             get_shared_prompt_tool_definition(),
             read_web_page_tool_definition(),
         ]

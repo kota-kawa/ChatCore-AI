@@ -89,6 +89,12 @@ OCCURRENCE_FIELDS = (
     # 記憶のまとめ（`<user_memory>`）を文脈に入れたターンの割合。
     # Turns whose context carried the memory summary.
     "user_memory_fact_count",
+    # モデルが記憶の検索ツールを呼んだターン、記憶を 1 件以上返したターン、本人由来でない未確認の記憶を含んで自動承認を止めたターンの割合。
+    # Turns where the model called the memory search tool, turns where it returned at least one memory, and turns whose result held
+    # unconfirmed memory that does not originate from the owner and so stopped auto approval.
+    "memory_search_call_count",
+    "memory_search_fact_count",
+    "memory_search_untrusted_memory_seen",
 )
 
 # 中央値で報告する分量の指標。

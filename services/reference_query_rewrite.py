@@ -1,4 +1,4 @@
-"""チャットで選択された参照(メモ・My Context・共有プロンプト)向けに、ユーザーの発話を検索クエリへ書き換える。
+"""チャットで選択された参照(メモ・共有プロンプト)向けに、ユーザーの発話を検索クエリへ書き換える。
 
 直近の発話と一つ前のユーザー発話から LLM が構造化クエリを作り、相対的な日付も解決する。
 検索が空振りに終わったときだけ呼ばれ、LLM が使えなければ呼び出し側(services.selected_reference_context)が原文のまま続ける。
@@ -7,7 +7,7 @@ Rewrite a chat turn into search queries for selected chat references.
 
 The query planner reads the latest turn and the previous user turn instead of splitting on
 Japanese particles or applying a fixed stop-word list. It returns structured queries that
-can be used for memos, My Context facts, and shared prompts, resolving relative dates on the
+can be used for memos and shared prompts, resolving relative dates on the
 way.
 
 Only used after a lookup already came back empty, so its cost lands on the turns that need
@@ -33,8 +33,8 @@ MAX_REWRITTEN_QUERY_CHARS = 120
 
 _SYSTEM_PROMPT = (
     "You are the selected-reference query planner for a chat turn. Turn the latest user "
-    "request into search queries for the explicitly selected sources: the user's memos, "
-    "My Context facts, and shared prompts.\n"
+    "request into search queries for the explicitly selected sources: the user's memos "
+    "and shared prompts.\n"
     'Reply with JSON only: {"queries": ["...", "..."]}\n'
     "Rules:\n"
     f"- Return 1 to {MAX_REWRITTEN_QUERIES} queries, ordered best first.\n"

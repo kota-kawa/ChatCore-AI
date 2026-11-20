@@ -87,7 +87,7 @@ export const jaMessages = {
   "home.attachMenu.pasteEmpty": "貼り付けられる文章や画像がありません。",
   "home.attachMenu.pasteUnsupported": "この形式はペーストできません。文章やPNG・JPEG・WebP・GIF画像をコピーするか、ファイル添付を使用してください。",
   "home.attachMenu.pasteUnavailable": "クリップボードを読み取れませんでした。文章は入力欄を長押しして貼り付けてください。画像はファイル添付から選択してください。",
-  "home.attachMenu.memoActive": "メモ・記憶を参照",
+  "home.attachMenu.memoActive": "メモを参照",
   "home.attachMenu.memoTurnOff": "メモの参照をやめる",
   "home.attachMenu.memoLoginRequired": "ログインすると自分のメモを参照できます",
   "home.attachMenu.sharedPromptActive": "共有プロンプトを参照",

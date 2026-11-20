@@ -31,7 +31,7 @@ def _async_return(value):
 class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
     # 日本語: 参照用の検索関数をモックに差し替えた、ChatPostUseCase の依存一式を組み立てます。
     # English: Build the ChatPostUseCase dependencies with the lookup functions replaced by stubs.
-    def _build_deps(self, search_personal_knowledge, search_shared_prompts=None):
+    def _build_deps(self, search_personal_knowledge, search_shared_prompts=None, search_memory=None):
         async def require_json_dict(request):
             return await request.json(), None
 
@@ -94,6 +94,7 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
             check_usage_limit=AsyncMock(return_value=None),
             is_streaming_model=Mock(return_value=True),
             search_personal_knowledge=search_personal_knowledge,
+            search_memory=search_memory or Mock(return_value={"status": "no_results"}),
             search_shared_prompts=search_shared_prompts or Mock(return_value={"status": "no_results"}),
             start_generation_job=Mock(return_value=SimpleNamespace(generation_id="a" * 32)),
             build_llm_stream_response=Mock(return_value=JSONResponse({"streaming": True})),

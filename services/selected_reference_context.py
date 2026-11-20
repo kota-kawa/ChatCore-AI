@@ -1,4 +1,4 @@
-"""利用者がチャットで選んだ参照元（メモ・My Context、公開プロンプト）を、生成の前に検索して文脈へ差し込む。
+"""利用者がチャットで選んだ参照元（メモ、公開プロンプト）を、生成の前に検索して文脈へ差し込む。
 
 検索語の候補作成、参照元ごとの検索と再試行、結果の system メッセージ化を担当する。同期版は純粋なプロンプト組み立てのテスト用、
 リクエスト処理は非同期版を使う。
@@ -52,10 +52,14 @@ MAX_SELECTED_REFERENCE_FAILURE_RETRIES = 1
 _WHITESPACE_PATTERN = re.compile(r"\s+")
 
 PERSONAL_KNOWLEDGE_SOURCE = "personal_knowledge_search"
+# 事前に選ばれる参照元ではなく、モデルが呼ぶ記憶の検索ツール（services/memory_search.py）の識別子。回答までのステップと根拠の種類で使う。
+# Not a source the user selects beforehand: the identifier of the memory_search tool the model calls (services/memory_search.py),
+# used for the answer-step trace and the evidence type.
+MEMORY_SEARCH_SOURCE = "memory_search"
 PERSONAL_OVERVIEW_TAG = "personal_overview_result"
 SHARED_PROMPT_SOURCE = "shared_prompt_search"
 _SOURCE_LABELS = {
-    PERSONAL_KNOWLEDGE_SOURCE: "memo and My Context",
+    PERSONAL_KNOWLEDGE_SOURCE: "memo",
     SHARED_PROMPT_SOURCE: "shared prompt",
 }
 _SOURCE_RESULT_TAGS = {
@@ -66,7 +70,7 @@ _SOURCE_RESULT_TAGS = {
 # An enabled-but-unusable source is reported to the model together with its reason.
 UNAVAILABLE_SOURCE_REASONS = {
     PERSONAL_KNOWLEDGE_SOURCE: (
-        "memo and My Context (the user is signed out, and memos are readable only in a signed-in session)"
+        "memo (the user is signed out, and memos are readable only in a signed-in session)"
     ),
 }
 
@@ -112,6 +116,19 @@ def previous_user_message(messages: Sequence[dict[str, Any]]) -> str:
     if len(user_contents) < 2:
         return ""
     return _normalize_query(user_contents[-2], MAX_PREVIOUS_TURN_QUERY_CHARS)
+
+
+def lookup_query_key(query: str) -> str:
+    """検索語の同一性を測るキー。空白の連続と大文字小文字の差を無視する。
+
+    言い換えの候補の重複除去（CandidateQueryPlan）と、同じ検索語の再実行を止める DeduplicatedLookup が同じ規則を使う。
+    別々の規則だと、候補としては別の語が already_searched で返り、後続の言い換えが試されなくなる。
+
+    The identity key of a search query: whitespace runs and letter case are ignored. The candidate dedup (CandidateQueryPlan)
+    and DeduplicatedLookup share this one rule; with two rules a candidate that counts as new would come back already_searched
+    and the later rephrasings would never be tried.
+    """
+    return " ".join(str(query or "").split()).casefold()
 
 
 class CandidateQueryPlan:
@@ -160,8 +177,9 @@ class CandidateQueryPlan:
                 self._rewritten = rewritten if isinstance(rewritten, list) else []
             return self._rewritten
 
-    # 日本語: 元の発話 → 言い換えの順に、重複と空を除いて最大 MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS 件まで出す。
-    # English: Yield the original turn, then the rewrites, skipping blanks and duplicates, up to MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS.
+    # 日本語: 元の発話 → 言い換えの順に、空と重複（lookup_query_key が同じもの）を除いて、最大試行回数まで出す。
+    # English: Yield the original turn, then the rewrites, skipping blanks and duplicates (same lookup_query_key), up to
+    # MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS.
     def __iter__(self) -> Iterator[str]:
         seen: set[str] = set()
         emitted = 0
@@ -173,16 +191,17 @@ class CandidateQueryPlan:
             # The rewrite is only produced once the first candidate has missed.
             candidates = cast(Iterable[str], group() if callable(group) else group)
             for candidate in candidates:
-                if not candidate or candidate in seen:
+                key = lookup_query_key(candidate)
+                if not key or key in seen:
                     continue
-                seen.add(candidate)
+                seen.add(key)
                 emitted += 1
                 yield candidate
                 if emitted >= MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS:
                     return
 
 
-def _safe_json(payload: dict[str, Any]) -> str:
+def safe_json(payload: dict[str, Any]) -> str:
     # 日本語: メモやプロンプトの本文は利用者が書くので、& < > をエスケープし、system 側の区切りタグを偽装できないようにする。
     # English: System-level delimiters must not be forgeable by user-authored memo/prompt bodies.
     return (
@@ -234,6 +253,7 @@ def _run_lookup(
     payload: dict[str, Any] = {}
     for candidate in candidates:
         attempted_queries.append(candidate)
+        previous = payload
         payload = _run_lookup_once(search, candidate, source_label=source_label)
         for _ in range(MAX_SELECTED_REFERENCE_FAILURE_RETRIES):
             if payload.get("status") != "failed":
@@ -241,6 +261,12 @@ def _run_lookup(
             logger.info("Retrying the selected %s lookup once after a failure.", source_label)
             payload = _run_lookup_once(search, candidate, source_label=source_label)
         status = payload.get("status")
+        if status == "already_searched":
+            # 試し済みの語だった。結果は無いので、直前の有意な結果（0 件など）を保って次の候補へ進む。
+            # The query was already tried. It carries no result, so keep the previous meaningful result (such as zero hits)
+            # and move on to the next candidate.
+            payload = previous or payload
+            continue
         if status == "failed":
             # 参照元自体が落ちている状態は言い換えでは直らないため、残りの試行は使わない。
             # Rephrasing cannot fix a source that is down, so do not spend the remaining attempts.
@@ -353,6 +379,7 @@ async def _run_lookup_async(
         if candidate is None:
             break
         attempted_queries.append(candidate)
+        previous = payload
         payload = await _run_lookup_once_async(search, candidate, source_label=source_label)
         for _ in range(MAX_SELECTED_REFERENCE_FAILURE_RETRIES):
             if payload.get("status") != "failed":
@@ -360,6 +387,12 @@ async def _run_lookup_async(
             logger.info("Retrying the selected %s lookup once after a failure.", source_label)
             payload = await _run_lookup_once_async(search, candidate, source_label=source_label)
         status = payload.get("status")
+        if status == "already_searched":
+            # 試し済みの語だった。結果は無いので、直前の有意な結果（0 件など）を保って次の候補へ進む。
+            # The query was already tried. It carries no result, so keep the previous meaningful result (such as zero hits)
+            # and move on to the next candidate.
+            payload = previous or payload
+            continue
         if status == "failed":
             break
         if status != "no_results":
@@ -416,7 +449,7 @@ async def _load_overview_async(
         return None
     if not isinstance(overview, dict):
         return None
-    if not overview.get("recent_memos") and not overview.get("context_facts"):
+    if not overview.get("recent_memos"):
         return None
     return overview
 
@@ -454,9 +487,9 @@ def _load_overview_if_unmatched(
         return None
     if not isinstance(overview, dict):
         return None
-    if not overview.get("recent_memos") and not overview.get("context_facts"):
-        # 保存済みのメモも事実も無いなら、渡すものが無いので何も足さない。
-        # Nothing saved means nothing to hand over.
+    if not overview.get("recent_memos"):
+        # 保存済みのメモが無いなら、渡すものが無いので何も足さない。
+        # No saved memo means nothing to hand over.
         return None
     return overview
 
@@ -469,7 +502,7 @@ def _build_overview_block(overview: dict[str, Any]) -> tuple[str, dict[str, Any]
     payload = {"status": "overview", **overview}
     return (
         f'<{PERSONAL_OVERVIEW_TAG} encoding="json">'
-        f"{_safe_json(payload)}"
+        f"{safe_json(payload)}"
         f"</{PERSONAL_OVERVIEW_TAG}>",
         payload,
     )
@@ -490,7 +523,7 @@ def _build_context(
             [
                 "The user explicitly enabled these ChatCore reference sources for this turn: "
                 f"{', '.join(selected_sources)}.",
-                "Use successful results below as primary evidence for the answer and name the memo, My Context fact,",
+                "Use successful results below as primary evidence for the answer and name the memo",
                 "or shared prompt that supports the answer. Do not ignore or replace a successful selected-source",
                 "result with web search. Web search may only supplement it when the request separately requires",
                 "external or current information.",
@@ -518,7 +551,7 @@ def _build_context(
         lines.extend(
             [
                 f"Nothing matched the query, so a <{PERSONAL_OVERVIEW_TAG}> block is included: an inventory of",
-                "the user's most recently updated memo titles and a digest of their My Context facts. These are",
+                "the user's most recently updated memo titles. These are",
                 "NOT search matches. Use them when the question is broad enough that the user's own notes should",
                 "shape the answer (plans, priorities, what to work on next), state plainly that nothing matched",
                 "the specific wording, and never present an inventory entry as a match. To read one of those memos,",
@@ -586,7 +619,7 @@ def augment_messages_with_selected_references(
 
     result_blocks = [
         f'<{_SOURCE_RESULT_TAGS[source]} encoding="json">'
-        f"{_safe_json(payload)}"
+        f"{safe_json(payload)}"
         f"</{_SOURCE_RESULT_TAGS[source]}>"
         for (source, _), payload in zip(lookups, payloads, strict=True)
     ]
@@ -672,7 +705,7 @@ async def augment_messages_with_selected_references_async(
 
     result_blocks = [
         f'<{_SOURCE_RESULT_TAGS[source]} encoding="json">'
-        f"{_safe_json(payload)}"
+        f"{safe_json(payload)}"
         f"</{_SOURCE_RESULT_TAGS[source]}>"
         for (source, _), payload in zip(lookups, payloads, strict=True)
     ]

@@ -59,6 +59,19 @@ def is_memory_use_enabled(user: Mapping[str, Any] | None) -> bool:
     return isinstance(user, Mapping) and user.get("memory_use_enabled") is True
 
 
+def should_use_user_memory(*, user_id: int | None, room_mode: str, user: Mapping[str, Any] | None) -> bool:
+    """記憶を読んでよいか。ログイン中の利用者の通常ルームで、記憶の利用の設定が有効なときだけ True。
+
+    毎ターンの `<user_memory>` と、モデルが呼ぶ記憶の検索ツール（memory_search）が同じ条件を使う。一時チャット・ゲスト・設定オフ・
+    ユーザー行が読めないときは、どちらも記憶を読まない。
+
+    Whether memory may be read: only for a signed-in user's normal room with the memory-use setting on. The per-turn
+    `<user_memory>` and the model-called memory_search tool share this one condition, so a temporary chat, a guest, a switched-off
+    setting or an unreadable user row reads memory through neither.
+    """
+    return user_id is not None and room_mode == "normal" and is_memory_use_enabled(user)
+
+
 def _single_line_data(text: Any) -> str:
     """記憶の文面を、1 行のデータとして安全な形にする。タグや実体参照でブロックの構造を壊せないようにする。
 
@@ -85,7 +98,11 @@ def _normalize_until_stable(text: str) -> str:
     return current
 
 
-def _last_mentioned_date(value: datetime | None) -> str | None:
+def last_mentioned_date(value: datetime | None) -> str | None:
+    """最後に話題に出た時刻を UTC の日付（YYYY-MM-DD）にする。まとめと記憶の検索で同じ定義を使う。
+
+    The last-mentioned moment as a UTC date (YYYY-MM-DD); the summary and memory search share this definition.
+    """
     if value is None:
         return None
     moment = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
@@ -99,7 +116,7 @@ def _render_line(fact: Mapping[str, Any]) -> str:
     title = _single_line_data(
         trim_text_to_token_budget(_normalize_until_stable(str(fact.get("title") or "")), USER_MEMORY_FACT_CONTENT_TOKENS)
     )
-    mentioned = _last_mentioned_date(fact.get("last_mentioned_at"))
+    mentioned = last_mentioned_date(fact.get("last_mentioned_at"))
     dated = f" (last mentioned {mentioned})" if mentioned else ""
     return f"- [{fact.get('fact_type')}]{dated} {title}: {content}"
 

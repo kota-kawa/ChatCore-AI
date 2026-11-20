@@ -175,15 +175,86 @@ class UserMemoryOnPostPathTestCase(unittest.TestCase):
         self.assertIn("Failed to load user memory", logged)
         self.assertNotIn(_SECRET_TEXT, logged)
 
+    # --- 記憶の検索ツール（memory_search）の提供条件。`<user_memory>` と同じ条件で、「＋→メモ」のトグルに依らない。
+    # --- Offering the memory_search tool: the same condition as `<user_memory>`, independent of the "+ -> Memo" toggle.
+    def test_the_memory_search_tool_is_offered_on_every_turn_of_a_normal_room_whatever_the_toggle_says(self):
+        for toggle in (False, True):
+            with self.subTest(memo_toggle=toggle):
+                helper, deps = self._deps()
+                helper._run(deps, body_extra={"use_personal_knowledge": toggle}, session={"user_id": 42})
+                kwargs = deps.start_generation_job.call_args.kwargs
+
+                self.assertIsNotNone(kwargs["memory_search"])
+                # 事前の検索はしない（モデルが呼んだときだけ動く）。
+                # Nothing is prefetched: it runs only when the model calls it.
+                deps.search_memory.assert_not_called()
+                self.assertEqual([m for m in kwargs["conversation_messages"] if "memory_search_result" in str(m["content"])], [])
+
+    def test_the_memory_search_tool_is_not_offered_for_a_temporary_chat_a_guest_or_an_unusable_setting(self):
+        def temporary(deps):
+            deps.resolve_authenticated_room_target.return_value = ("temporary", "sid-1", None)
+
+        for label, setup, session in (
+            ("temporary chat", temporary, {"user_id": 42}),
+            ("guest", lambda deps: None, {}),
+            (
+                "disabled",
+                lambda deps: deps.get_user_by_id.configure_mock(return_value={"id": 42, "memory_use_enabled": False}),
+                {"user_id": 42},
+            ),
+            ("no setting value", lambda deps: deps.get_user_by_id.configure_mock(return_value={"id": 42}), {"user_id": 42}),
+            ("missing row", lambda deps: deps.get_user_by_id.configure_mock(return_value=None), {"user_id": 42}),
+            ("read failure", lambda deps: deps.get_user_by_id.configure_mock(side_effect=RuntimeError("db down")), {"user_id": 42}),
+        ):
+            with self.subTest(label):
+                helper, deps = self._deps()
+                setup(deps)
+                helper._run(deps, body_extra={"use_personal_knowledge": True}, session=session)
+
+                self.assertIsNone(deps.start_generation_job.call_args.kwargs["memory_search"])
+
+    def test_the_memo_toggle_does_not_search_memory_before_generation(self):
+        # 「＋→メモ」がオンでも、事前の検索はメモだけ。記憶の検索関数は呼ばれない。
+        # With the memo toggle on, the prefetch covers memos only: the memory search function is not called.
+        helper, deps = self._deps()
+
+        helper._run(deps, body_extra={"use_personal_knowledge": True}, session={"user_id": 42})
+
+        deps.search_memory.assert_not_called()
+
+    def test_a_non_streaming_turn_runs_without_the_tool_as_before(self):
+        _, deps = self._deps(streaming=False)
+
+        use_case = ChatPostUseCase(deps, default_model="test-model")
+        request = post_helpers.build_request(
+            method="POST",
+            path="/api/chat",
+            json_body={"message": "こんにちは", "chat_room_id": "room-1", "model": "test-model"},
+            session={"user_id": 42},
+        )
+        with patch("services.chat_use_case.generate_chat_room_title", return_value=None):
+            asyncio.run(
+                use_case.execute(
+                    request,
+                    auth_limit_service=object(),
+                    llm_daily_limit_service=object(),
+                    chat_generation_service=object(),
+                )
+            )
+
+        deps.start_generation_job.assert_not_called()
+        deps.search_memory.assert_not_called()
+
 
 # 再生成・編集して再生成の経路（run_chat_regeneration）。
 # The regeneration paths (run_chat_regeneration), which serve both regenerate and edit-and-regenerate.
 class UserMemoryOnRegenerationPathTestCase(unittest.TestCase):
-    def _run(self, *, user=None, room_mode="normal", load=None, streaming=True):
+    def _run(self, *, user=None, room_mode="normal", load=None, streaming=True, use_personal_knowledge=False):
         helper = regeneration_helpers.ChatSkillSelectionIntegrationTests()
         pipeline_input = helper._regeneration_input(
             streaming=streaming, room_mode=room_mode, user={"id": 42, "memory_use_enabled": True} if user is None else user
         )
+        pipeline_input = dataclasses.replace(pipeline_input, use_personal_knowledge=use_personal_knowledge)
         load = load or AsyncMock(return_value=_summary())
         deps = dataclasses.replace(pipeline_input.dependencies, load_user_memory_summary=load)
         pipeline_input = dataclasses.replace(pipeline_input, dependencies=deps)
@@ -223,6 +294,32 @@ class UserMemoryOnRegenerationPathTestCase(unittest.TestCase):
                 load.assert_not_called()
                 self.assertEqual(_memory_messages(start.call_args.kwargs["conversation_messages"]), [])
                 self.assertNotIn("user_memory", start.call_args.kwargs)
+
+    def test_regeneration_offers_the_memory_search_tool_on_the_same_terms(self):
+        for toggle in (False, True):
+            with self.subTest(memo_toggle=toggle):
+                outcome, start, _, deps = self._run(use_personal_knowledge=toggle)
+
+                self.assertIsInstance(outcome, ChatRegenerationStreamStarted)
+                self.assertIsNotNone(start.call_args.kwargs["memory_search"])
+                deps.search_memory.assert_not_called()
+
+    def test_regeneration_does_not_offer_it_for_a_temporary_chat_a_switched_off_setting_or_an_unreadable_row(self):
+        for label, kwargs in (
+            ("temporary chat", {"room_mode": "temporary"}),
+            ("disabled", {"user": {"id": 42, "memory_use_enabled": False}}),
+            ("no setting value", {"user": {"id": 42}}),
+        ):
+            with self.subTest(label):
+                _, start, _, _ = self._run(use_personal_knowledge=True, **kwargs)
+
+                self.assertIsNone(start.call_args.kwargs["memory_search"])
+
+    def test_the_non_streaming_regeneration_never_starts_a_job_with_the_tool(self):
+        _, start, _, deps = self._run(streaming=False)
+
+        start.assert_not_called()
+        deps.search_memory.assert_not_called()
 
     def test_a_failed_read_does_not_stop_regeneration_and_logs_no_memory_text(self):
         load = AsyncMock(side_effect=RuntimeError(f"boom while reading {_SECRET_TEXT}"))

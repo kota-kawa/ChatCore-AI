@@ -300,18 +300,57 @@ test("shared-prompt search results distinguish hits, zero hits and prefetched qu
   assert.equal(prefetched.kind === "thinking_status" && prefetched.phase, "web-search");
 });
 
-test("personal-knowledge results count memos and context facts together", () => {
-  const factsOnly = interpret("personal_knowledge_search_completed", {
-    memo_count: 0,
-    context_fact_count: 2,
-  });
-  const nothing = interpret("personal_knowledge_search_completed", {
-    memo_count: 0,
-    context_fact_count: 0,
-  });
+test("memo search results count memos only, whatever else an older server reports", () => {
+  const hit = interpret("personal_knowledge_search_completed", { memo_count: 2 });
+  const nothing = interpret("personal_knowledge_search_completed", { memo_count: 0 });
+  // 旧バージョンのサーバーは context_fact_count も送る。メモだけを数えるので、記憶の件数では「見つかった」にならない。
+  // An older server also sends context_fact_count; only memos count, so facts alone never read as a hit.
+  const legacyFactsOnly = interpret("personal_knowledge_search_completed", { memo_count: 0, context_fact_count: 2 });
 
-  assert.equal(factsOnly.kind === "thinking_status" && factsOnly.phase, "web-search");
+  assert.equal(hit.kind === "thinking_status" && hit.phase, "web-search");
   assert.equal(nothing.kind === "thinking_status" && nothing.phase, "generating");
+  assert.equal(legacyFactsOnly.kind === "thinking_status" && legacyFactsOnly.phase, "generating");
+});
+
+test("memory search events show their own wording, apart from the memo search", () => {
+  // サーバーは記憶の検索の検索語をイベントに載せない。載せていても（過去の形）文言は変わらない。
+  // The server no longer sends the memory query in these events; a payload that still carries one reads the same.
+  const started = { kind: "thinking_status", text: "記憶を検索しています", phase: "web-search" };
+  assert.deepEqual(interpret("memory_search_started", { step: 1, max_steps: 5 }), started);
+  assert.deepEqual(interpret("memory_search_started", { query: "犬", step: 1, max_steps: 5 }), started);
+  const hit = interpret("memory_search_completed", { memory_count: 2 });
+  const nothing = interpret("memory_search_completed", { memory_count: 0 });
+  const repeated = interpret("memory_search_completed", { status: "already_searched" });
+  const failed = interpret("memory_search_failed", {});
+
+  assert.deepEqual(hit, { kind: "thinking_status", text: "見つかった記憶を読み込んでいます", phase: "web-search" });
+  assert.deepEqual(nothing, {
+    kind: "thinking_status",
+    text: "該当する記憶はありませんでした。思考中",
+    phase: "generating",
+  });
+  assert.equal(repeated.kind === "thinking_status" && repeated.phase, "web-search");
+  assert.deepEqual(failed, {
+    kind: "thinking_status",
+    text: "記憶の検索に失敗しました。思考中",
+    phase: "generating",
+  });
+});
+
+test("memo and memory search wording never mixes the two", () => {
+  const memo = ["started", "completed", "failed"].map((suffix) =>
+    interpret(`personal_knowledge_search_${suffix}`, { memo_count: 1 }),
+  );
+  const memory = ["started", "completed", "failed"].map((suffix) =>
+    interpret(`memory_search_${suffix}`, { memory_count: 1 }),
+  );
+
+  for (const action of memo) {
+    assert.ok(action.kind === "thinking_status" && !action.text.includes("記憶"));
+  }
+  for (const action of memory) {
+    assert.ok(action.kind === "thinking_status" && !action.text.includes("メモ"));
+  }
 });
 
 test("search failures and the generation start move the thinking status on", () => {
@@ -327,7 +366,7 @@ test("search failures and the generation start move the thinking status on", () 
   });
   assert.deepEqual(interpret("personal_knowledge_search_started", {}), {
     kind: "thinking_status",
-    text: "メモと記憶を検索しています",
+    text: "メモを検索しています",
     phase: "web-search",
   });
 });

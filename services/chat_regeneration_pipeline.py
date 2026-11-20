@@ -79,9 +79,9 @@ from services.selected_reference_context import (
     SelectedReferenceLookupTrace,
     augment_messages_with_selected_references_async,
 )
-from services.selected_reference_sources import DeduplicatedLookup, build_selected_reference_searchers
+from services.selected_reference_sources import DeduplicatedLookup, build_memory_searcher, build_selected_reference_searchers
 from services.usage_limits import UsageLimitBlock, usage_limit_message
-from services.user_memory import UserMemorySummary, is_memory_use_enabled
+from services.user_memory import UserMemorySummary, should_use_user_memory
 from services.user_skills import build_chat_skills_context
 from services.web_search import (
     deserialize_web_search_results,
@@ -207,6 +207,7 @@ class ChatRegenerationDependencies:
     check_usage_limit: CheckUsageLimit
     is_streaming_model: Callable[[str], bool]
     search_personal_knowledge: Callable[[int, str], Awaitable[dict[str, Any]]]
+    search_memory: Callable[[int, str], Awaitable[dict[str, Any]]]
     search_shared_prompts: Callable[[str], Awaitable[dict[str, Any]]]
     get_llm_response: Callable[[list[dict[str, Any]], str], str | None]
     save_message_to_db: SaveMessageToDb
@@ -430,7 +431,8 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     # 読み込みに失敗しても再生成は続ける。例外の種類だけをログに残し、記憶の文面は出さない。
     # Regeneration puts the memory summary in on the same terms as a send (signed in, normal room, setting on). A failed
     # read does not stop it; only the exception type is logged, never memory text.
-    if user_id is not None and is_normal_user_room and is_memory_use_enabled(user):
+    uses_user_memory = should_use_user_memory(user_id=user_id, room_mode=room_mode, user=user)
+    if user_id is not None and uses_user_memory:
         try:
             user_memory = await deps.load_user_memory_summary(user_id)
         except Exception as exc:
@@ -514,6 +516,10 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     )
     personal_knowledge_search = selected_references.personal_knowledge
     shared_prompt_search = selected_references.shared_prompt
+    # 再生成でも、送信時と同じ条件（記憶を読んでよいターン）で記憶の検索ツールを渡す。「＋→メモ」のトグルとは無関係で、事前の検索はしない。
+    # Regeneration offers the memory search tool on the same terms as a send (a turn that may read memory), independent of the
+    # "+ -> Memo" toggle and without prefetching.
+    memory_search = build_memory_searcher(user_id=user_id, memory_enabled=uses_user_memory, search_memory=deps.search_memory)
     selected_reference_trace: list[SelectedReferenceLookupTrace] = []
     conversation_messages = await augment_messages_with_selected_references_async(
         conversation_messages,
@@ -658,6 +664,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
                 earlier_pasted_urls=earlier_pasted_urls,
                 personal_knowledge_search=personal_knowledge_search,
                 shared_prompt_search=shared_prompt_search,
+                memory_search=memory_search,
                 selected_reference_trace=selected_reference_trace,
                 ui_mode=ui_mode,
                 explicit_ui_opt_out=explicit_ui_opt_out,

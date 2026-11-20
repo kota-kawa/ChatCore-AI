@@ -24,6 +24,7 @@ from services.api_errors import ApiServiceError
 from services.context_vault_embeddings import schedule_embedding
 from services.db import is_retryable_db_error, session_scope
 from services.embeddings import embeddings_available, generate_embedding
+from services.memory_search_ranking import MEMORY_SEARCH_RESULT_LIMIT, rank_memory_facts
 from services.repositories.context_fact_repository import ContextFactRepository
 from services.request_models import (
     DEFAULT_CONTEXT_FACT_IMPORTANCE,
@@ -432,6 +433,32 @@ async def search_facts(
         return ContextSearchResult(total=len(rows), facts=[_to_response(row) for row in rows])
 
     return await _transaction(session, operation)
+
+
+# 日本語: チャットの記憶の検索用に、その利用者の有効な記憶すべてを語の一致と意味の近さで順位づけして上位を返す(ADR 0025)。
+# 検索語の埋め込みは DB のトランザクションを開く前に作り、失敗・利用不可なら語の一致だけで順位づける。DB の読み取りは 1 回。
+# MCP の search_context が使う search_facts は別の関数で、挙動は変えない。埋め込みの失敗は種類だけ記録する。
+# English: For chat memory search: rank all of the user's active memory by word match and semantic closeness and return the top ones
+# (ADR 0025). The query embedding is made before any DB transaction opens, and when it is unavailable or fails the ranking uses word
+# match alone. One DB read. search_facts, used by MCP search_context, is a separate function whose behavior is unchanged.
+async def search_facts_ranked(
+    user_id: int,
+    query: str,
+    *,
+    limit: int = MEMORY_SEARCH_RESULT_LIMIT,
+    session: AsyncSession | None = None,
+) -> list[dict[str, Any]]:
+    normalized_query = query.strip()
+    if not normalized_query:
+        return []
+    embedding: list[float] | None = None
+    if embeddings_available():
+        try:
+            embedding = await asyncio.to_thread(generate_embedding, normalized_query)
+        except Exception as exc:
+            logger.warning("Failed to generate a memory search embedding; ranking by word match only (%s).", type(exc).__name__)
+    rows = await _transaction(session, lambda db: _repository(db).list_active_for_memory_search(user_id, embedding))
+    return [dict(row) for row in rank_memory_facts(rows, normalized_query, limit=limit)]
 
 
 # 日本語: 保存した記憶をチャットの回答に使う設定。保存する設定（context_vault_candidate_service の抽出設定）とは別。
