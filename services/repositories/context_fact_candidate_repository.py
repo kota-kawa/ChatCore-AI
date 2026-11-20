@@ -278,6 +278,8 @@ class ContextFactCandidateRepository:
     # created_at はタイムゾーン無しなので、created_at を timestamptz へ明示的に変換して比べる。created_at は CURRENT_TIMESTAMP を
     # セッションのタイムゾーンの壁時計で保存した値で、変換も同じタイムゾーンで元の時刻へ戻るため、暗黙の変換に頼らず意図を固定する。
     # 選択と無効化は 1 文で行い、対象の条件を更新側にも繰り返す。選んだ後に本人が編集した行は条件に合わなくなり、無効化されない。
+    # 選ぶ側は FOR UPDATE SKIP LOCKED で、別のトランザクションが編集中（未コミット）の行を飛ばして次の候補を選ぶ。飛ばさないと、
+    # 編集の確定後に更新が 0 行になり、ほかに入れ替えられる事実があっても新しい内容を捨ててしまう。
     # English: At the cap, deprecate one active fact that was auto-saved and never touched by the owner, record reason capacity,
     # and return whether one was replaced. Only facts with source_kind chat and a NULL last_confirmed_at qualify (the owner's
     # manual, edited and approved facts, MCP and imports are never removed). The fact last mentioned longest ago goes first,
@@ -286,6 +288,9 @@ class ContextFactCandidateRepository:
     # explicitly: it was stored as the session-timezone wall clock of CURRENT_TIMESTAMP, and the cast reads it back in the same
     # zone, so the comparison does not rely on an implicit conversion. Choosing and deprecating happen in one statement and the
     # eligibility is repeated on the update, so a fact the owner edits in between is no longer eligible and is left alone.
+    # The choosing side uses FOR UPDATE SKIP LOCKED, so a row another transaction is editing (uncommitted) is skipped and the
+    # next candidate is chosen; otherwise the update would hit zero rows once the edit commits and the new content would be
+    # dropped even though other facts could be replaced.
     async def _deprecate_replaceable_fact(self, user_id: int, protected_fact_ids: set[int]) -> bool:
         replaceable = aliased(ContextFact)
 
@@ -311,6 +316,7 @@ class ContextFactCandidateRepository:
             .where(*eligible(replaceable))
             .order_by(last_mentioned.asc(), replaceable.importance.asc(), replaceable.id.asc())
             .limit(1)
+            .with_for_update(skip_locked=True, of=replaceable)
             .scalar_subquery()
         )
         statement = (

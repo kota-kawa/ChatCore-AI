@@ -228,6 +228,20 @@ class ContextFactCandidateRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
             sql,
         )
 
+    async def test_store_extracted_skips_rows_another_transaction_is_editing_when_choosing_the_replaced_fact(self):
+        # 本人が編集中（未コミット）の行を選ぶと、編集の確定後に更新が 0 行になり新しい内容を捨ててしまう。選ぶ副問い合わせだけが
+        # 行ロック（FOR UPDATE SKIP LOCKED）で、ロック中の行を飛ばして次の候補を選ぶ。外側の UPDATE には付けない。
+        # Choosing a row the owner is editing (uncommitted) would update zero rows once the edit commits and drop the new
+        # content. Only the choosing subquery takes row locks (FOR UPDATE SKIP LOCKED) so a locked row is skipped and the
+        # next candidate is chosen; the outer UPDATE does not.
+        session = _store_session(active=MAX_ACTIVE_CONTEXT_FACTS, inserts=[_replaced(), _result(mapping=_fact(id=41))])
+
+        await ContextFactCandidateRepository(session).store_extracted(7, [_extracted()])
+
+        sql = " ".join(str(_executed(session)[3]).split())
+        self.assertEqual(sql.count("FOR UPDATE"), 1)
+        self.assertIn("LIMIT %(param_1)s FOR UPDATE OF context_facts_1 SKIP LOCKED)", sql)
+
     async def test_store_extracted_does_not_replace_what_the_same_batch_saved_or_re_mentioned(self):
         # 1 件目は上限の入れ替えで保存(41)、2 件目は有効な事実(12)への再言及、3 件目は入れ替え。3 件目の入れ替えは
         # 保存したばかりの 41 と再言及した 12 を対象から外す。
