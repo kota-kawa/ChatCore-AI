@@ -42,6 +42,7 @@ from services.error_messages import (
 )
 from services.models import ContextFact, ContextFactSource
 from services.models.types import Vector
+from services.repositories.context_fact_source_repository import last_mentioned_at
 from services.search_terms import build_like_pattern, split_search_terms
 
 # 日本語: 有効(active)な事実の 1 ユーザーあたり上限。
@@ -50,6 +51,21 @@ MAX_ACTIVE_CONTEXT_FACTS = 200
 # 日本語: advisory lock の名前空間。候補リポジトリと同じ値で、同一ユーザーの事実/候補の書き込みを直列化する。
 # English: Advisory-lock namespace, shared with the candidate repository so one user's fact/candidate writes are serialized.
 _CONTEXT_FACT_LOCK_NAMESPACE = 1129601108  # ASCII "CTXT"
+
+
+# 日本語: 「再び覚えない」の比較対象になる事実の条件。有効な事実と、本人が無効化した事実(理由 user か未記録)。上限で外した事実(capacity)と
+# 新しい事実に置き換えた事実(superseded)は、本人が取り消したわけではないので含めない。理由が NULL の無効化済みの事実はこの列の追加前の
+# 記録で、本人が無効化したものとして扱う。重複判定と、照合で近い記憶を引く検索が同じ条件を使う。
+# English: The facts "do not remember again" compares against: active facts and facts the owner deprecated (reason user or unrecorded).
+# Facts the cap removed (capacity) and facts replaced by a newer one (superseded) are not something the owner undid, so they are left out.
+# A deprecated fact with a NULL reason predates the column and counts as the owner's. Duplicate detection and the nearby-memory search
+# of reconciliation use the same condition.
+def matchable_fact_clause():
+    return or_(
+        ContextFact.status == "active",
+        ContextFact.deprecated_reason.is_(None),
+        ContextFact.deprecated_reason == "user",
+    )
 
 _FACT_COLUMNS = (
     "id",
@@ -314,6 +330,41 @@ class ContextFactRepository:
             .limit(limit)
         )
         return [self._serialize_row(fact) for fact in result.scalars().all()]
+
+    # 日本語: 照合のために、候補の埋め込みに意味が近い記憶を近い順に limit 件まで返す。対象は matchable_fact_clause の事実
+    # (有効な事実と本人が無効化した事実)で、埋め込みのある行だけ。距離は max_distance 以内。最後に話題に出た時刻(last_mentioned)も返す。
+    # English: For reconciliation, returns up to limit memories semantically close to the candidate's embedding, nearest first. Only
+    # facts matching matchable_fact_clause (active and owner-deprecated) that have an embedding, within max_distance. Also returns when
+    # each was last mentioned (last_mentioned).
+    async def find_reconcile_neighbors(
+        self,
+        user_id: int,
+        embedding: list[float],
+        *,
+        limit: int,
+        max_distance: float,
+    ) -> list[dict[str, Any]]:
+        distance = self._distance(embedding)
+        result = await self.session.execute(
+            select(
+                ContextFact.id,
+                ContextFact.revision,
+                ContextFact.fact_type,
+                ContextFact.title,
+                ContextFact.content,
+                ContextFact.status,
+                last_mentioned_at(ContextFact).label("last_mentioned"),
+            )
+            .where(
+                ContextFact.user_id == user_id,
+                matchable_fact_clause(),
+                ContextFact.embedding_vector.is_not(None),
+                distance <= max_distance,
+            )
+            .order_by(distance)
+            .limit(limit)
+        )
+        return [dict(row) for row in result.mappings().all()]
 
     # 日本語: 語ごとに title/content の部分一致(ILIKE)を AND で重ねる簡易検索。新しい更新順に返す。
     # English: Simple search that ANDs a title/content ILIKE match per term, newest update first.

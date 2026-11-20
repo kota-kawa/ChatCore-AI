@@ -1,10 +1,13 @@
 """記憶(context_facts)の自動抽出の保存を永続化する。抽出した内容は未確認の事実として保存し、有効件数が上限のときは、
-自動保存のまま本人が手を入れていない事実を無効化して入れ替える。重複判定には本人が却下した候補(context_fact_candidates)も読む。
+自動保存のまま本人が手を入れていない事実を無効化して入れ替える。照合の結果があれば、食い違う古い事実を無効化して新しい事実に
+置き換える(置き換え先を記録する)か、言い換えとして出典だけを足す。重複判定には本人が却下した候補(context_fact_candidates)も読む。
 自動抽出の設定(users.context_auto_extract_enabled)も扱う。services/context_vault_candidate_service.py から使われる。
 
 Async SQLAlchemy persistence for automatically extracted memory.
 Extracted content is saved as unconfirmed facts, and at the active-fact cap an auto-saved fact the owner never touched is
-deprecated to make room. Duplicate checks also read the candidates the owner rejected (context_fact_candidates).
+deprecated to make room. Given a reconciliation result, an outdated contradicting fact is deprecated and replaced by the new
+one (recording the replacement), or a reworded one only gains a source. Duplicate checks also read the candidates the owner
+rejected (context_fact_candidates).
 Also covers the extraction setting (users.context_auto_extract_enabled); used by services/context_vault_candidate_service.py.
 """
 
@@ -13,18 +16,19 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from sqlalchemy import DateTime, cast, func, or_, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from services.api_errors import ResourceNotFoundError
 from services.context_vault_bm25 import find_bm25_duplicates
+from services.context_vault_reconcile import CandidatePlan
 from services.datetime_serialization import serialize_datetime_iso
 from services.error_messages import ERROR_CONTEXT_EXTRACTION_SETTINGS_NOT_FOUND
-from services.models import ContextFact, ContextFactCandidate, ContextFactSource, User
-from services.repositories.context_fact_repository import MAX_ACTIVE_CONTEXT_FACTS
-from services.repositories.context_fact_source_repository import ContextFactSourceRepository
+from services.models import ContextFact, ContextFactCandidate, User
+from services.repositories.context_fact_repository import MAX_ACTIVE_CONTEXT_FACTS, matchable_fact_clause
+from services.repositories.context_fact_source_repository import ContextFactSourceRepository, last_mentioned_at
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +53,7 @@ _FACT_COLUMNS = (
     "importance",
     "status",
     "revision",
+    "embedding_status",
     "confidence",
     "last_confirmed_at",
     "created_at",
@@ -88,6 +93,7 @@ def _serialize_fact(row: Any) -> dict[str, Any]:
         "importance": int(record["importance"] if record["importance"] is not None else 50),
         "status": str(record["status"] or "active"),
         "revision": max(int(record["revision"] or 1), 1),
+        "embedding_status": str(record["embedding_status"] or "pending"),
         "confidence": float(record["confidence"]) if record["confidence"] is not None else None,
         "last_confirmed_at": serialize_datetime_iso(record["last_confirmed_at"]),
         "created_at": serialize_datetime_iso(record["created_at"]),
@@ -111,41 +117,17 @@ class ContextFactCandidateRepository:
             select(func.pg_advisory_xact_lock(_CONTEXT_VAULT_LOCK_NAMESPACE, user_id))
         )
 
-    async def store_extracted(
+    # 日本語: 候補ごとに、重複している相手の文書(同じバッチで先に残った候補を含む)を返す。重複していない候補は None。比較対象は
+    # 有効な事実・本人が無効化した事実(matchable_fact_clause)と、本人が却下した候補。ロックは取らないので、保存の前に重複しない候補を
+    # 絞る読み取り(照合)と、ロックの中での保存の両方から使う。
+    # English: Returns, per candidate, the document it duplicates (including an earlier candidate of the same batch), or None when it
+    # is unique. The corpus is active facts, facts the owner deprecated (matchable_fact_clause) and rejected candidates. It takes no
+    # lock, so both the read that narrows candidates before reconciliation and the save inside the lock can use it.
+    async def find_duplicate_matches(
         self,
         user_id: int,
         candidates: list[dict[str, Any]],
-        *,
-        room_id: str | None = None,
-        user_message_id: int | None = None,
-    ) -> list[dict[str, Any]]:
-        """重複を除いた抽出結果を、未確認の事実として保存する。有効件数が上限のときは、自動保存のまま本人が手を入れていない
-        事実を 1 件ずつ無効化(理由 capacity)して入れ替える。保存した事実の一覧を返す。
-
-        重複判定は、有効な事実・本人が無効化した事実(理由 user か未記録)・本人が却下した候補との BM25 と、却下済み候補の
-        fingerprint で行う。上限で外した事実(capacity)と、承認待ち・承認済みの候補は比較しないので、外れた内容が再び話題に
-        なれば新しい事実として保存できる。入れ替えられる事実が無いときは、新しい内容を保存しない。
-        room_id があり候補に evidence(本人発話の引用)があるときは出典行を残す。保存した事実には同じトランザクションで
-        1 件入れ、有効な事実と重複した分は、その事実へ出典を足す(事実の行は更新しない)。
-
-        Save unique extracted content as unconfirmed facts. At the active-fact cap, replace facts one at a time by
-        deprecating an auto-saved fact the owner never touched (reason capacity). Returns the facts saved.
-        Duplicates are judged by BM25 against active facts, facts the owner deprecated (reason user or unrecorded) and
-        rejected candidates, plus the fingerprint of rejected candidates. Facts the cap removed (capacity) and
-        pending/approved candidates are not compared, so content that was pushed out can be saved again as a new
-        fact. With nothing replaceable, the new content is not saved.
-        With a room_id and a candidate evidence quote, a source row is kept: one in the same transaction for a saved
-        fact, and one added to the matched fact when the content duplicates an active fact (the fact row is not updated).
-        """
-        await self._lock_user(user_id)
-        active_count = await self.session.scalar(
-            select(func.count(ContextFact.id)).where(
-                ContextFact.user_id == user_id,
-                ContextFact.status == "active",
-            )
-        )
-        free_fact_slots = max(MAX_ACTIVE_CONTEXT_FACTS - int(active_count or 0), 0)
-
+    ) -> list[dict[str, Any] | None]:
         facts_result = await self.session.execute(
             select(
                 ContextFact.id,
@@ -157,15 +139,11 @@ class ContextFactCandidateRepository:
                 ContextFact.status,
             ).where(
                 ContextFact.user_id == user_id,
-                # 日本語: 上限で外した事実(capacity)は、本人が取り消したわけではないので比較しない。理由が NULL の無効化済みの事実は
-                # この列の追加前の記録で、本人が無効化したものとして扱う。
-                # English: A fact the cap removed (capacity) is not something the owner undid, so it is not compared. A deprecated
-                # fact with a NULL reason predates the column and counts as the owner's.
-                or_(
-                    ContextFact.status == "active",
-                    ContextFact.deprecated_reason.is_(None),
-                    ContextFact.deprecated_reason == "user",
-                ),
+                # 日本語: 上限で外した事実(capacity)と新しい事実に置き換えた事実(superseded)は、本人が取り消したわけではないので
+                # 比較しない。理由が NULL の無効化済みの事実はこの列の追加前の記録で、本人が無効化したものとして扱う。
+                # English: A fact the cap removed (capacity) or a newer fact replaced (superseded) is not something the owner undid,
+                # so it is not compared. A deprecated fact with a NULL reason predates the column and counts as the owner's.
+                matchable_fact_clause(),
             )
         )
         candidates_result = await self.session.execute(
@@ -217,18 +195,68 @@ class ContextFactCandidateRepository:
                 ),
             )
         )
-        matches = find_bm25_duplicates(
+        return find_bm25_duplicates(
             candidates,
             existing_documents[:MAX_CONTEXT_DEDUPLICATION_DOCUMENTS],
         )
 
+    async def store_extracted(
+        self,
+        user_id: int,
+        candidates: list[dict[str, Any]],
+        *,
+        room_id: str | None = None,
+        user_message_id: int | None = None,
+        plans: dict[int, CandidatePlan] | None = None,
+    ) -> list[dict[str, Any]]:
+        """重複を除いた抽出結果を、未確認の事実として保存する。有効件数が上限のときは、自動保存のまま本人が手を入れていない
+        事実を 1 件ずつ無効化(理由 capacity)して入れ替える。保存した事実の一覧を返す。
+
+        重複判定は、有効な事実・本人が無効化した事実(理由 user か未記録)・本人が却下した候補との BM25 と、却下済み候補の
+        fingerprint で行う。上限で外した事実(capacity)と、置き換えた事実(superseded)、承認待ち・承認済みの候補は比較しないので、
+        外れた内容が再び話題になれば新しい事実として保存できる。入れ替えられる事実が無いときは、新しい内容を保存しない。
+        room_id があり候補に evidence(本人発話の引用)があるときは出典行を残す。保存した事実には同じトランザクションで
+        1 件入れ、有効な事実と重複した分は、その事実へ出典を足す(事実の行は更新しない)。
+
+        plans は、重複しなかった候補の照合の結果(候補の添字から)。重複判定を通った候補にだけ適用する。supersede は、対象が
+        判定の時点の revision のままの有効な事実なら、対象を無効化(理由 superseded)して新しい事実を入れ、対象に置き換え先を記録する
+        (有効件数は変わらないので入れ替えは起こさない)。対象が変わっていたら置き換えず、新しい事実として保存する。mention は
+        対象へ出典だけを足し、skip は何も保存しない。plans の embedding があれば、新しい事実にそのまま保存する。
+
+        Save unique extracted content as unconfirmed facts. At the active-fact cap, replace facts one at a time by
+        deprecating an auto-saved fact the owner never touched (reason capacity). Returns the facts saved.
+        Duplicates are judged by BM25 against active facts, facts the owner deprecated (reason user or unrecorded) and
+        rejected candidates, plus the fingerprint of rejected candidates. Facts the cap removed (capacity), facts a newer
+        fact replaced (superseded) and pending/approved candidates are not compared, so content that was pushed out can be
+        saved again as a new fact. With nothing replaceable, the new content is not saved.
+        With a room_id and a candidate evidence quote, a source row is kept: one in the same transaction for a saved
+        fact, and one added to the matched fact when the content duplicates an active fact (the fact row is not updated).
+
+        plans holds the reconciliation result of candidates that were not duplicates (by candidate index) and applies only to
+        candidates that pass the duplicate checks. A supersede deprecates the target (reason superseded) when it is still an
+        active fact at the revision it was judged at, inserts the new fact and records the replacement on the target; the
+        active count does not change, so it never triggers a replacement at the cap. A changed target is not replaced and the
+        content is saved as a new fact. A mention only adds a source to the target and a skip saves nothing. An embedding in
+        the plan is stored with the new fact as is.
+        """
+        await self._lock_user(user_id)
+        active_count = await self.session.scalar(
+            select(func.count(ContextFact.id)).where(
+                ContextFact.user_id == user_id,
+                ContextFact.status == "active",
+            )
+        )
+        free_fact_slots = max(MAX_ACTIVE_CONTEXT_FACTS - int(active_count or 0), 0)
+        matches = await self.find_duplicate_matches(user_id, candidates)
+
         saved_facts: list[dict[str, Any]] = []
         replaced_count = 0
+        superseded_count = 0
         # 日本語: このバッチで保存した事実と再言及を記録した事実は、同じバッチの入れ替えの対象にしない。
         # English: Facts saved or re-mentioned in this batch are never replaced by a later candidate of the same batch.
         protected_fact_ids: set[int] = set()
         replacement_exhausted = False
-        for candidate, match in zip(candidates, matches, strict=True):
+        for index, (candidate, match) in enumerate(zip(candidates, matches, strict=True)):
             if match is not None:
                 # 日本語: 有効な事実と重複した分は、その事実への再言及として出典だけを足す。一致相手が同一バッチの候補
                 # (fact_id なし)・本人が無効化した事実・却下済みの候補のときは何も保存しない。
@@ -256,20 +284,90 @@ class ContextFactCandidateRepository:
             )
             if already_rejected is not None:
                 continue
-            if len(saved_facts) - replaced_count >= free_fact_slots:
+            plan = (plans or {}).get(index) or CandidatePlan()
+            resolution = plan.resolution
+            if resolution.action == "skip":
+                continue
+            if resolution.action == "mention" and resolution.target_fact_id is not None:
+                protected_fact_ids.add(resolution.target_fact_id)
+                await self._record_source(
+                    user_id,
+                    resolution.target_fact_id,
+                    candidate,
+                    room_id,
+                    user_message_id,
+                    expected_revision=resolution.target_revision,
+                )
+                continue
+            if resolution.action == "supersede":
+                superseding_fact = await self._supersede_fact(user_id, candidate, plan, room_id, user_message_id)
+                if superseding_fact is not None:
+                    saved_facts.append(superseding_fact)
+                    superseded_count += 1
+                    protected_fact_ids.add(int(superseding_fact["id"]))
+                    continue
+                # 日本語: 対象が判定の後に変わっていたときは置き換えず、新しい事実として下で保存する(従来の挙動)。
+                # English: A target that changed after it was judged is not replaced; the content is saved as a new fact below.
+            if len(saved_facts) - replaced_count - superseded_count >= free_fact_slots:
                 if replacement_exhausted:
                     continue
                 if not await self._deprecate_replaceable_fact(user_id, protected_fact_ids):
                     replacement_exhausted = True
                     continue
                 replaced_count += 1
-            fact = await self._insert_unconfirmed_fact(user_id, candidate)
+            fact = await self._insert_unconfirmed_fact(user_id, candidate, plan.embedding)
             saved_facts.append(fact)
             protected_fact_ids.add(int(fact["id"]))
             await self._record_source(user_id, int(fact["id"]), candidate, room_id, user_message_id)
         if replaced_count:
             logger.info("Replaced memory facts at the cap.", extra={"user_id": user_id, "replaced_count": replaced_count})
+        if superseded_count:
+            logger.info("Superseded memory facts.", extra={"user_id": user_id, "superseded_count": superseded_count})
         return saved_facts
+
+    # 日本語: 対象の有効な事実を、判定の時点の revision のままであることを確かめて無効化し(理由 superseded、revision を進める)、
+    # 新しい事実を未確認として入れ、対象に置き換え先を記録する。更新は 1 文で条件(本人のもの・有効・revision)を確かめるので、
+    # 判定の後に本人が編集・無効化した対象は 0 行になり、何も変えずに None を返す(呼び出し側は新しい事実として保存する)。
+    # 対象の行はこの更新で行ロックを取る。
+    # English: Deprecate the active target after checking it is still at the revision it was judged at (reason superseded, revision
+    # advanced), insert the new fact as unconfirmed, and record the replacement on the target. The update checks the conditions (the
+    # owner's, active, revision) in one statement, so a target the owner edited or deprecated after the judgement matches zero rows
+    # and None is returned without changing anything (the caller saves the content as a new fact). The update takes the row lock.
+    async def _supersede_fact(
+        self,
+        user_id: int,
+        candidate: dict[str, Any],
+        plan: CandidatePlan,
+        room_id: str | None,
+        user_message_id: int | None,
+    ) -> dict[str, Any] | None:
+        target_id = plan.resolution.target_fact_id
+        deprecated = await self.session.execute(
+            update(ContextFact)
+            .where(
+                ContextFact.id == target_id,
+                ContextFact.user_id == user_id,
+                ContextFact.status == "active",
+                ContextFact.revision == plan.resolution.target_revision,
+            )
+            .values(
+                status="deprecated",
+                deprecated_reason="superseded",
+                revision=ContextFact.revision + 1,
+                updated_at=func.current_timestamp(),
+            )
+            .returning(ContextFact.id)
+        )
+        if deprecated.scalar_one_or_none() is None:
+            return None
+        fact = await self._insert_unconfirmed_fact(user_id, candidate, plan.embedding)
+        await self.session.execute(
+            update(ContextFact)
+            .where(ContextFact.id == target_id, ContextFact.user_id == user_id)
+            .values(superseded_by_fact_id=fact["id"])
+        )
+        await self._record_source(user_id, int(fact["id"]), candidate, room_id, user_message_id)
+        return fact
 
     # 日本語: 上限のとき、自動保存のまま本人が手を入れていない有効な事実を 1 件無効化して理由 capacity を記録し、入れたかを返す。
     # 対象は source_kind が chat で last_confirmed_at が NULL、かつ一度も更新されていない(revision が初期値の 1)事実だけ(本人の
@@ -311,12 +409,7 @@ class ContextFactCandidateRepository:
                 conditions.append(model.id.not_in(sorted(protected_fact_ids)))
             return conditions
 
-        last_mentioned = func.coalesce(
-            select(func.max(ContextFactSource.observed_at))
-            .where(ContextFactSource.fact_id == replaceable.id)
-            .scalar_subquery(),
-            cast(replaceable.created_at, DateTime(timezone=True)),
-        )
+        last_mentioned = last_mentioned_at(replaceable)
         victim = (
             select(replaceable.id)
             .where(*eligible(replaceable))
@@ -364,10 +457,15 @@ class ContextFactCandidateRepository:
         )
 
     # 日本語: 抽出した内容を事実として挿入する。last_confirmed_at は書かず NULL(本人未確認)のまま、確信度は抽出時の値を残す。
-    # 本人が Web UI で編集すれば確認済みになる(ADR 0016)。
+    # 本人が Web UI で編集すれば確認済みになる(ADR 0016)。embedding があれば一緒に保存する。
     # English: Insert extracted content as a fact. last_confirmed_at stays NULL (unconfirmed by the owner) and the extraction
     # confidence is kept; an owner edit in the web UI later confirms it (ADR 0016).
-    async def _insert_unconfirmed_fact(self, user_id: int, candidate: dict[str, Any]) -> dict[str, Any]:
+    async def _insert_unconfirmed_fact(
+        self,
+        user_id: int,
+        candidate: dict[str, Any],
+        embedding: list[float] | None = None,
+    ) -> dict[str, Any]:
         statement = pg_insert(ContextFact).values(
             user_id=user_id,
             fact_type=candidate["fact_type"],
@@ -377,6 +475,9 @@ class ContextFactCandidateRepository:
             source_ref=candidate.get("source_ref"),
             importance=candidate.get("importance", 50),
             confidence=candidate.get("confidence", 0),
+            # 日本語: 照合で作った埋め込みがあれば、同じ文面の埋め込みを作り直さず、そのまま保存して ready にする。
+            # English: An embedding made while reconciling is stored as is and marked ready, so the same text is not embedded again.
+            **({"embedding_vector": [float(value) for value in embedding], "embedding_status": "ready"} if embedding else {}),
         ).returning(*_FACT_RETURNING)
         row = (await self.session.execute(statement)).mappings().first()
         if row is None:  # pragma: no cover - PostgreSQL RETURNING invariant

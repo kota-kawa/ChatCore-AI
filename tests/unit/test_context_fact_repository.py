@@ -135,6 +135,59 @@ class ContextFactRepositoryTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIn(0.4, bound.values())
         self.assertEqual(bound["context_query_embedding"], "[0.1,0.2,0.3]")
 
+    async def test_reconcile_neighbors_query_is_owner_scoped_bounded_and_ordered_by_distance(self):
+        row = {"id": 10, "revision": 2, "fact_type": "profile", "title": "Home", "content": "Lives in Tokyo", "status": "active"}
+        result = MagicMock()
+        result.mappings.return_value.all.return_value = [row]
+        session = MagicMock()
+        session.execute = AsyncMock(return_value=result)
+
+        neighbors = await ContextFactRepository(session).find_reconcile_neighbors(
+            7, [0.1, 0.2, 0.3], limit=5, max_distance=0.6
+        )
+
+        self.assertEqual(neighbors, [row])
+        statement = session.execute.await_args.args[0]
+        sql = " ".join(str(statement.compile(dialect=dialect())).split())
+        # 利用者で絞り、埋め込みのある行だけを、距離の上限以内で近い順に limit 件まで読む。
+        # Scoped to the owner, only rows with an embedding, within the distance ceiling, nearest first, at most limit rows.
+        self.assertIn("WHERE context_facts.user_id = %(user_id_1)s AND (", sql)
+        self.assertIn("context_facts.embedding_vector IS NOT NULL", sql)
+        self.assertIn("(context_facts.embedding_vector <=> %(context_query_embedding)s) <= %(param_1)s", sql)
+        self.assertIn("ORDER BY context_facts.embedding_vector <=> %(context_query_embedding)s LIMIT %(param_2)s", sql)
+        bound = bind_statement_parameters(statement)
+        self.assertEqual(bound["user_id_1"], 7)
+        self.assertEqual(bound["param_1"], 0.6)
+        self.assertEqual(bound["param_2"], 5)
+        self.assertEqual(bound["context_query_embedding"], "[0.1,0.2,0.3]")
+        # 最後に話題に出た時刻は、出典の最大値(無ければ作成時刻)から読む。
+        # When it was last mentioned is read from the newest source (or the creation time without one).
+        self.assertIn("max(context_fact_sources.observed_at)", sql)
+        self.assertIn("AS last_mentioned", sql)
+
+    async def test_reconcile_neighbors_only_target_active_and_owner_deprecated_facts(self):
+        # 置き換え(superseded)・上限(capacity)・統合(merged)で無効化した事実は対象にしない。条件は重複判定と同じ
+        # matchable_fact_clause（有効、または理由が NULL か user の無効化済み）。
+        # Facts deprecated by replacement (superseded), the cap (capacity) or merging (merged) are never targeted. The condition is
+        # the one duplicate detection uses (active, or deprecated with a NULL or user reason).
+        session = MagicMock()
+        result = MagicMock()
+        result.mappings.return_value.all.return_value = []
+        session.execute = AsyncMock(return_value=result)
+
+        await ContextFactRepository(session).find_reconcile_neighbors(7, [0.1], limit=5, max_distance=0.6)
+
+        statement = session.execute.await_args.args[0]
+        sql = " ".join(str(statement.compile(dialect=dialect())).split())
+        self.assertIn(
+            "(context_facts.status = %(status_1)s OR context_facts.deprecated_reason IS NULL OR "
+            "context_facts.deprecated_reason = %(deprecated_reason_1)s)",
+            sql,
+        )
+        values = set(bind_statement_parameters(statement).values())
+        self.assertTrue({"active", "user"} <= values)
+        self.assertFalse({"superseded", "capacity", "merged"} & values)
+
     async def test_update_fact_uses_optimistic_revision_and_returning(self):
         session = MagicMock()
         session.execute = AsyncMock(return_value=_result(mapping=_fact_row(revision=2)))
