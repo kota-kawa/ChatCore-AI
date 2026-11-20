@@ -99,6 +99,8 @@ MEDIAN_FIELDS = (
     "web_search_count",
     "continuation_count",
     "final_answer_input_tokens",
+    # 記憶のまとめを入れなかったターン（0 を記録）も含めた中央値。入れたターンだけの代表値ではない。
+    # The median includes turns that carried no memory summary (recorded as 0); it is not the typical size of an included summary.
     "user_memory_estimated_tokens",
     "final_answer_output_chars",
     "first_visible_text_ms",
