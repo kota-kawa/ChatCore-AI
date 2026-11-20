@@ -108,8 +108,9 @@ effort: high
 | 変更する領域 | 主な実装 | 実行するテスト |
 | --- | --- | --- |
 | プロンプト文言 | `services/chat_prompt.py`、`services/prompt_assist.py`、`blueprints/chat/tasks.py` | `tests/unit/test_task_launch_prompting.py`、`tests/unit/test_chat_prompt_management.py`、`tests/unit/test_prompt_assist_logic.py` |
-| ツール定義 | `services/llm_tool_schema.py` | `tests/unit/test_llm_tool_schema.py` |
-| 生成ループ・予算・継続生成 | `services/chat_generation.py`、`services/chat_generation_agent_loop.py`、`services/chat_generation_llm_stream.py`、`services/chat_generation_answer_stream.py`、`services/chat_agent_budget.py`、`services/chat_answer_continuation.py`、`services/llm_context_budget.py` | `tests/unit/test_chat_generation_failure_recovery.py`、`tests/unit/test_llm_context_budget.py`、`tests/unit/test_chat_context_and_state.py` |
+| ツール定義 | `services/llm_tool_schema.py`、`services/memory_search.py`、`services/personal_knowledge.py` | `tests/unit/test_llm_tool_schema.py`、`tests/unit/test_memory_search_tool.py`、`tests/unit/test_personal_knowledge.py` |
+| 生成ループ・予算・継続生成 | `services/chat_generation.py`、`services/chat_generation_agent_loop.py`、`services/chat_generation_llm_stream.py`、`services/chat_generation_answer_stream.py`、`services/chat_agent_budget.py`、`services/chat_answer_continuation.py`、`services/llm_context_budget.py` | `tests/unit/test_chat_generation_failure_recovery.py`、`tests/unit/test_llm_context_budget.py`、`tests/unit/test_chat_context_and_state.py`、`tests/unit/test_memory_search_tool.py`（記憶の検索ツールの予算の共有・重複・取り下げ） |
+| 記憶の検索（順位づけ・信頼の分け方） | `services/memory_search_ranking.py`、`services/memory_trust.py`、`services/context_vault_service.py`（`search_facts_ranked`） | `tests/unit/test_memory_search_ranking.py`、`tests/unit/test_memory_search_retrieval.py`、`tests/unit/test_memory_trust.py` |
 | 会話文脈の組み立て（プロフィール・記憶のまとめ・要約・履歴） | `services/chat_context.py`、`services/user_memory.py` | `tests/unit/test_user_memory.py`、`tests/unit/test_chat_user_memory_paths.py`、`tests/unit/test_prompt_cache_layout.py`、`tests/unit/test_chat_context_and_state.py` |
 | Web 検索 | `services/web_search.py`、`services/web_search_trace.py`、`services/answer_trace.py` | `tests/unit/test_web_search.py`、`tests/unit/test_web_search_trace.py`、`tests/unit/test_answer_trace.py` |
 | 生成 UI | `services/generative_ui.py`、`services/generative_ui_repair.py` | `tests/unit/test_generative_ui.py`、`tests/unit/test_generated_ui_reliability.py`、`tests/unit/test_generative_ui_contract_matches_validator.py` |
@@ -121,7 +122,7 @@ effort: high
   - TurnState の封筒: `missing_turn_state_updates`、`untagged_turn_state_recoveries`
   - 予算の使い切り: `llm_turn_budget_exhausted`、`tools_withdrawn_by_budget`、`truncated_evidence_payloads`
   - 生成 UI: `artifact_status`、`artifact_reason_codes`、`artifact_repair_attempted`、`artifact_repair_succeeded`
-  - 分量: `final_answer_input_tokens`（見積もり）、`final_answer_output_chars`、`web_search_count`、`user_memory_fact_count`・`user_memory_estimated_tokens`（そのターンの文脈に入れた記憶のまとめの件数と見積もりトークン数。入れなかったターンは 0）
+  - 分量: `final_answer_input_tokens`（見積もり）、`final_answer_output_chars`、`web_search_count`、`user_memory_fact_count`・`user_memory_estimated_tokens`（そのターンの文脈に入れた記憶のまとめの件数と見積もりトークン数。入れなかったターンは 0）、`memory_search_call_count`・`memory_search_fact_count`・`memory_search_untrusted_memory_seen`（モデルが呼んだ記憶の検索ツールの回数、返した記憶の件数の合計、本人由来でない未確認の記憶を含んで自動承認を止めたか）
   - 下書き: `answer_draft_discards`（画面に出した下書きが確定した本文に置き換わらず捨てられた回数）、`first_visible_text_ms`（ジョブ開始から最初の本文を送るまでのミリ秒）
 - これらの指標が変更前より悪化した場合は、回答文が良く見えても PR にしません。悪化していないことと、狙った改善が観点の比較で確認できたことの両方が揃ってから PR を作ります。
 - LLM に採点させる判定は実行ごとに揺れるため、CI の合否条件にはしません。CI で守るのは決定的に判定できるもの（形式、契約、引用先の存在、禁止パターンの不在、構造のしきい値）に限り、意味の判定は PR 本文に残す比較で扱います。

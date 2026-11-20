@@ -2,10 +2,10 @@
 
 The phase that decides which tools the model is offered and runs the tool calls it requests.
 
-検索系（メモ/マイコンテキスト、公開プロンプト）と読み取り系（根拠の再読み取り、
+検索系（メモ、記憶、公開プロンプト）と読み取り系（根拠の再読み取り、
 ページ本文）はここで実行する。Web 検索は `_run_web_search_tool_call`
 （`chat_generation_web_search`）へ渡す。
-Lookups (memo / My Context, public prompts) and reads (re-reading evidence, page bodies) run
+Lookups (memos, memory, public prompts) and reads (re-reading evidence, page bodies) run
 here; web search is handed to `_run_web_search_tool_call` (`chat_generation_web_search`).
 """
 
@@ -28,7 +28,7 @@ from .chat_generation_job_base import ChatGenerationJobBase
 from .chat_generation_turn import ChatTurnRunState
 from .chat_tool_calls import (
     _EXTERNAL_CONTENT_TOOL_NAMES,
-    _contains_unconfirmed_context_facts,
+    _contains_non_owner_unconfirmed_memories,
     _includes_external_evidence,
     _is_memo_only_request,
     _normalize_tool_call,
@@ -39,12 +39,18 @@ from .chat_web_page_reader import (
     READ_WEB_PAGE_TOOL_NAME,
     read_web_page_tool_definition,
 )
+from .memory_search import (
+    MEMORY_SEARCH_TOOL_NAME,
+    format_memory_search_tool_result,
+    get_memory_search_tool_definition,
+)
 from .personal_knowledge import (
     PERSONAL_KNOWLEDGE_TOOL_NAME,
     get_personal_knowledge_tool_definition,
 )
 from .research_state import TurnState
 from .selected_reference_context import (
+    MEMORY_SEARCH_SOURCE,
     PERSONAL_KNOWLEDGE_SOURCE,
     SHARED_PROMPT_SOURCE,
 )
@@ -74,7 +80,19 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
     # Turn a lookup tool result into one answer-trace step; the source follows the event prefix.
     @staticmethod
     def _lookup_source(event_prefix: str) -> str:
+        if event_prefix == MEMORY_SEARCH_TOOL_NAME:
+            return MEMORY_SEARCH_SOURCE
         return PERSONAL_KNOWLEDGE_SOURCE if event_prefix == "personal_knowledge_search" else SHARED_PROMPT_SOURCE
+
+    # 検索の進行イベントの本文。記憶の検索の検索語は記憶の内容から作られうるので載せない（回答までのステップで伏せているのと同じ）。
+    # メモ・共有プロンプトの検索は検索語を載せる。
+    # The body of a lookup progress event. The memory tool's query can be built from memory content, so it is left out (as the answer
+    # steps already do); memo and shared-prompt lookups keep their query.
+    @staticmethod
+    def _lookup_event_payload(event_prefix: str, query: str, fields: dict[str, Any]) -> dict[str, Any]:
+        if event_prefix == MEMORY_SEARCH_TOOL_NAME:
+            return fields
+        return {"query": query, **fields}
 
     @classmethod
     def _lookup_trace_step(
@@ -154,14 +172,16 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
             return None
         self._publish(
             f"{event_prefix}_started",
-            {"query": query, "step": step, "max_steps": budget.max_steps},
+            self._lookup_event_payload(event_prefix, query, {"step": step, "max_steps": budget.max_steps}),
         )
         return step, query
 
     # 検索系ツールの呼び出しを1件実行する。ステップ会計は共有の予算オブジェクトが持つ。
-    # メモ検索と共有プロンプト検索は進行管理が同じなので、1つの実行部を共有する。
-    # Execute one lookup tool call. Step accounting lives in the shared budget object. The
-    # memo and shared prompt tools share this runner because their handling is identical.
+    # メモ検索・共有プロンプト検索・記憶の検索は進行管理が同じなので、1つの実行部を共有する（ツール呼び出し回数の上限も共有）。
+    # format_result があれば、結果をモデルへ渡す文面をそれで作る（既定は JSON）。
+    # Execute one lookup tool call. Step accounting lives in the shared budget object. The memo,
+    # shared prompt and memory tools share this runner because their handling is identical, which
+    # also shares one tool-call limit. A format_result builds the text handed to the model (JSON by default).
     def _run_lookup_tool_call(
         self,
         tool_call: dict[str, Any],
@@ -177,6 +197,7 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
         turn_state: TurnState,
         evidence_store: EvidenceStore,
         trace_steps: list[TraceStep] | None = None,
+        format_result: Callable[[dict[str, Any]], str] | None = None,
     ) -> dict[str, Any] | None:
         admitted = self._begin_lookup_tool_call(
             tool_call,
@@ -215,7 +236,7 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
             logger.exception(failure_log_message)
             self._publish(
                 f"{event_prefix}_failed",
-                {"query": query, "step": step, "max_steps": budget.max_steps},
+                self._lookup_event_payload(event_prefix, query, {"step": step, "max_steps": budget.max_steps}),
             )
             current_messages.append(
                 _tool_result_message(
@@ -257,24 +278,27 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
             logger.warning("%s (status=failed)", failure_log_message)
             self._publish(
                 f"{event_prefix}_failed",
-                {"query": query, "step": step, "max_steps": budget.max_steps},
+                self._lookup_event_payload(event_prefix, query, {"step": step, "max_steps": budget.max_steps}),
             )
-            current_messages.append(_tool_result_message(tool_call, payload))
+            current_messages.append(_tool_result_message(tool_call, format_result(payload) if format_result else payload))
             if trace_steps is not None and running is not None:
                 self._finish_trace_step(trace_steps, running, self._lookup_trace_step(event_prefix, payload, query))
             return payload
 
         self._publish(
             f"{event_prefix}_completed",
-            {
-                "query": query,
-                "status": status,
-                **{key: int(payload.get(key) or 0) for key in result_counts},
-                "step": step,
-                "max_steps": budget.max_steps,
-            },
+            self._lookup_event_payload(
+                event_prefix,
+                query,
+                {
+                    "status": status,
+                    **{key: int(payload.get(key) or 0) for key in result_counts},
+                    "step": step,
+                    "max_steps": budget.max_steps,
+                },
+            ),
         )
-        current_messages.append(_tool_result_message(tool_call, payload))
+        current_messages.append(_tool_result_message(tool_call, format_result(payload) if format_result else payload))
         if trace_steps is not None and running is not None:
             # 事前検索と同じ検索語で、検索し直していない場合はステップを残さない。
             # A query already prefetched was not searched again, so it leaves no step.
@@ -302,6 +326,11 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
             if self._shared_prompt_search is not None
             else None
         )
+        memory_search_tool = (
+            get_memory_search_tool_definition()
+            if self._memory_search is not None
+            else None
+        )
 
         # メモ検索はWeb検索の設定に依存しないので、どちらか一方だけでもツールを渡す。
         # Memo lookup does not depend on the web search settings, so either tool alone
@@ -309,6 +338,11 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
         configured_tools: list[dict[str, Any]] = []
         if is_web_search_enabled() and not suppress_external_lookup_tools:
             configured_tools.append(web_search_tool)
+        # 記憶の検索は、メモの参照トグルで出し入れされるツールより前に置く。毎ターン出るので、先頭側を安定させる（ADR 0011）。
+        # Memory search goes before the tools that the memo toggle adds or removes. It is present every turn, which keeps the head of
+        # the list stable (ADR 0011).
+        if memory_search_tool is not None:
+            configured_tools.append(memory_search_tool)
         if personal_knowledge_tool is not None:
             configured_tools.append(personal_knowledge_tool)
         if shared_prompt_tool is not None:
@@ -370,26 +404,50 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
                 func_name == PERSONAL_KNOWLEDGE_TOOL_NAME
                 and self._personal_knowledge_search is not None
             ):
-                lookup_payload = self._run_lookup_tool_call(
+                self._run_lookup_tool_call(
                     tc,
                     tool_name=PERSONAL_KNOWLEDGE_TOOL_NAME,
                     search=self._personal_knowledge_search,
                     event_prefix="personal_knowledge_search",
-                    result_counts=("memo_count", "context_fact_count"),
-                    failure_log_message="Memo / context search via tool call failed.",
-                    failure_tool_message="Memo and My Context search failed.",
+                    result_counts=("memo_count",),
+                    failure_log_message="Memo search via tool call failed.",
+                    failure_tool_message="Memo search failed.",
                     current_messages=state.current_messages,
                     budget=state.budget,
                     turn_state=state.turn_state,
                     evidence_store=state.evidence_store,
                     trace_steps=state.web_search_trace_steps,
                 )
-                if _contains_unconfirmed_context_facts(lookup_payload):
-                    # MCP や取り込みで入った事実は、本人の確認なしで有効になりうる。外部入力と同様に扱い、
-                    # 「常に承認」でも、それを根拠にした書き込みが黙って実行されないようにする。
-                    # MCP/import facts can be active without owner review. Treat them like
-                    # external input so "always approve" cannot turn one into a silent write.
+                # メモは本人のデータなので、この経路は「常に承認」の自動実行を止めない（記憶の検索は下の memory_search）。
+                # Memos are the owner's own data, so this path never stops auto-run under "always approve"
+                # (memory is searched through memory_search below).
+                continue
+
+            if func_name == MEMORY_SEARCH_TOOL_NAME and self._memory_search is not None:
+                state.telemetry.memory_search_call_count += 1
+                memory_payload = self._run_lookup_tool_call(
+                    tc,
+                    tool_name=MEMORY_SEARCH_TOOL_NAME,
+                    search=self._memory_search,
+                    event_prefix=MEMORY_SEARCH_TOOL_NAME,
+                    result_counts=("memory_count",),
+                    failure_log_message="Memory search via tool call failed.",
+                    failure_tool_message="Memory search failed.",
+                    current_messages=state.current_messages,
+                    budget=state.budget,
+                    turn_state=state.turn_state,
+                    evidence_store=state.evidence_store,
+                    trace_steps=state.web_search_trace_steps,
+                    format_result=format_memory_search_tool_result,
+                )
+                state.telemetry.memory_search_fact_count += int((memory_payload or {}).get("memory_count") or 0)
+                if _contains_non_owner_unconfirmed_memories(memory_payload, "memories"):
+                    # MCP や取り込みで入り、本人が確認していない記憶は、外部入力と同様に扱う。「常に承認」でも、それを根拠にした書き込みが
+                    # 黙って実行されないようにする。本人が確認した記憶とチャットから抽出した記憶は止めない（ADR 0025）。
+                    # Memory that arrived through MCP or import and was never confirmed counts as external input, so "always approve"
+                    # cannot turn it into a silent write. Memory the owner confirmed or extracted from chat does not stop it (ADR 0025).
                     state.untrusted_input_ingested = True
+                    state.telemetry.memory_search_untrusted_memory_seen = True
                 continue
 
             if (

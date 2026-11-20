@@ -12,21 +12,23 @@ Keeping that rule in one place means the three routes cannot drift apart.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import threading
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from functools import partial
 from typing import Any
 
 from services.personal_knowledge import build_personal_overview
-from services.selected_reference_context import PERSONAL_KNOWLEDGE_SOURCE
+from services.selected_reference_context import PERSONAL_KNOWLEDGE_SOURCE, lookup_query_key
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "DeduplicatedLookup",
     "SelectedReferenceSearchers",
+    "build_memory_searcher",
     "build_selected_reference_searchers",
 ]
 
@@ -44,24 +46,21 @@ class DeduplicatedLookup:
     already prefetched would push the very same memo bodies into the context a second time.
     """
 
-    def __init__(self, search: Callable[[str], dict[str, Any]], *, source_label: str) -> None:
+    def __init__(self, search: Callable[[str], Any], *, source_label: str) -> None:
         self._search = search
         self._source_label = source_label
         self._lock = threading.Lock()
         self._searched: set[str] = set()
 
-    # 空白の連続と大文字小文字の差を無視して同一クエリとみなすための正規化キー。
-    # Normalized key so queries differing only in whitespace runs or letter case count as the same query.
-    @staticmethod
-    def _key(query: str) -> str:
-        return " ".join(str(query or "").split()).casefold()
-
     # 実行済みのクエリなら検索せず already_searched を返し、未実行なら検索して成功時だけ記録する。
     # 空クエリ（key が空）は重複判定の対象にせず、毎回そのまま検索へ渡す。
+    # 検索が非同期（DB 検索）のときは、結果が出てから記録する awaitable を返す。呼び出し側は同期の値と awaitable の両方を受け取る。
     # Return already_searched for a query run earlier; otherwise search and record it only on success.
     # An empty query (empty key) is never deduplicated and always goes straight to the search.
-    def __call__(self, query: str) -> dict[str, Any]:
-        key = self._key(query)
+    # With an async search (a database lookup) an awaitable is returned that records the query once the result is in; callers accept
+    # both a plain value and an awaitable.
+    def __call__(self, query: str) -> Any:
+        key = lookup_query_key(query)
         if key:
             with self._lock:
                 if key in self._searched:
@@ -80,14 +79,24 @@ class DeduplicatedLookup:
                     }
 
         payload = self._search(query)
-        # 失敗したクエリは記録しない。記録すると、一過性の障害からの引き直しが
-        # 「検索済み」として空振りしてしまう。
-        # A failed query is not recorded: recording it would turn the retry that recovers from a
-        # transient outage into an "already searched" no-op.
+        if inspect.isawaitable(payload):
+            return self._record_when_done(key, payload)
+        self._record(key, payload)
+        return payload
+
+    async def _record_when_done(self, key: str, pending: Awaitable[Any]) -> Any:
+        payload = await pending
+        self._record(key, payload)
+        return payload
+
+    # 失敗したクエリは記録しない。記録すると、一過性の障害からの引き直しが
+    # 「検索済み」として空振りしてしまう。
+    # A failed query is not recorded: recording it would turn the retry that recovers from a
+    # transient outage into an "already searched" no-op.
+    def _record(self, key: str, payload: Any) -> None:
         if key and isinstance(payload, dict) and payload.get("status") != "failed":
             with self._lock:
                 self._searched.add(key)
-        return payload
 
 
 @dataclass(frozen=True)
@@ -137,7 +146,7 @@ def build_selected_reference_searchers(
         else:
             personal_knowledge = DeduplicatedLookup(
                 partial(search_personal_knowledge, user_id),
-                source_label="memo and My Context",
+                source_label="memo",
             )
             overview = partial(personal_overview, user_id)
 
@@ -153,3 +162,19 @@ def build_selected_reference_searchers(
         personal_overview=overview,
         unavailable_sources=tuple(unavailable),
     )
+
+
+# モデルが呼ぶ記憶の検索ツール用の検索関数。「＋→メモ」のトグルとは無関係で、記憶を読んでよいターン（services/user_memory.py の
+# should_use_user_memory）だけ渡す。事前の検索はしない。同じ検索語の繰り返しは、メモや共有プロンプトと同じ DeduplicatedLookup で止める。
+# The lookup behind the model-called memory_search tool. It is independent of the "+ -> Memo" toggle and handed over only on a turn that
+# may read memory (should_use_user_memory in services/user_memory.py). Nothing is prefetched. A repeated query is stopped by the same
+# DeduplicatedLookup the memo and shared-prompt tools use.
+def build_memory_searcher(
+    *,
+    user_id: int | None,
+    memory_enabled: bool,
+    search_memory: Callable[..., Any],
+) -> DeduplicatedLookup | None:
+    if user_id is None or not memory_enabled:
+        return None
+    return DeduplicatedLookup(partial(search_memory, user_id), source_label="memory")

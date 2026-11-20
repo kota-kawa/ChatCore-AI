@@ -8,14 +8,14 @@ import { getInitialThinkingState } from "../lib/chat_page/thinking_status";
 
 test("shows personal-knowledge lookup while selected references are prefetched", () => {
   assert.deepEqual(getInitialThinkingState(true, false, "ja"), {
-    text: "メモと記憶を検索しています",
+    text: "メモを検索しています",
     generationPhase: "web-search",
   });
 });
 
 test("shows both selected lookup types when both are enabled", () => {
   assert.deepEqual(getInitialThinkingState(true, true, "ja"), {
-    text: "メモ、記憶、共有プロンプトを検索しています",
+    text: "メモと共有プロンプトを検索しています",
     generationPhase: "web-search",
   });
 });

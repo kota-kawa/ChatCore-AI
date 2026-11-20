@@ -22,6 +22,7 @@ from services.user_memory import (
     build_user_memory_summary,
     is_memory_use_enabled,
     load_user_memory_summary,
+    should_use_user_memory,
 )
 
 
@@ -338,6 +339,20 @@ class MemoryUseEnabledTestCase(unittest.TestCase):
         for user in (None, {}, {"memory_use_enabled": False}, {"memory_use_enabled": None}, {"memory_use_enabled": "true"}, "x"):
             with self.subTest(user=user):
                 self.assertFalse(is_memory_use_enabled(user))  # type: ignore[arg-type]
+
+
+class ShouldUseUserMemoryTestCase(unittest.TestCase):
+    # `<user_memory>` と記憶の検索ツールが共有する条件。
+    # The condition `<user_memory>` and the memory search tool share.
+    def test_only_a_signed_in_normal_room_with_the_setting_on_may_read_memory(self):
+        on = {"memory_use_enabled": True}
+
+        self.assertTrue(should_use_user_memory(user_id=7, room_mode="normal", user=on))
+        self.assertFalse(should_use_user_memory(user_id=None, room_mode="normal", user=on))
+        self.assertFalse(should_use_user_memory(user_id=7, room_mode="temporary", user=on))
+        for user in (None, {}, {"memory_use_enabled": False}, {"memory_use_enabled": None}, {"memory_use_enabled": "true"}):
+            with self.subTest(user=user):
+                self.assertFalse(should_use_user_memory(user_id=7, room_mode="normal", user=user))  # type: ignore[arg-type]
 
 
 class OwnerFactsQueryTestCase(unittest.IsolatedAsyncioTestCase):

@@ -43,6 +43,7 @@ from services.error_messages import (
     ERROR_CONTEXT_FACT_REVISION_CONFLICT,
     ERROR_CONTEXT_MEMORY_USE_SETTINGS_NOT_FOUND,
 )
+from services.memory_trust import owner_originated_condition
 from services.models import ContextFact, ContextFactSource, User
 from services.models.types import Vector
 from services.repositories.context_fact_source_repository import last_mentioned_at
@@ -138,6 +139,19 @@ def _serialize_record(record: dict[str, Any]) -> dict[str, Any]:
         "updated_at": serialize_datetime_iso(record["updated_at"]),
         "_updated_at_raw": record["updated_at"],
     }
+
+
+# 日本語: 事実が最後に話題に出た時刻。出典 context_fact_sources.observed_at の最大値で、出典が無ければ updated_at。
+# observed_at は timestamptz、updated_at はタイムゾーン無しなので、updated_at を timestamptz へ明示的に変換して揃える。
+# 毎ターンのまとめと記憶の検索が同じ定義を使う。
+# English: When a fact was last mentioned: the newest context_fact_sources.observed_at, or updated_at without a source. observed_at is
+# timestamptz while updated_at is timezone-less, so updated_at is cast to timestamptz explicitly. The per-turn summary and memory search
+# share this definition.
+def _last_mentioned_at():
+    return func.coalesce(
+        select(func.max(ContextFactSource.observed_at)).where(ContextFactSource.fact_id == ContextFact.id).scalar_subquery(),
+        cast(ContextFact.updated_at, DateTime(timezone=True)),
+    ).label("last_mentioned_at")
 
 
 class ContextFactRepository:
@@ -242,24 +256,21 @@ class ContextFactRepository:
         return [self._serialize_row(fact) for fact in result.scalars().all()]
 
     # 日本語: 毎ターン文脈へ入れる記憶のまとめ用に、有効で本人由来の事実を 1 回の読み取りで返す。
-    # 本人由来とは、本人が確認した事実(last_confirmed_at が非 NULL)と、チャットから抽出した事実(source_kind が chat)。
-    # MCP・取り込みで入って本人が確認していない事実は返さない(ADR 0025)。MCP 向けの list_active_for_digest とは別の問い合わせで、
+    # 本人由来とは、本人が確認した事実(last_confirmed_at が非 NULL)と、チャットから抽出した事実(source_kind が chat)で、
+    # 定義は services/memory_trust.py と共有する。MCP・取り込みで入って本人が確認していない事実は返さない(ADR 0025)。
+    # MCP 向けの list_active_for_digest とは別の問い合わせで、
     # 順序は重要度の高い順、同じなら最後に話題に出た(出典 context_fact_sources.observed_at の最大値、出典が無ければ updated_at)が新しい順、
     # それも同じなら id の大きい順。observed_at は timestamptz、updated_at はタイムゾーン無しなので、updated_at を timestamptz へ
     # 明示的に変換して揃える(候補リポジトリの入れ替え判定と同じ扱い)。
     # English: One read of the active, owner-originated facts for the per-turn memory summary. Owner-originated means confirmed by
-    # the owner (last_confirmed_at is not NULL) or extracted from chat (source_kind is chat); unconfirmed facts that arrived through
-    # MCP or import are not returned (ADR 0025). This is a separate query from list_active_for_digest, which serves MCP. Order:
-    # importance descending, then the most recently mentioned (newest context_fact_sources.observed_at, or updated_at without a
-    # source), then id descending. observed_at is timestamptz while updated_at is timezone-less, so updated_at is cast to
-    # timestamptz explicitly, as the candidate repository does when it picks a fact to replace.
+    # the owner (last_confirmed_at is not NULL) or extracted from chat (source_kind is chat), defined in services/memory_trust.py;
+    # unconfirmed facts that arrived through MCP or import are not returned (ADR 0025). This is a separate query from
+    # list_active_for_digest, which serves MCP. Order: importance descending, then the most recently mentioned (newest
+    # context_fact_sources.observed_at, or updated_at without a source), then id descending. observed_at is timestamptz while
+    # updated_at is timezone-less, so updated_at is cast to timestamptz explicitly, as the candidate repository does when it picks
+    # a fact to replace.
     async def list_owner_facts_for_memory_summary(self, user_id: int) -> list[dict[str, Any]]:
-        last_mentioned = func.coalesce(
-            select(func.max(ContextFactSource.observed_at))
-            .where(ContextFactSource.fact_id == ContextFact.id)
-            .scalar_subquery(),
-            cast(ContextFact.updated_at, DateTime(timezone=True)),
-        ).label("last_mentioned_at")
+        last_mentioned = _last_mentioned_at()
         result = await self.session.execute(
             select(
                 ContextFact.id,
@@ -272,9 +283,42 @@ class ContextFactRepository:
             .where(
                 ContextFact.user_id == user_id,
                 ContextFact.status == "active",
-                or_(ContextFact.last_confirmed_at.is_not(None), ContextFact.source_kind == "chat"),
+                owner_originated_condition(ContextFact.last_confirmed_at, ContextFact.source_kind),
             )
             .order_by(ContextFact.importance.desc(), last_mentioned.desc().nulls_last(), ContextFact.id.desc())
+            .limit(MAX_ACTIVE_CONTEXT_FACTS)
+        )
+        return [dict(row) for row in result.mappings().all()]
+
+    # 日本語: 記憶の検索の順位づけ用に、その利用者の有効な事実すべて(上限 MAX_ACTIVE_CONTEXT_FACTS)を 1 回の読み取りで返す。
+    # embedding があれば、各行に検索語の埋め込みとのコサイン距離 distance を付ける(ベクトルがまだ無い行は None)。無ければ全行 None。
+    # 順位づけ(services/memory_search_ranking.py)は Python 側で行うので、語の一致を DB で絞らない。MCP の search_context 用の
+    # search_facts(semantic_search / text_search)とは別の問い合わせで、そちらの挙動は変えない。
+    # English: All of the user's active facts (capped at MAX_ACTIVE_CONTEXT_FACTS) in one read for memory-search ranking. With an
+    # embedding each row carries `distance`, its cosine distance to the query embedding (None for a row with no vector yet); without
+    # one every row's distance is None. Ranking (services/memory_search_ranking.py) happens in Python, so word matches are not filtered
+    # in the database. This is a separate query from search_facts (semantic_search / text_search) behind MCP search_context, whose
+    # behavior is unchanged.
+    async def list_active_for_memory_search(
+        self,
+        user_id: int,
+        embedding: list[float] | None = None,
+    ) -> list[dict[str, Any]]:
+        distance = self._distance(embedding).label("distance") if embedding else null().label("distance")
+        result = await self.session.execute(
+            select(
+                ContextFact.id,
+                ContextFact.fact_type,
+                ContextFact.title,
+                ContextFact.content,
+                ContextFact.importance,
+                ContextFact.source_kind,
+                ContextFact.last_confirmed_at,
+                _last_mentioned_at(),
+                distance,
+            )
+            .where(ContextFact.user_id == user_id, ContextFact.status == "active")
+            .order_by(ContextFact.id.desc())
             .limit(MAX_ACTIVE_CONTEXT_FACTS)
         )
         return [dict(row) for row in result.mappings().all()]

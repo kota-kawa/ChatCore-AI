@@ -1385,7 +1385,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                     SelectedReferenceLookupTrace(
                         source=PERSONAL_KNOWLEDGE_SOURCE,
                         query="好みのカフェ",
-                        payload={"status": "ok", "memo_count": 1, "context_fact_count": 0},
+                        payload={"status": "ok", "memo_count": 1},
                     )
                 ],
             )
@@ -1801,9 +1801,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                     "status": "ok",
                     "query": query,
                     "memo_count": 2,
-                    "context_fact_count": 0,
                     "memos": [],
-                    "context_facts": [],
                 },
             )
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
@@ -1812,9 +1810,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(
             [[(step["id"], step["title"], step["status"], step["badge"]) for step in snapshot["steps"]] for snapshot in snapshots],
             [
-                [("s1", "メモと記憶を検索", "running", "実行中")],
-                [("s1", "メモと記憶を検索", "done", "2件")],
-                [("s1", "メモと記憶を検索", "done", "2件"), ("s2", "回答を作成", "done", "")],
+                [("s1", "メモを検索", "running", "実行中")],
+                [("s1", "メモを検索", "done", "2件")],
+                [("s1", "メモを検索", "done", "2件"), ("s2", "回答を作成", "done", "")],
             ],
         )
         self.assertEqual(snapshots[0]["steps"][0]["query"], "好みのカフェ")
@@ -1845,7 +1843,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                     SelectedReferenceLookupTrace(
                         source=PERSONAL_KNOWLEDGE_SOURCE,
                         query="好みのカフェ",
-                        payload={"status": "ok", "memo_count": 1, "context_fact_count": 0},
+                        payload={"status": "ok", "memo_count": 1},
                     )
                 ],
             )
@@ -1855,10 +1853,10 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(
             [[(step["title"], step["status"]) for step in snapshot["steps"]] for snapshot in snapshots],
             [
-                [("メモと記憶を検索", "done")],
-                [("メモと記憶を検索", "done"), ("メモと記憶を検索", "running")],
-                [("メモと記憶を検索", "done")],
-                [("メモと記憶を検索", "done"), ("回答を作成", "done")],
+                [("メモを検索", "done")],
+                [("メモを検索", "done"), ("メモを検索", "running")],
+                [("メモを検索", "done")],
+                [("メモを検索", "done"), ("回答を作成", "done")],
             ],
         )
 
@@ -1889,7 +1887,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                     SelectedReferenceLookupTrace(
                         source=PERSONAL_KNOWLEDGE_SOURCE,
                         query="好みのカフェ",
-                        payload={"status": "ok", "memo_count": 1, "context_fact_count": 0},
+                        payload={"status": "ok", "memo_count": 1},
                     )
                 ],
             )
@@ -1901,7 +1899,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         # 回答を書いたステップはまだ確定していないので、記録は画面に出ていたもの（参照元の検索）のまま。
         # The step that writes the answer was never settled, so the record is what was on screen: the reference lookup.
         (published,) = _sse_payloads(body, "answer_trace_updated")
-        self.assertEqual([step["title"] for step in published["trace"]["steps"]], ["メモと記憶を検索"])
+        self.assertEqual([step["title"] for step in published["trace"]["steps"]], ["メモを検索"])
         trace_part = {"type": "answer_trace", **published}
         (aborted,) = _sse_payloads(body, "aborted")
         self.assertEqual(aborted["parts"], [trace_part, {"type": "text", "text": "途中まで"}])
@@ -1964,7 +1962,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                     SelectedReferenceLookupTrace(
                         source=PERSONAL_KNOWLEDGE_SOURCE,
                         query="好みのカフェ",
-                        payload={"status": "ok", "memo_count": 1, "context_fact_count": 0},
+                        payload={"status": "ok", "memo_count": 1},
                     )
                 ],
             )
@@ -1973,7 +1971,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         snapshots = [payload["trace"] for payload in _sse_payloads(body, "answer_trace_updated")]
         self.assertEqual(
             [[step["title"] for step in snapshot["steps"]] for snapshot in snapshots],
-            [["メモと記憶を検索"], ["メモと記憶を検索", "回答を作成"]],
+            [["メモを検索"], ["メモを検索", "回答を作成"]],
         )
         self.assertLess(body.index("event: answer_trace_updated"), body.index("event: response_generation_started"))
 
@@ -2257,7 +2255,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("web_search_image", persisted_types)
         self.assertEqual(persisted_types[-1], "interactive_buttons")
 
-    # 日本語: 選択した参照（メモ・記憶・共有プロンプト）の検索が、「回答までのステップ」として応答に追加されることを検証します。
+    # 日本語: 選択した参照（メモ・共有プロンプト）の検索が、「回答までのステップ」として応答に追加されることを検証します。
     # English: Verify lookups of selected references (memos, Memory, shared prompts) are appended to the reply as answer steps.
     def test_background_generation_job_records_selected_reference_steps(self):
         persisted_messages = []
@@ -2265,7 +2263,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             SelectedReferenceLookupTrace(
                 source=PERSONAL_KNOWLEDGE_SOURCE,
                 query="好みのカフェ",
-                payload={"status": "ok", "memo_count": 1, "context_fact_count": 1},
+                payload={"status": "ok", "memo_count": 1},
             ),
             SelectedReferenceLookupTrace(
                 source=SHARED_PROMPT_SOURCE,
@@ -2293,7 +2291,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         trace_event = _sse_payloads(body, "answer_trace_updated")[-1]
         self.assertEqual(
             [step["title"] for step in trace_event["trace"]["steps"]],
-            ["メモと記憶を検索", "共有プロンプトを検索", "回答を作成"],
+            ["メモを検索", "共有プロンプトを検索", "回答を作成"],
         )
         self.assertEqual(_sse_payloads(body, "done")[0]["parts"][0], {"type": "answer_trace", **trace_event})
         self.assertEqual(persisted_messages, ["回答本文"])
@@ -4339,7 +4337,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         )
         self.assertEqual(history_payload["messages"][-1]["message"], "完了")
 
-    # 日本語: 参照元（メモ・記憶と共有プロンプト）を選んだ非ストリーミングの再生成を実行し、応答と、
+    # 日本語: 参照元（メモと共有プロンプト）を選んだ非ストリーミングの再生成を実行し、応答と、
     # モデルへ渡した会話を返します。
     # English: Run a non-streaming regeneration with both reference sources selected; returns the payload
     # and the conversation sent to the model.
@@ -4393,9 +4391,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 new=AsyncMock(return_value={
                     "status": "ok",
                     "memo_count": 1,
-                    "context_fact_count": 0,
                     "memos": [{"title": "要約方針", "content": "結論を先に書く"}],
-                    "context_facts": [],
                 }),
             ) as personal_search,
             patch(
@@ -4421,7 +4417,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(payload["response"], "new answer")
         self.assertEqual(
             [step["title"] for step in payload["parts"][0]["trace"]["steps"]],
-            ["メモと記憶を検索", "共有プロンプトを検索", "回答を作成"],
+            ["メモを検索", "共有プロンプトを検索", "回答を作成"],
         )
         self.assertEqual(payload["parts"][1:], [{"type": "text", "text": "new answer"}])
         contents = [message["content"] for message in captured_messages["messages"]]
@@ -4900,9 +4896,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 new=AsyncMock(return_value={
                     "status": "ok",
                     "memo_count": 1,
-                    "context_fact_count": 0,
                     "memos": [{"title": "文章方針", "content": "短くまとめる"}],
-                    "context_facts": [],
                 }),
             ) as personal_search,
             patch("blueprints.chat.messages.get_llm_response", side_effect=get_llm_response),
@@ -4916,7 +4910,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["response"], "edited answer")
         self.assertEqual(payload["parts"][0]["type"], "answer_trace")
-        self.assertEqual(payload["parts"][0]["trace"]["steps"][0]["title"], "メモと記憶を検索")
+        self.assertEqual(payload["parts"][0]["trace"]["steps"][0]["title"], "メモを検索")
         contents = [message["content"] for message in captured_messages["messages"]]
         self.assertTrue(any("PDF BODY" in content for content in contents))
         self.assertTrue(any("文章方針" in content for content in contents))

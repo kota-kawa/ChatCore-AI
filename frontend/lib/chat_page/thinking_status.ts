@@ -11,8 +11,10 @@ type InitialThinkingState = {
   generationPhase: ChatGenerationPhase;
 };
 
-// メモ・記憶と共有プロンプトのどちらを検索するかに応じて文言を選ぶ。どちらも使わないときだけ「準備中」の段階にする。
-// Picks the text by which of memos/Memory and shared prompts will be searched; only when neither is used does the phase become "preparing".
+// メモと共有プロンプトのどちらを検索するかに応じて文言を選ぶ。どちらも使わないときだけ「準備中」の段階にする。
+// 記憶は事前に検索しないので、ここには出ない。
+// Picks the text by which of memos and shared prompts will be searched; only when neither is used does the phase become "preparing".
+// Memory is never searched beforehand, so it does not appear here.
 export function getInitialThinkingState(
   personalKnowledgeEnabled: boolean,
   sharedPromptsEnabled: boolean,
@@ -22,16 +24,16 @@ export function getInitialThinkingState(
   if (personalKnowledgeEnabled && sharedPromptsEnabled) {
     return {
       text: english
-        ? "Searching your memos, Memory, and shared prompts"
-        : "メモ、記憶、共有プロンプトを検索しています",
+        ? "Searching your memos and shared prompts"
+        : "メモと共有プロンプトを検索しています",
       generationPhase: "web-search",
     };
   }
   if (personalKnowledgeEnabled) {
     return {
       text: english
-        ? "Searching your memos and Memory"
-        : "メモと記憶を検索しています",
+        ? "Searching your memos"
+        : "メモを検索しています",
       generationPhase: "web-search",
     };
   }

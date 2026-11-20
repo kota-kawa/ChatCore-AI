@@ -54,6 +54,7 @@ _REFERENCE_GROUPS = (
     "prompts",
     "recent_memos",
     "context_facts",
+    "memories",
 )
 
 
