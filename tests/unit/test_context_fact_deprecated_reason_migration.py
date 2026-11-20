@@ -39,7 +39,11 @@ class ContextFactDeprecatedReasonMigrationTestCase(unittest.TestCase):
         with patch.object(migration.op, "execute") as execute:
             migration.upgrade()
 
-        (alter,) = _statements(execute)
+        bound, alter, reset = _statements(execute)
+        # 排他ロックの待ちに上限を付け、後続の revision へ持ち越さないよう最後に戻す。
+        # The exclusive-lock wait is bounded and the limit is reset so it does not carry into later revisions.
+        self.assertEqual(bound, "SET LOCAL lock_timeout = '5s'")
+        self.assertEqual(reset, "SET LOCAL lock_timeout TO DEFAULT")
         self.assertIn("ADD COLUMN deprecated_reason VARCHAR(20),", alter)
         self.assertNotIn("NOT NULL", alter)
         self.assertNotIn("DEFAULT", alter)

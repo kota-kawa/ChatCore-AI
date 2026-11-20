@@ -89,7 +89,10 @@ backfill だけが `# migration-review: approved-data-backfill` を付けられ�
 書き込みを待たせる）を 1 つ取ります。トランザクション内の advisory lock は終了まで残り、ロック表
 （`max_locks_per_transaction` × `max_connections`）を使い切ると `out of shared memory` で失敗するためです。
 書き込み全体を止めないよう `SET LOCAL lock_timeout` で待ちを区切り、取れなければ revision ごと失敗させて
-再実行します（`20261120_03`）。
+再実行します（`20261120_03`）。Alembic は適用待ちの revision を 1 つのトランザクションで流すので、
+`lock_timeout` は revision の最後で `TO DEFAULT` に戻します。同じ理由で、先に流れる revision が同じ表へ
+`ALTER TABLE` を発行するなら、そちらにも同じ上限を付けます（`20261120_02`）。上限の無い `ALTER TABLE` が
+長いトランザクションの後ろで待つと、その表の読み書きも後ろに並ぶためです。
 
 既存データを再生成する embedding migration は NULL を成功扱いにして終わらせず、
 `embedding_status = 'pending'` として `scripts/backfill_embeddings.py` の対象に残します。

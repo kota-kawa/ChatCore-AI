@@ -31,6 +31,13 @@ def upgrade() -> None:
     # （旧コードは列を書かず、復元しても NULL に戻さない。新しいコードは status が deprecated の行だけ理由を読む）。
     # Expand only: the column is nullable and no existing row is touched, so an older code color keeps working (it
     # writes no reason and does not clear it on restore; the new code reads the reason only on deprecated rows).
+    # ALTER TABLE は表全体の排他ロックを取る。長いトランザクションの後ろで待つと、その間は context_facts の
+    # 読み書きも後ろに並ぶので、待ち時間に上限を付け、取れなければ失敗させて再実行できるようにする。
+    # 同じトランザクションで流れる後続の revision に上限を持ち越さないよう、最後に戻す。
+    # ALTER TABLE takes an exclusive lock on the table. Waiting behind a long transaction would queue every
+    # read and write on context_facts behind it, so the wait is bounded: the revision fails and can be re-run.
+    # The limit is reset at the end so it does not carry into later revisions run in the same transaction.
+    op.execute("SET LOCAL lock_timeout = '5s'")
     op.execute(
         """
         ALTER TABLE context_facts
@@ -39,6 +46,7 @@ def upgrade() -> None:
                 CHECK (deprecated_reason IS NULL OR deprecated_reason IN ('user', 'superseded', 'merged', 'capacity'))
         """
     )
+    op.execute("SET LOCAL lock_timeout TO DEFAULT")
 
 
 def downgrade() -> None:
