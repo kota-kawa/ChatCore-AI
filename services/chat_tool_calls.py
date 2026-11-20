@@ -21,23 +21,25 @@ from .chat_workspace_tools.prompts import (
     PROMPTS_TOOL_FAMILY,
     SHARED_PROMPT_READ_TOOL_NAME,
 )
+from .memory_trust import contains_non_owner_unconfirmed_memory
 from .selected_reference_context import PERSONAL_KNOWLEDGE_SOURCE
 from .shared_prompt_lookup import SHARED_PROMPT_TOOL_NAME
 
 logger = logging.getLogger(__name__)
 
 
-def _contains_unconfirmed_context_facts(payload: dict[str, Any] | None) -> bool:
-    """個人の知識の検索結果に、持ち主がまだ確認していない事実が含まれているかを返す。
+def _contains_non_owner_unconfirmed_memories(payload: dict[str, Any] | None, group: str) -> bool:
+    """検索結果の `group` の一覧に、本人由来でない未確認の記憶（MCP・取り込みで入り、本人が確認していないもの）が含まれているかを返す。
 
-    Whether a personal-knowledge result contains facts the owner has not confirmed.
+    本人が確認した記憶と、チャットから抽出した記憶は含まない。定義は services/memory_trust.py にある。
+
+    Whether the result's `group` list contains unconfirmed memory that does not originate from the owner (saved through MCP or
+    import and never confirmed). Memory the owner confirmed and memory extracted from chat do not count; the definition lives in
+    services/memory_trust.py.
     """
     if not payload:
         return False
-    facts = payload.get("context_facts")
-    if not isinstance(facts, list):
-        return False
-    return any(not isinstance(fact, dict) or fact.get("confirmed") is not True for fact in facts)
+    return contains_non_owner_unconfirmed_memory(payload.get(group))
 
 
 def _is_memo_only_request(latest_user_message: str) -> bool:

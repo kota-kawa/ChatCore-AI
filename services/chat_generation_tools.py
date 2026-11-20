@@ -28,7 +28,7 @@ from .chat_generation_job_base import ChatGenerationJobBase
 from .chat_generation_turn import ChatTurnRunState
 from .chat_tool_calls import (
     _EXTERNAL_CONTENT_TOOL_NAMES,
-    _contains_unconfirmed_context_facts,
+    _contains_non_owner_unconfirmed_memories,
     _includes_external_evidence,
     _is_memo_only_request,
     _normalize_tool_call,
@@ -384,11 +384,13 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
                     evidence_store=state.evidence_store,
                     trace_steps=state.web_search_trace_steps,
                 )
-                if _contains_unconfirmed_context_facts(lookup_payload):
+                if _contains_non_owner_unconfirmed_memories(lookup_payload, "context_facts"):
                     # MCP や取り込みで入った事実は、本人の確認なしで有効になりうる。外部入力と同様に扱い、
                     # 「常に承認」でも、それを根拠にした書き込みが黙って実行されないようにする。
+                    # 本人が確認した事実とチャットから抽出した事実は止めない（ADR 0025）。
                     # MCP/import facts can be active without owner review. Treat them like
                     # external input so "always approve" cannot turn one into a silent write.
+                    # Facts the owner confirmed and facts extracted from chat do not stop it (ADR 0025).
                     state.untrusted_input_ingested = True
                 continue
 
