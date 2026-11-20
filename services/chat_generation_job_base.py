@@ -167,9 +167,9 @@ class ChatGenerationJobBase:
         # URLs pasted in earlier turns. Only the entry point is registered, with no body: the
         # fetch happens inside read_web_page if the model asks, so no turn pays for it upfront.
         self._earlier_pasted_urls = tuple(earlier_pasted_urls or ())
-        # メモ/マイコンテキスト検索。ユーザーIDに束ねた呼び出し側のクロージャを受け取るので、
+        # メモ検索。ユーザーIDに束ねた呼び出し側のクロージャを受け取るので、
         # ジョブ自身はセッションもDBも知らないままでいられる。None のときは機能そのものが無効。
-        # Memo / My Context lookup. The caller passes a closure already bound to a user id, so the
+        # Memo lookup. The caller passes a closure already bound to a user id, so the
         # job stays free of session and database concerns. None means the feature is off.
         self._personal_knowledge_search = personal_knowledge_search
         # 記憶の検索。呼び出し側が記憶を読んでよいと判断したターン（services/user_memory.py の should_use_user_memory）だけ受け取る。

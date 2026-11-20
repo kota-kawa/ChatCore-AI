@@ -1,4 +1,4 @@
-"""利用者がチャットで選んだ参照元（メモ・My Context、公開プロンプト）を、生成の前に検索して文脈へ差し込む。
+"""利用者がチャットで選んだ参照元（メモ、公開プロンプト）を、生成の前に検索して文脈へ差し込む。
 
 検索語の候補作成、参照元ごとの検索と再試行、結果の system メッセージ化を担当する。同期版は純粋なプロンプト組み立てのテスト用、
 リクエスト処理は非同期版を使う。
@@ -59,7 +59,7 @@ MEMORY_SEARCH_SOURCE = "memory_search"
 PERSONAL_OVERVIEW_TAG = "personal_overview_result"
 SHARED_PROMPT_SOURCE = "shared_prompt_search"
 _SOURCE_LABELS = {
-    PERSONAL_KNOWLEDGE_SOURCE: "memo and My Context",
+    PERSONAL_KNOWLEDGE_SOURCE: "memo",
     SHARED_PROMPT_SOURCE: "shared prompt",
 }
 _SOURCE_RESULT_TAGS = {
@@ -70,7 +70,7 @@ _SOURCE_RESULT_TAGS = {
 # An enabled-but-unusable source is reported to the model together with its reason.
 UNAVAILABLE_SOURCE_REASONS = {
     PERSONAL_KNOWLEDGE_SOURCE: (
-        "memo and My Context (the user is signed out, and memos are readable only in a signed-in session)"
+        "memo (the user is signed out, and memos are readable only in a signed-in session)"
     ),
 }
 
@@ -420,7 +420,7 @@ async def _load_overview_async(
         return None
     if not isinstance(overview, dict):
         return None
-    if not overview.get("recent_memos") and not overview.get("context_facts"):
+    if not overview.get("recent_memos"):
         return None
     return overview
 
@@ -458,9 +458,9 @@ def _load_overview_if_unmatched(
         return None
     if not isinstance(overview, dict):
         return None
-    if not overview.get("recent_memos") and not overview.get("context_facts"):
-        # 保存済みのメモも事実も無いなら、渡すものが無いので何も足さない。
-        # Nothing saved means nothing to hand over.
+    if not overview.get("recent_memos"):
+        # 保存済みのメモが無いなら、渡すものが無いので何も足さない。
+        # No saved memo means nothing to hand over.
         return None
     return overview
 
@@ -494,7 +494,7 @@ def _build_context(
             [
                 "The user explicitly enabled these ChatCore reference sources for this turn: "
                 f"{', '.join(selected_sources)}.",
-                "Use successful results below as primary evidence for the answer and name the memo, My Context fact,",
+                "Use successful results below as primary evidence for the answer and name the memo",
                 "or shared prompt that supports the answer. Do not ignore or replace a successful selected-source",
                 "result with web search. Web search may only supplement it when the request separately requires",
                 "external or current information.",
@@ -522,7 +522,7 @@ def _build_context(
         lines.extend(
             [
                 f"Nothing matched the query, so a <{PERSONAL_OVERVIEW_TAG}> block is included: an inventory of",
-                "the user's most recently updated memo titles and a digest of their My Context facts. These are",
+                "the user's most recently updated memo titles. These are",
                 "NOT search matches. Use them when the question is broad enough that the user's own notes should",
                 "shape the answer (plans, priorities, what to work on next), state plainly that nothing matched",
                 "the specific wording, and never present an inventory entry as a match. To read one of those memos,",

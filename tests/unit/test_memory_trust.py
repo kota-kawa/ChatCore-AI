@@ -5,12 +5,14 @@ Tests that "originates from the owner" means the same in the SQL condition, the 
 
 import json
 import unittest
+from datetime import datetime
 
 from sqlalchemy import column, create_engine, select, table, text
 from sqlalchemy.dialects.postgresql import dialect
 
 from services.chat_generation import ChatGenerationJob
 from services.chat_tool_calls import _contains_non_owner_unconfirmed_memories
+from services.memory_search import build_memory_search_tool_payload
 from services.memory_trust import (
     OWNER_EXTRACTED_SOURCE_KIND,
     contains_non_owner_unconfirmed_memory,
@@ -116,38 +118,54 @@ class ResultCheckTestCase(unittest.TestCase):
 
 
 class AutoApprovalGateTestCase(unittest.TestCase):
-    def _dispatch(self, memories):
+    # 記憶の検索（memory_search）の結果が、実際に生成ジョブの自動承認の判定を動かすことを、本人由来の定義と突き合わせる。
+    # Drives a memory_search result through the real generation job and checks the auto-approval gate against the definition.
+    def _untrusted(self, *memories):
+        facts = [
+            {
+                "id": index,
+                "fact_type": "preference",
+                "title": "t",
+                "content": "c",
+                "importance": 50,
+                "source_kind": kind,
+                "last_confirmed_at": datetime(2026, 11, 1) if confirmed else None,
+                "last_mentioned_at": None,
+            }
+            for index, (kind, confirmed) in enumerate(memories, start=1)
+        ]
+
+        async def search(query):
+            return build_memory_search_tool_payload(query, facts)
+
         job = ChatGenerationJob(
             conversation_messages=[{"role": "user", "content": "この情報でTaskを作って"}],
             model="test-model",
             persist_response=lambda response, **kwargs: None,
-            personal_knowledge_search=lambda _query: {
-                "status": "ok",
-                "memo_count": 0,
-                "context_fact_count": len(memories),
-                "memos": [],
-                "context_facts": memories,
-            },
+            memory_search=search,
         )
         state = job._build_turn_run_state()
         tool_call = {
             "id": "call_1",
             "type": "function",
-            "function": {"name": "personal_knowledge_search", "arguments": json.dumps({"query": "Taskの情報"})},
+            "function": {"name": "memory_search", "arguments": json.dumps({"query": "Taskの情報"})},
         }
         job._configure_agent_tools(state)
         job._dispatch_tool_calls(state, [tool_call], llm_step=1)
-        return state
+        return state.untrusted_input_ingested
 
-    def test_owner_originated_results_do_not_stop_auto_approval(self):
-        for memories in ([_memory("manual", True)], [_memory("chat", False)], [_memory("chat", True), _memory("mcp", True)]):
-            with self.subTest(memories=memories):
-                self.assertFalse(self._dispatch(memories).untrusted_input_ingested)
+    def test_the_gate_agrees_with_the_definition_for_every_combination(self):
+        for kind in _SOURCE_KINDS:
+            for confirmed in (True, False):
+                with self.subTest(source_kind=kind, confirmed=confirmed):
+                    self.assertEqual(
+                        self._untrusted((kind, confirmed)),
+                        not is_owner_originated(confirmed=confirmed, source_kind=kind),
+                    )
 
-    def test_a_single_unconfirmed_mcp_or_import_memory_stops_it(self):
-        for memories in ([_memory("mcp", False)], [_memory("chat", False), _memory("import", False)]):
-            with self.subTest(memories=memories):
-                self.assertTrue(self._dispatch(memories).untrusted_input_ingested)
+    def test_a_single_unconfirmed_mcp_or_import_memory_among_trusted_ones_stops_it(self):
+        self.assertTrue(self._untrusted(("manual", True), ("chat", False), ("mcp", False)))
+        self.assertFalse(self._untrusted(("manual", True), ("chat", False), ("mcp", True)))
 
 
 if __name__ == "__main__":

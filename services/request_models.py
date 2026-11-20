@@ -335,8 +335,9 @@ class ChatMessageRequest(RequestPayloadModel):
     # 日本語: このブラウザーの保存済みテーマ設定。チャット内で明示的に読む場合だけ使う。
     # English: This browser's stored theme preference, used only when explicitly read in chat.
     theme_preference: Literal["light", "dark", "auto"] | None = None
-    # 日本語: 回答の途中で自分のメモ・マイコンテキストを検索してよいか。ログイン中のみ有効。
-    # English: Whether the answer may search the sender's own memos and My Context (login only).
+    # 日本語: 回答の前と途中で自分のメモを検索してよいか（「＋→メモ」）。ログイン中のみ有効。記憶は対象外（常時、記憶の検索ツールが引く）。
+    # English: Whether the answer may search the sender's own memos before and while answering ("+ -> Memo"; login only). Memory is not
+    # covered: the memory search tool reads it every turn.
     use_personal_knowledge: bool = False
     # 日本語: 回答の途中で公開された共有プロンプトを検索してよいか。公開データなので誰でも利用可。
     # English: Whether the answer may search public shared prompts (public data, available to anyone).

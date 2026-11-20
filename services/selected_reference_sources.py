@@ -152,7 +152,7 @@ def build_selected_reference_searchers(
         else:
             personal_knowledge = DeduplicatedLookup(
                 partial(search_personal_knowledge, user_id),
-                source_label="memo and My Context",
+                source_label="memo",
             )
             overview = partial(personal_overview, user_id)
 

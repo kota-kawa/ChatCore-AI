@@ -42,9 +42,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
             return_value={
                 "status": "ok",
                 "memo_count": 1,
-                "context_fact_count": 0,
                 "memos": [{"title": "沖縄旅行", "content": "予算は10万円"}],
-                "context_facts": [],
             }
         )
         shared_search = Mock(
@@ -91,15 +89,13 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
         self.assertEqual(attempted[0], "今月は何をしたらいいかな？")
         self.assertIn("2026年8月 8月 目標", attempted)
 
-    # 日本語: 一致0件でも、保存済みの内容そのものは棚卸しとして渡します。
-    # English: A zero-match lookup still hands over an inventory of what the user saved.
+    # 日本語: 一致0件でも、直近のメモの見出しは棚卸しとして渡します。記憶は含みません。
+    # English: A zero-match lookup still hands over an inventory of recent memo titles, and never memory.
     def test_no_match_hands_over_the_saved_inventory(self):
         overview = Mock(
             return_value={
                 "recent_memos": [{"id": 3, "title": "8月の目標"}],
-                "context_facts": [{"id": 9, "title": "進行中の案件", "content": "Chat-Core"}],
                 "recent_memo_count": 1,
-                "context_fact_count": 1,
             }
         )
 
@@ -115,6 +111,10 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
         self.assertIn(PERSONAL_OVERVIEW_TAG, context)
         self.assertIn("8月の目標", context)
         self.assertIn("NOT search matches", context)
+        # 文脈の文面は、メモだけを指す。旧称（My Context）も記憶も出てこない。
+        # The wording names memos only: neither the old name (My Context) nor memory appears.
+        for forbidden in ("My Context", "memory", "Memory", "記憶", "context fact"):
+            self.assertNotIn(forbidden, context)
 
     # 日本語: 一致した場合は棚卸しを行いません（無関係な内容で文脈を埋めないため）。
     # English: A successful match must not also pull in the inventory.
@@ -152,7 +152,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
     # 日本語: 保存済みの内容が無ければ、空の棚卸しは渡しません。
     # English: Nothing saved means nothing to hand over.
     def test_empty_inventory_is_not_injected(self):
-        overview = Mock(return_value={"recent_memos": [], "context_facts": []})
+        overview = Mock(return_value={"recent_memos": [], "recent_memo_count": 0})
 
         augmented = augment_messages_with_selected_references(
             [{"role": "user", "content": "今月は何をしたらいいかな？"}],
@@ -174,9 +174,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
             personal_knowledge_search=lambda _query: {"status": "no_results", "query": _query},
             personal_overview=lambda: {
                 "recent_memos": [{"id": 3, "title": "8月の目標"}],
-                "context_facts": [],
                 "recent_memo_count": 1,
-                "context_fact_count": 0,
             },
             trace_results=traces,
         )
@@ -193,7 +191,6 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
             personal_knowledge_search=lambda _query: {
                 "status": "ok",
                 "memo_count": 1,
-                "context_fact_count": 2,
             },
             shared_prompt_search=lambda _query: {
                 "status": "ok",
@@ -207,7 +204,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
             [PERSONAL_KNOWLEDGE_SOURCE, SHARED_PROMPT_SOURCE],
         )
         self.assertEqual(traces[0].query, "旅行計画")
-        self.assertEqual(traces[0].payload["context_fact_count"], 2)
+        self.assertEqual(traces[0].payload["memo_count"], 1)
         self.assertEqual(traces[1].payload["prompt_count"], 3)
 
     # 日本語: メモ本文が制御タグを含んでも、システム文脈の区切りを偽装できません。

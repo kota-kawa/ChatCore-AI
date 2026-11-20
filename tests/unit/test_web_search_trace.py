@@ -3,6 +3,7 @@
 Tests for the "steps to the answer" (services.web_search_trace): each step and the structured data built for the answer part.
 """
 
+import json
 import unittest
 
 from services import web_search_trace as trace
@@ -287,14 +288,14 @@ class WebSearchTraceTestCase(unittest.TestCase):
         self.assertEqual((step["kind"], step["status"]), ("warning", "failed"))
         self.assertEqual(step["detail"], "上限に達しました。")
 
-    # 日本語: 選択した参照元 (メモ・記憶・共有プロンプト) の検索ステップが、件数と検索の種類を表示することを検証します。
-    # English: Verify selected-reference lookup steps (memos, Memory, shared prompts) show counts and the type of search.
+    # 日本語: 選択した参照元 (メモ・共有プロンプト) の検索ステップが、件数と検索の種類を表示することを検証します。
+    # English: Verify selected-reference lookup steps (memos, shared prompts) show counts and the type of search.
     def test_selected_reference_steps_show_counts_and_search_types(self):
         record = trace.build_answer_trace(
             steps=[
                 trace.selected_reference_step(
                     PERSONAL_KNOWLEDGE_SOURCE,
-                    {"status": "ok", "memo_count": 2, "context_fact_count": 1},
+                    {"status": "ok", "memo_count": 2},
                     query="好みのカフェ",
                 ),
                 trace.selected_reference_step(
@@ -306,8 +307,11 @@ class WebSearchTraceTestCase(unittest.TestCase):
         )
 
         knowledge, prompt = record["steps"]
-        self.assertEqual((knowledge["kind"], knowledge["title"]), ("knowledge", "メモと記憶を検索"))
-        self.assertEqual(knowledge["chips"], ["メモ 2件", "記憶 1件"])
+        self.assertEqual((knowledge["kind"], knowledge["title"]), ("knowledge", "メモを検索"))
+        self.assertEqual(knowledge["chips"], ["メモ 2件"])
+        # メモの検索のステップは、記憶に触れない。
+        # The memo step never mentions memory.
+        self.assertNotIn("記憶", json.dumps(knowledge, ensure_ascii=False))
         self.assertEqual((prompt["kind"], prompt["title"]), ("prompt", "共有プロンプトを検索"))
         self.assertEqual(record["summary"], "メモ検索あり · 共有プロンプト検索あり")
 

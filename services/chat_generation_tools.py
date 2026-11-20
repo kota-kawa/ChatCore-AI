@@ -2,10 +2,10 @@
 
 The phase that decides which tools the model is offered and runs the tool calls it requests.
 
-検索系（メモ/マイコンテキスト、公開プロンプト）と読み取り系（根拠の再読み取り、
+検索系（メモ、記憶、公開プロンプト）と読み取り系（根拠の再読み取り、
 ページ本文）はここで実行する。Web 検索は `_run_web_search_tool_call`
 （`chat_generation_web_search`）へ渡す。
-Lookups (memo / My Context, public prompts) and reads (re-reading evidence, page bodies) run
+Lookups (memos, memory, public prompts) and reads (re-reading evidence, page bodies) run
 here; web search is handed to `_run_web_search_tool_call` (`chat_generation_web_search`).
 """
 
@@ -391,28 +391,23 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
                 func_name == PERSONAL_KNOWLEDGE_TOOL_NAME
                 and self._personal_knowledge_search is not None
             ):
-                lookup_payload = self._run_lookup_tool_call(
+                self._run_lookup_tool_call(
                     tc,
                     tool_name=PERSONAL_KNOWLEDGE_TOOL_NAME,
                     search=self._personal_knowledge_search,
                     event_prefix="personal_knowledge_search",
-                    result_counts=("memo_count", "context_fact_count"),
-                    failure_log_message="Memo / context search via tool call failed.",
-                    failure_tool_message="Memo and My Context search failed.",
+                    result_counts=("memo_count",),
+                    failure_log_message="Memo search via tool call failed.",
+                    failure_tool_message="Memo search failed.",
                     current_messages=state.current_messages,
                     budget=state.budget,
                     turn_state=state.turn_state,
                     evidence_store=state.evidence_store,
                     trace_steps=state.web_search_trace_steps,
                 )
-                if _contains_non_owner_unconfirmed_memories(lookup_payload, "context_facts"):
-                    # MCP や取り込みで入った事実は、本人の確認なしで有効になりうる。外部入力と同様に扱い、
-                    # 「常に承認」でも、それを根拠にした書き込みが黙って実行されないようにする。
-                    # 本人が確認した事実とチャットから抽出した事実は止めない（ADR 0025）。
-                    # MCP/import facts can be active without owner review. Treat them like
-                    # external input so "always approve" cannot turn one into a silent write.
-                    # Facts the owner confirmed and facts extracted from chat do not stop it (ADR 0025).
-                    state.untrusted_input_ingested = True
+                # メモは本人のデータなので、この経路は「常に承認」の自動実行を止めない（記憶の検索は下の memory_search）。
+                # Memos are the owner's own data, so this path never stops auto-run under "always approve"
+                # (memory is searched through memory_search below).
                 continue
 
             if func_name == MEMORY_SEARCH_TOOL_NAME and self._memory_search is not None:

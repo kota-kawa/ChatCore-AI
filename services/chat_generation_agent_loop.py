@@ -24,10 +24,7 @@ from .chat_generation_job_base import (
 from .chat_generation_turn import ChatTurnRunState, ModelDecision
 from .chat_input_budget import estimate_messages_chars
 from .chat_prompt import insert_before_latest_user_message
-from .chat_tool_calls import (
-    _contains_non_owner_unconfirmed_memories,
-    _parse_tool_calls_chunk,
-)
+from .chat_tool_calls import _parse_tool_calls_chunk
 from .chat_turn_state import (
     TurnStateUpdateFilter,
     build_turn_loop_messages,
@@ -60,10 +57,7 @@ from .research_state import (
     TurnState,
     TurnStateProjectionError,
 )
-from .selected_reference_context import (
-    PERSONAL_KNOWLEDGE_SOURCE,
-    SHARED_PROMPT_SOURCE,
-)
+from .selected_reference_context import SHARED_PROMPT_SOURCE
 from .web_search import (
     build_web_search_evidence_policy_message,
     create_web_evidence_context_budget,
@@ -130,14 +124,6 @@ class ChatGenerationAgentLoopMixin(ChatGenerationJobBase):
                 status="prior_turn",
             )
         for selected_trace in self._selected_reference_trace:
-            if (
-                selected_trace.source == PERSONAL_KNOWLEDGE_SOURCE
-                and _contains_non_owner_unconfirmed_memories(selected_trace.payload, "context_facts")
-            ):
-                # 選択済み参照と、検索0件時に注入する概観にもツール検索と同じ自動承認ゲートを適用する。
-                # Selected references and the no-match overview enter the prompt before the job
-                # starts; they must hold the same auto-approval gate as tool-driven lookups.
-                state.untrusted_input_ingested = True
             selected_refs = evidence_store.add_reference_payload(
                 selected_trace.payload,
                 source_type=selected_trace.source,
