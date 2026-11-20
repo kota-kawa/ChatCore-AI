@@ -188,6 +188,7 @@ _ENGLISH_BY_JAPANESE_TEXT: dict[str, str] = {
         "This replacement has already changed and cannot be undone. Reload the latest version."
     ),
     "revisionを1以上の整数で指定してください。": "Specify revision as an integer of 1 or more.",
+    "すべての記憶を削除するには、確認の値を指定してください。": "Provide the confirmation value to delete all memories.",
     "検索語が長すぎます。": "The search query is too long.",
     "インポート形式が不正です。": "The import format is invalid.",
     "エクスポート形式が不正です。": "The export format is invalid.",

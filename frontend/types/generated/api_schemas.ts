@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: ee38799be64becf339f2373d641ec7ff5631154068dc9caaf106094bd510bb78
+// Schema fingerprint: 05b2248c8c6a0d900e9a506cc01839864a249f4cb5c9f182ad36f8cbbadf2e1a
 
 import { z } from "zod";
 
@@ -244,6 +244,9 @@ export type ContextFactListResponse = z.infer<typeof ContextFactListResponseSche
 
 export const ContextFactRevertReplacementResponseSchema = z.object({ "fact": z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "status": z.enum(["active","deprecated"]), "revision": z.number().int(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("manual"), "importance": z.number().int().gte(0).lte(100).default(50), "confidence": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "last_confirmed_at": z.union([z.string(), z.null()]).default(null), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any()), "restored_fact": z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "status": z.enum(["active","deprecated"]), "revision": z.number().int(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("manual"), "importance": z.number().int().gte(0).lte(100).default(50), "confidence": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "last_confirmed_at": z.union([z.string(), z.null()]).default(null), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any()) }).catchall(z.any());
 export type ContextFactRevertReplacementResponse = z.infer<typeof ContextFactRevertReplacementResponseSchema>;
+
+export const ContextFactDeleteAllResponseSchema = z.object({ "deleted_count": z.number().int().gte(0).default(0) }).catchall(z.any());
+export type ContextFactDeleteAllResponse = z.infer<typeof ContextFactDeleteAllResponseSchema>;
 
 export const ContextVaultPortableFactSchema = z.object({ "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string().min(1).max(100), "content": z.string().min(1).max(2000), "status": z.enum(["active","deprecated"]), "importance": z.number().int().gte(0).lte(100), "confidence": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "last_confirmed_at": z.union([z.string().max(64), z.null()]).default(null) }).strict();
 export type ContextVaultPortableFact = z.infer<typeof ContextVaultPortableFactSchema>;

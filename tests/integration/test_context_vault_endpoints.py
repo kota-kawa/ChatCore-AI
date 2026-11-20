@@ -178,10 +178,12 @@ class ContextVaultEndpointIntegrationTestCase(unittest.TestCase):
         asyncio.run(scenario())
 
     def test_memory_screen_writes_reject_missing_csrf_and_login_through_router(self):
-        # 置き換えを元に戻すは、既存の書き込みと同じく CSRF とログインを要る。
-        # Undoing a replacement needs CSRF and login like the existing writes.
+        # 置き換えを元に戻す・1 件の完全削除・すべての記憶の削除は、既存の書き込みと同じく CSRF とログインを要る。
+        # Undoing a replacement, deleting one memory and deleting all need CSRF and login like the existing writes.
         requests = (
             ("POST", "/api/context-facts/4/revert-replacement", {"json": {"revision": 2}}),
+            ("DELETE", "/api/context-facts/4?revision=2", {}),
+            ("DELETE", "/api/context-facts?confirm=delete-all", {}),
         )
 
         async def scenario():
@@ -199,6 +201,29 @@ class ContextVaultEndpointIntegrationTestCase(unittest.TestCase):
                 for method, path, kwargs in requests:
                     logged_out = await client.request(method, path, headers={CSRF_HEADER_NAME: token}, **kwargs)
                     self.assertEqual(logged_out.status_code, 401, path)
+
+        asyncio.run(scenario())
+
+    def test_memory_screen_writes_reach_the_services_for_the_session_owner_through_router(self):
+        async def scenario():
+            async with self._make_client() as client:
+                token = await self._authenticate_with_csrf(client)
+                headers = {CSRF_HEADER_NAME: token}
+                with (
+                    patch("blueprints.context_vault.routes.delete_fact", new=AsyncMock(return_value=None)) as delete_one,
+                    patch("blueprints.context_vault.routes.delete_all_facts", new=AsyncMock(return_value=9)) as delete_all,
+                ):
+                    one = await client.delete("/api/context-facts/4?revision=2", headers=headers)
+                    missing_revision = await client.delete("/api/context-facts/4", headers=headers)
+                    unconfirmed = await client.delete("/api/context-facts", headers=headers)
+                    everything = await client.delete("/api/context-facts?confirm=delete-all", headers=headers)
+
+            self.assertEqual(one.json(), {"status": "success"})
+            delete_one.assert_awaited_once_with(7, 4, expected_revision=2)
+            self.assertEqual(missing_revision.status_code, 400)
+            self.assertEqual(unconfirmed.status_code, 400)
+            self.assertEqual(everything.json(), {"status": "success", "deleted_count": 9})
+            delete_all.assert_awaited_once_with(7)
 
         asyncio.run(scenario())
 

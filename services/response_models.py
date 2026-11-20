@@ -357,6 +357,12 @@ class ContextFactRevertReplacementResponse(ResponsePayloadModel):
     restored_fact: ContextFactResponse
 
 
+# 日本語: すべての記憶の削除結果。消した記憶の件数。
+# English: The result of deleting all memories: how many were deleted.
+class ContextFactDeleteAllResponse(ResponsePayloadModel):
+    deleted_count: int = Field(default=0, ge=0)
+
+
 # 日本語: コンテキスト事実の一覧と keyset ページングカーソルを返す応答モデル。
 # English: Response model returning a list of context facts with a keyset cursor.
 class ContextFactListResponse(ResponsePayloadModel):

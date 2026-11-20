@@ -1,6 +1,8 @@
-"""記憶の画面からの置き換えを元に戻す書き込みの SQL、実行順、状態の再確認、エラーの変換を検証するテスト。
+"""記憶の画面からの複数行にまたがる書き込み(置き換えを元に戻す・1 件の完全削除・すべての記憶の削除)の SQL、実行順、状態の再確認、
+エラーの変換を検証するテスト。
 
-Tests the SQL, execution order, state re-checks and error translation of the memory screen's undo-replacement write.
+Tests the SQL, execution order, state re-checks and error translation of the memory screen's multi-row writes:
+undoing a replacement, deleting one memory for good and deleting all memories.
 """
 
 import unittest
@@ -81,6 +83,12 @@ def _missing_row():
 def _returning(row):
     result = MagicMock()
     result.mappings.return_value.first.return_value = row
+    return result
+
+
+def _count(rowcount):
+    result = MagicMock()
+    result.rowcount = rowcount
     return result
 
 
@@ -214,6 +222,75 @@ class RevertReplacementTestCase(unittest.IsolatedAsyncioTestCase):
             with self.subTest(results=len(results)), self.assertRaises(ApiServiceError) as error:
                 await ContextFactCurationRepository(_Session(results)).revert_replacement(7, 4, 2)
             self.assertEqual(error.exception.status_code, 409)
+
+
+class DeleteFactTestCase(unittest.IsolatedAsyncioTestCase):
+    async def test_candidates_are_deleted_before_the_fact_so_the_reference_is_still_there(self):
+        session = _Session([_LOCK, _locked_row(), _count(1), _count(1)])
+        await ContextFactCurationRepository(session).delete_fact(7, 4, 2)
+
+        sql = session.sql()
+        self.assertEqual(len(sql), 4)
+        self.assertIn("pg_advisory_xact_lock", sql[0])
+        self.assertIn("FOR UPDATE", sql[1])
+        self.assertTrue(sql[2].startswith("DELETE FROM context_fact_candidates"))
+        self.assertIn("context_fact_candidates.promoted_fact_id =", sql[2])
+        self.assertIn("context_fact_candidates.user_id =", sql[2])
+        self.assertTrue(sql[3].startswith("DELETE FROM context_facts"))
+        self.assertIn("context_facts.user_id =", sql[3])
+
+    async def test_sources_and_replacement_links_are_left_to_the_foreign_keys(self):
+        session = _Session([_LOCK, _locked_row(), _count(0), _count(1)])
+        await ContextFactCurationRepository(session).delete_fact(7, 4, 2)
+        for text in session.sql():
+            self.assertNotIn("context_fact_sources", text)
+            self.assertFalse(text.startswith("UPDATE"))
+
+    async def test_deleting_works_for_an_active_or_a_deprecated_fact(self):
+        for status in ("active", "deprecated"):
+            session = _Session([_LOCK, _locked_row(status=status), _count(0), _count(1)])
+            with self.subTest(status=status):
+                await ContextFactCurationRepository(session).delete_fact(7, 4, 2)
+                self.assertEqual(len(session.log), 4)
+
+    async def test_missing_fact_is_404_and_revision_mismatch_is_409_without_deleting(self):
+        session = _Session([_LOCK, _missing_row()])
+        with self.assertRaises(ResourceNotFoundError):
+            await ContextFactCurationRepository(session).delete_fact(7, 4, 2)
+        self.assertEqual(len(session.log), 2)
+
+        session = _Session([_LOCK, _locked_row(revision=9)])
+        with self.assertRaises(ApiServiceError) as error:
+            await ContextFactCurationRepository(session).delete_fact(7, 4, 2)
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(len(session.log), 2)
+
+
+class DeleteAllFactsTestCase(unittest.IsolatedAsyncioTestCase):
+    async def test_deletes_candidates_of_every_status_then_facts_and_returns_the_count(self):
+        session = _Session([_LOCK, _count(5), _count(12)])
+        deleted = await ContextFactCurationRepository(session).delete_all_facts(7)
+
+        self.assertEqual(deleted, 12)
+        sql = session.sql()
+        self.assertEqual(len(sql), 3)
+        self.assertIn("pg_advisory_xact_lock", sql[0])
+        self.assertEqual(sql[1].split(" WHERE ")[0], "DELETE FROM context_fact_candidates")
+        # 候補は状態で絞らない（却下済みを含む全状態）。
+        # Candidates are not narrowed by status (every status, rejected ones included).
+        self.assertNotIn("context_fact_candidates.status", sql[1])
+        self.assertIn("context_fact_candidates.user_id =", sql[1])
+        self.assertEqual(sql[2].split(" WHERE ")[0], "DELETE FROM context_facts")
+        self.assertIn("context_facts.user_id =", sql[2])
+        self.assertIn(7, bind_statement_parameters(session.log[2]).values())
+
+    async def test_settings_and_sources_are_not_written_directly(self):
+        session = _Session([_LOCK, _count(0), _count(0)])
+        await ContextFactCurationRepository(session).delete_all_facts(7)
+        for text in session.sql():
+            self.assertNotIn("users", text)
+            self.assertNotIn("context_fact_sources", text)
+            self.assertFalse(text.startswith("UPDATE"))
 
 
 if __name__ == "__main__":

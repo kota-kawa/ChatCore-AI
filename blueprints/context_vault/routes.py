@@ -23,6 +23,8 @@ from services.context_vault_portability import (
 from services.context_vault_service import (
     MAX_CONTEXT_LIST_LIMIT,
     create_fact,
+    delete_all_facts,
+    delete_fact,
     get_memory_use_settings,
     list_facts,
     revert_replacement,
@@ -32,6 +34,7 @@ from services.context_vault_service import (
 from services.csrf import require_csrf
 from services.error_messages import (
     ERROR_CONTEXT_EXTRACTION_SETTINGS_PAYLOAD_INVALID,
+    ERROR_CONTEXT_FACT_DELETE_ALL_CONFIRMATION_REQUIRED,
     ERROR_CONTEXT_FACT_REVISION_REQUIRED,
     ERROR_CONTEXT_FACT_SEARCH_QUERY_TOO_LONG,
     ERROR_CONTEXT_MEMORY_USE_SETTINGS_PAYLOAD_INVALID,
@@ -51,6 +54,7 @@ from services.request_models import (
     ContextVaultImportConfirmRequest,
     ContextVaultImportPreviewRequest,
 )
+from services.response_models import ContextFactDeleteAllResponse
 from services.web import (
     jsonify,
     jsonify_service_error,
@@ -61,8 +65,10 @@ from services.web import (
 
 from .constants import (
     CONTEXT_FACT_CREATE_ERROR,
+    CONTEXT_FACT_DELETE_ERROR,
     CONTEXT_FACT_UPDATE_ERROR,
     DEFAULT_CONTEXT_LIST_LIMIT,
+    DELETE_ALL_CONFIRMATION,
     MAX_CONTEXT_SEARCH_QUERY_LENGTH,
 )
 
@@ -483,3 +489,47 @@ async def api_revert_context_fact_replacement(request: Request, fact_id: int):
         return jsonify_service_error(exc, status="fail")
     except Exception as exc:
         return _internal_error_without_parameters("Failed to revert a memory replacement.", exc, CONTEXT_FACT_UPDATE_ERROR)
+
+
+@context_vault_bp.delete("/{fact_id:int}", name="context_vault.api_delete")
+async def api_delete_context_fact(request: Request, fact_id: int, revision: int | None = None):
+    # 記憶 1 件を、有効・無効化済みのどちらでも完全に削除する（無効化とは違い、文面ごと消える）。revision で競合検出する。
+    # Delete one memory for good, active or deprecated (unlike deprecating, the wording is erased); revision detects conflicts.
+    """記憶 1 件を完全に削除する。"""
+    user_id = user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
+    if revision is None or revision < 1:
+        return jsonify({"status": "fail", "error": ERROR_CONTEXT_FACT_REVISION_REQUIRED}, status_code=400)
+
+    try:
+        await delete_fact(user_id, fact_id, expected_revision=revision)
+        return jsonify({"status": "success"})
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc, status="fail")
+    except Exception as exc:
+        return _internal_error_without_parameters("Failed to delete a memory.", exc, CONTEXT_FACT_DELETE_ERROR)
+
+
+@context_vault_bp.delete("", name="context_vault.api_delete_all")
+async def api_delete_all_context_facts(request: Request, confirm: str | None = None):
+    # 自分の記憶・出典・候補をすべて削除する。誤操作を防ぐため confirm に確認の値を要求する。自動で記憶する設定と回答に使う設定は変えない。
+    # Delete all of the owner's memories, sources and candidates; confirm must carry the confirmation value to prevent accidents.
+    # The saving and use-in-answers settings are left as they are.
+    """自分の記憶をすべて削除する。"""
+    user_id = user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
+    if confirm != DELETE_ALL_CONFIRMATION:
+        return jsonify(
+            {"status": "fail", "error": ERROR_CONTEXT_FACT_DELETE_ALL_CONFIRMATION_REQUIRED},
+            status_code=400,
+        )
+
+    try:
+        deleted_count = await delete_all_facts(user_id)
+        return jsonify({"status": "success", **ContextFactDeleteAllResponse(deleted_count=deleted_count).model_dump()})
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc, status="fail")
+    except Exception as exc:
+        return _internal_error_without_parameters("Failed to delete all memories.", exc, CONTEXT_FACT_DELETE_ERROR)

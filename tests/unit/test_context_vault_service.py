@@ -15,6 +15,8 @@ from services.api_errors import ApiServiceError
 from services.context_vault_service import (
     build_digest,
     create_fact,
+    delete_all_facts,
+    delete_fact,
     get_fact,
     get_memory_use_settings,
     list_facts,
@@ -362,6 +364,16 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
         ) as schedule:
             await revert_replacement(7, 4, expected_revision=2, session=object())
         schedule.assert_not_called()
+
+    async def test_delete_use_cases_delegate_to_the_curation_repository(self):
+        curation = MagicMock()
+        curation.delete_fact = AsyncMock()
+        curation.delete_all_facts = AsyncMock(return_value=12)
+        with patch("services.context_vault_service.ContextFactCurationRepository", return_value=curation):
+            self.assertIsNone(await delete_fact(7, 3, expected_revision=2, session=object()))
+            self.assertEqual(await delete_all_facts(7, session=object()), 12)
+        curation.delete_fact.assert_awaited_once_with(7, 3, 2)
+        curation.delete_all_facts.assert_awaited_once_with(7)
 
     async def test_digest_groups_and_search_falls_back_from_semantic(self):
         repo = _repo()

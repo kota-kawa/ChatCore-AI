@@ -1,15 +1,17 @@
-"""記憶の画面からの利用者の操作のうち、複数の行にまたがる書き込み(置き換えを元に戻す)を永続化する。利用者単位の advisory lock を取ってから
-状態を確かめ直し、同じトランザクションの中で行う。トランザクションは呼び出し側が持つ。services/context_vault_service.py から使われる。
+"""記憶の画面からの利用者の操作のうち、複数の行にまたがる書き込み(置き換えを元に戻す・記憶 1 件の完全削除・すべての記憶の削除)を永続化する。
+どれも利用者単位の advisory lock を取ってから状態を確かめ直し、同じトランザクションの中で行う。トランザクションは呼び出し側が持つ。
+services/context_vault_service.py から使われる。
 
-Owner-scoped write of the memory screen that spans several rows: undoing a replacement. It takes the per-user advisory lock, re-checks the
-state and writes inside one transaction; transaction ownership stays with the caller. Used by services/context_vault_service.py.
+Owner-scoped writes of the memory screen that span several rows: undoing a replacement, deleting one memory for good and deleting
+all memories. Each takes the per-user advisory lock, re-checks the state and writes inside one transaction; transaction ownership
+stays with the caller. Used by services/context_vault_service.py.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api_errors import ApiServiceError, ResourceNotFoundError
@@ -18,7 +20,7 @@ from services.error_messages import (
     ERROR_CONTEXT_FACT_REPLACEMENT_NOT_REVERTIBLE,
     ERROR_CONTEXT_FACT_REVISION_CONFLICT,
 )
-from services.models import ContextFact
+from services.models import ContextFact, ContextFactCandidate
 from services.repositories.context_fact_repository import (
     _CONTEXT_FACT_LOCK_NAMESPACE,
     _FACT_RETURNING_COLUMNS,
@@ -120,3 +122,31 @@ class ContextFactCurationRepository:
         if deprecated_row is None or restored_row is None:
             raise ApiServiceError(ERROR_CONTEXT_FACT_REPLACEMENT_NOT_REVERTIBLE, 409, status="fail")
         return ContextFactRepository._serialize_row(deprecated_row), ContextFactRepository._serialize_row(restored_row)
+
+    # 日本語: 事実 1 件を、有効・無効化済みのどちらでも完全に削除する。出典は外部キーの CASCADE で消える。この事実を指す候補の行
+    # (promoted_fact_id)は同じ文面を持つので先に消す(事実を先に消すと参照が NULL になり、本人の記憶の文面が候補に残る)。置き換えの関係は
+    # 外部キーの SET NULL に任せ、この事実を置き換え先にしていた古い事実は無効化済みのまま残る。
+    # English: Deletes one fact for good, active or deprecated. Its sources go through the foreign key's CASCADE. Candidate rows pointing
+    # at it (promoted_fact_id) carry the same wording and are deleted first (deleting the fact first would null the reference and
+    # leave the wording in the candidate). Replacement links are left to the foreign key's SET NULL, so an older fact that
+    # pointed at this one stays deprecated.
+    async def delete_fact(self, user_id: int, fact_id: int, expected_revision: int) -> None:
+        await self._lock_user_writes(user_id)
+        await self._lock_fact_row(user_id, fact_id, expected_revision)
+        await self.session.execute(
+            delete(ContextFactCandidate).where(
+                ContextFactCandidate.user_id == user_id, ContextFactCandidate.promoted_fact_id == fact_id
+            )
+        )
+        await self.session.execute(delete(ContextFact).where(ContextFact.id == fact_id, ContextFact.user_id == user_id))
+
+    # 日本語: 利用者の記憶・出典(外部キーの CASCADE)・候補(却下済みを含む全状態)をまとめて消し、消した記憶の件数を返す。自動で記憶する設定と
+    # 記憶を回答に使う設定は users の列なので変えない。
+    # English: Deletes the user's memories, their sources (through the foreign key's CASCADE) and candidates (every status, rejected
+    # ones included) together, and returns how many memories were deleted. The saving and use-in-answers settings are users columns
+    # and stay as they are.
+    async def delete_all_facts(self, user_id: int) -> int:
+        await self._lock_user_writes(user_id)
+        await self.session.execute(delete(ContextFactCandidate).where(ContextFactCandidate.user_id == user_id))
+        result = await self.session.execute(delete(ContextFact).where(ContextFact.user_id == user_id))
+        return int(result.rowcount or 0)

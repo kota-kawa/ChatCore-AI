@@ -366,6 +366,24 @@ async def revert_replacement(
     return ContextFactRevertReplacementResponse(fact=_to_response(deprecated), restored_fact=_to_response(restored))
 
 
+# 日本語: 記憶 1 件を、有効・無効化済みのどちらでも完全に削除する(出典と、その記憶を指す候補も消える)。
+# English: Delete one memory for good, active or deprecated (its sources and the candidates pointing at it go too).
+async def delete_fact(
+    user_id: int,
+    fact_id: int,
+    *,
+    expected_revision: int,
+    session: AsyncSession | None = None,
+) -> None:
+    await _transaction(session, lambda db: ContextFactCurationRepository(db).delete_fact(user_id, fact_id, expected_revision))
+
+
+# 日本語: 利用者の記憶・出典・候補をすべて削除し、消した記憶の件数を返す。
+# English: Delete all of the user's memories, sources and candidates, and return how many memories were deleted.
+async def delete_all_facts(user_id: int, *, session: AsyncSession | None = None) -> int:
+    return await _transaction(session, lambda db: ContextFactCurationRepository(db).delete_all_facts(user_id))
+
+
 async def build_digest(
     user_id: int,
     *,
