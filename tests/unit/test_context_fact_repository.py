@@ -355,13 +355,17 @@ class ContextFactConfirmationTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIn("deprecated_reason=", restore_sql.replace(" ", ""))
         self.assertIsNone(restore_params["deprecated_reason"])
 
-    async def test_restoring_clears_the_replacement_link_and_other_updates_leave_it(self):
-        _, restore_params = await self._update(status="active")
-        _, deprecate_params = await self._update(status="deprecated")
+    async def test_status_changes_clear_the_replacement_link_and_other_updates_leave_it(self):
+        # 復元だけでなく、置き換えで無効化した事実を本人・MCP が改めて無効化したとき(理由は user に上書きされる)も、
+        # 置き換え先を NULL に戻す。状態を変えない更新は触らない。
+        # Not only a restore: when the owner or MCP deprecates a fact that a newer one replaced (its reason is overwritten with user),
+        # the replacement link is cleared too. Updates that leave the status alone do not touch it.
+        for status in ("active", "deprecated"):
+            with self.subTest(status=status):
+                _, params = await self._update(status=status)
 
-        self.assertIn("superseded_by_fact_id", restore_params)
-        self.assertIsNone(restore_params["superseded_by_fact_id"])
-        self.assertNotIn("superseded_by_fact_id", deprecate_params)
+                self.assertIn("superseded_by_fact_id", params)
+                self.assertIsNone(params["superseded_by_fact_id"])
         for kwargs in ({"importance": 90}, {"title": "New title"}):
             with self.subTest(kwargs=kwargs):
                 _, params = await self._update(**kwargs)

@@ -639,17 +639,19 @@ class ContextFactRepository:
                 ),
                 else_=ContextFact.last_confirmed_at,
             )
-        # 日本語: 利用者・MCP による無効化は理由 user、有効へ戻すときは理由と置き換え先(superseded_by_fact_id)を NULL にする。
+        # 日本語: 利用者・MCP による無効化は理由 user、有効へ戻すときは理由 NULL にする。どちらも置き換え先(superseded_by_fact_id)は
+        # NULL に戻す(置き換えで無効化した事実を本人が改めて無効化したときに、「本人が無効化した」のに置き換え先を持つ行を残さない)。
         # 上限での自動の入れ替え(capacity)と、新しい事実による置き換え(superseded)は抽出の保存側
         # (context_fact_candidate_repository)だけが書く。
-        # English: Deprecating through the owner or MCP records reason user; restoring clears the reason and the replacement link
-        # (superseded_by_fact_id). The automatic replacement at the cap (capacity) and the replacement by a newer fact (superseded)
-        # are written only by the extraction store (context_fact_candidate_repository).
+        # English: Deprecating through the owner or MCP records reason user and restoring clears the reason; both clear the
+        # replacement link (superseded_by_fact_id), so a fact replaced by a newer one that the owner then deprecates again does not
+        # stay a row that is "deprecated by the owner" yet points at a replacement. The automatic replacement at the cap (capacity)
+        # and the replacement by a newer fact (superseded) are written only by the extraction store
+        # (context_fact_candidate_repository).
         if status is not None:
             changes["status"] = status
             changes["deprecated_reason"] = "user" if status == "deprecated" else None
-            if status == "active":
-                changes["superseded_by_fact_id"] = None
+            changes["superseded_by_fact_id"] = None
         if importance is not None:
             changes["importance"] = importance
         changes["updated_at"] = func.current_timestamp()
