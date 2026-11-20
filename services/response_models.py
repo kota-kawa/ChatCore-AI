@@ -306,10 +306,19 @@ class ContextFactResponse(ResponsePayloadModel):
     updated_at: str | None = None
 
 
+# 日本語: 記憶の画面の一覧が返す 1 件の事実。AI に渡る応答（MCP・ダイジェスト・検索）の ContextFactResponse には無い、無効化した
+# 理由を持つ。capacity は上限での自動の入れ替え。None は本人が無効化した（この項目の追加前の記録を含む）か、有効な事実。
+# English: A fact as the memory screen's list returns it. Unlike ContextFactResponse (used by MCP, the digest and search,
+# which reach the AI), it carries why a fact was deprecated. capacity is the automatic replacement at the cap; None means
+# the owner deprecated it (including records from before this field), or the fact is active.
+class ContextFactListItemResponse(ContextFactResponse):
+    deprecated_reason: Literal["user", "superseded", "merged", "capacity"] | None = None
+
+
 # 日本語: コンテキスト事実の一覧と keyset ページングカーソルを返す応答モデル。
 # English: Response model returning a list of context facts with a keyset cursor.
 class ContextFactListResponse(ResponsePayloadModel):
-    facts: list[ContextFactResponse] = Field(default_factory=list)
+    facts: list[ContextFactListItemResponse] = Field(default_factory=list)
     total_active: int = 0
     next_cursor: str | None = None
 
@@ -379,38 +388,6 @@ class ContextVaultImportResponse(ResponsePayloadModel):
     skipped_duplicate_count: int = Field(ge=0)
     active_count: int = Field(ge=0)
     deprecated_count: int = Field(ge=0)
-
-
-# 日本語: ユーザー確認待ちの自動抽出候補。内部fingerprint等は公開しない。
-# English: Allowlisted extracted candidate awaiting user review.
-class ContextFactCandidateResponse(ResponsePayloadModel):
-    id: int
-    fact_type: Literal["preference", "profile", "project", "decision", "reference"]
-    title: str
-    content: str
-    source_kind: Literal["manual", "chat", "mcp", "import"] = "chat"
-    source_ref: str | None = None
-    importance: int = Field(default=50, ge=0, le=100)
-    confidence: float = Field(default=0, ge=0, le=1)
-    status: Literal["pending", "approved", "rejected"]
-    revision: int = Field(ge=1)
-    created_at: str | None = None
-    updated_at: str | None = None
-
-
-# 日本語: 承認待ち候補の一覧。next_cursor で続きを取得し、total_pending は承認待ちの総数。
-# English: List of pending candidates; next_cursor fetches the next page and total_pending is the overall pending count.
-class ContextFactCandidateListResponse(ResponsePayloadModel):
-    candidates: list[ContextFactCandidateResponse] = Field(default_factory=list)
-    next_cursor: str | None = None
-    total_pending: int = 0
-
-
-# 日本語: 候補を承認した結果。承認済みの候補と、昇格して作られた事実の両方を返す。
-# English: Result of approving a candidate: the approved candidate and the fact it was promoted to.
-class ContextFactCandidateApprovalResponse(ResponsePayloadModel):
-    candidate: ContextFactCandidateResponse
-    fact: ContextFactResponse
 
 
 # 日本語: 会話からの事実の自動抽出が有効かどうか。

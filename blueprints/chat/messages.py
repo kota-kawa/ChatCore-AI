@@ -111,7 +111,7 @@ from services.chat_tool_approval_service import (
     supersede_pending_approvals,
 )
 from services.chat_use_case import ChatPostUseCase
-from services.context_vault_candidate_service import should_extract_context
+from services.context_vault_candidate_service import is_context_extraction_enabled
 from services.context_vault_extraction import schedule_context_extraction
 from services.error_messages import (
     ERROR_CHAT_GENERATION_ID_INVALID,
@@ -759,7 +759,7 @@ def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
             ),
             background=ChatPostBackgroundDependencies(
                 submit_background_task=submit_background_task,
-                should_extract_context=should_extract_context,
+                should_extract_context=is_context_extraction_enabled,
                 schedule_context_extraction=schedule_context_extraction,
             ),
         ),

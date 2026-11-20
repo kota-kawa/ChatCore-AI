@@ -406,7 +406,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         # Context extraction is covered by dedicated use-case tests. Keep unrelated
         # chat route tests isolated from the real database-backed opt-in lookup.
         self._context_extraction_patch = patch(
-            "blueprints.chat.messages.should_extract_context",
+            "blueprints.chat.messages.is_context_extraction_enabled",
             return_value=False,
         )
         self._context_extraction_patch.start()

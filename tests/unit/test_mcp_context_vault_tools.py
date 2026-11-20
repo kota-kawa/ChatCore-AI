@@ -4,6 +4,7 @@ Tests the annotations, rate-limit buckets and write audit logging of the MCP con
 """
 
 import asyncio
+import json
 import os
 import unittest
 from types import SimpleNamespace
@@ -51,6 +52,17 @@ class McpContextVaultToolTestCase(unittest.TestCase):
             self.assertFalse(annotations.idempotentHint)
             self.assertTrue(annotations.destructiveHint)
             self.assertFalse(annotations.openWorldHint)
+
+    def test_context_tool_output_schemas_do_not_expose_the_deprecation_reason(self):
+        # 理由は記憶の画面の一覧だけが返す。AI に渡る MCP の出力スキーマには増やさない。
+        # The reason is returned only by the memory screen's list; MCP output schemas that reach the AI do not gain it.
+        tools = asyncio.run(self._server().list_tools())
+        by_name = {tool.name: tool for tool in tools}
+
+        for name in ("get_personal_context", "search_context", "save_context_fact", "update_context_fact"):
+            with self.subTest(tool=name):
+                self.assertIsNotNone(by_name[name].outputSchema)
+                self.assertNotIn("deprecated_reason", json.dumps(by_name[name].outputSchema))
 
     def test_digest_uses_context_read_rate_bucket(self):
         server = self._server()

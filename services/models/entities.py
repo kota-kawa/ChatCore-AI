@@ -771,6 +771,12 @@ class ContextFact(Base):
     # Extraction confidence (NULL when the owner wrote it) and when the owner last confirmed it (NULL = unconfirmed).
     confidence: Mapped[float | None] = mapped_column(DOUBLE_PRECISION)
     last_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # 無効化した理由。user=本人・MCP、capacity=上限での自動の入れ替え。NULL は未記録（有効な事実と、この列の追加前に無効化した事実。
+    # 後者は本人が無効化したので user と同じに扱う）。superseded・merged は後続の変更が書く。
+    # Why the fact was deprecated: user (the owner or MCP), capacity (automatic replacement at the cap). NULL means not recorded
+    # (active facts, and facts deprecated before the column existed, which were the owner's and read like user).
+    # superseded and merged are written by later changes.
+    deprecated_reason: Mapped[str | None] = mapped_column(String(20))
 
     __table_args__ = (
         CheckConstraint(
@@ -784,6 +790,10 @@ class ContextFact(Base):
         CheckConstraint("source_kind IN ('manual', 'mcp', 'chat', 'import')", name="ck_context_facts_source_kind"),
         CheckConstraint("importance BETWEEN 0 AND 100", name="ck_context_facts_importance"),
         CheckConstraint("confidence IS NULL OR confidence BETWEEN 0 AND 1", name="ck_context_facts_confidence"),
+        CheckConstraint(
+            "deprecated_reason IS NULL OR deprecated_reason IN ('user', 'superseded', 'merged', 'capacity')",
+            name="ck_context_facts_deprecated_reason",
+        ),
         CheckConstraint("idempotency_key_hash IS NULL OR idempotency_key_hash ~ '^[0-9a-f]{64}$'",
                         name="ck_context_facts_idempotency_key_hash"),
         CheckConstraint("idempotency_payload_hash IS NULL OR idempotency_payload_hash ~ '^[0-9a-f]{64}$'",

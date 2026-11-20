@@ -38,6 +38,7 @@ def _fact_row(**overrides):
         "revision": 1,
         "confidence": None,
         "last_confirmed_at": None,
+        "deprecated_reason": None,
         "created_at": None,
         "updated_at": None,
     }
@@ -292,6 +293,22 @@ class ContextFactConfirmationTestCase(unittest.IsolatedAsyncioTestCase):
         )
         self.assertNotIn("last_confirmed_at", _sql(session.execute.await_args.args[0]))
 
+    async def test_deprecating_records_the_user_reason_and_restoring_clears_it(self):
+        deprecate_sql, deprecate_params = await self._update(status="deprecated")
+        restore_sql, restore_params = await self._update(status="active")
+
+        self.assertIn("deprecated_reason=", deprecate_sql.replace(" ", ""))
+        self.assertEqual(deprecate_params["deprecated_reason"], "user")
+        self.assertIn("deprecated_reason=", restore_sql.replace(" ", ""))
+        self.assertIsNone(restore_params["deprecated_reason"])
+
+    async def test_updates_that_leave_the_status_alone_keep_the_reason(self):
+        for kwargs in ({"importance": 90}, {"title": "New title"}, {"content": "New", "confirmed_by_owner": True}):
+            with self.subTest(kwargs=kwargs):
+                sql, params = await self._update(**kwargs)
+                self.assertNotIn("deprecated_reason", sql)
+                self.assertNotIn("deprecated_reason", params)
+
     # 日本語: 更新で実行された文を、scalar と execute をまたいだ実行順で返します。
     # English: Return the statements a content update ran, in execution order across scalar and execute.
     async def _update_statements(self, *, content_changes=True, **kwargs):
@@ -387,6 +404,23 @@ class ContextFactConfirmationTestCase(unittest.IsolatedAsyncioTestCase):
         await ContextFactRepository(session).store_embedding(10, [0.1, 0.2], expected_revision=1)
 
         self.assertNotIn("last_confirmed_at", _sql(session.execute.await_args.args[0]))
+
+    async def test_owner_touches_advance_the_revision_and_embedding_storage_does_not(self):
+        # 上限での入れ替えは「revision が初期値 1 のまま」を手を入れていない印にする。復元・重要度の変更・無効化は
+        # last_confirmed_at を変えないが revision を進める。埋め込みの保存は進めない(進めると未編集の事実が対象から外れる)。
+        # The cap replacement treats "revision still at its initial 1" as untouched. Restoring, changing importance and
+        # deprecating leave last_confirmed_at alone but advance the revision; storing an embedding must not advance it.
+        for kwargs in ({"status": "active"}, {"status": "deprecated"}, {"importance": 90}):
+            with self.subTest(kwargs=kwargs):
+                sql, _ = await self._update(**kwargs)
+                self.assertIn("revision=(context_facts.revision+", sql.replace(" ", ""))
+                self.assertNotIn("last_confirmed_at", sql)
+
+        session = MagicMock()
+        session.execute = AsyncMock()
+        await ContextFactRepository(session).store_embedding(10, [0.1, 0.2], expected_revision=1)
+        set_clause = _sql(session.execute.await_args.args[0]).split("WHERE")[0]
+        self.assertNotIn("revision", set_clause)
 
     def test_serialization_exposes_confidence_and_confirmation(self):
         fact = ContextFactRepository._serialize_row(

@@ -36,6 +36,7 @@ from services.request_models import (
 from services.response_models import (
     ContextDigestGroup,
     ContextDigestResponse,
+    ContextFactListItemResponse,
     ContextFactListResponse,
     ContextFactResponse,
 )
@@ -113,6 +114,19 @@ def _to_response(fact: dict[str, Any]) -> ContextFactResponse:
     )
 
 
+# 日本語: 記憶の画面の一覧用に、_to_response の内容へ無効化の理由を足す。旧バージョンのコードが復元した行は理由が残るので、
+# 有効な事実には返さない。MCP・ダイジェスト・検索は理由を持たない _to_response のまま使い、AI に渡る内容を変えない。
+# English: For the memory screen's list: _to_response plus the deprecation reason. An older code color leaves the reason when
+# it restores a fact, so an active fact never reports one. MCP, the digest and search keep using _to_response without it,
+# so what reaches the AI is unchanged.
+def _to_list_item_response(fact: dict[str, Any]) -> ContextFactListItemResponse:
+    base = _to_response(fact)
+    return ContextFactListItemResponse(
+        **base.model_dump(),
+        deprecated_reason=fact.get("deprecated_reason") if base.status == "deprecated" else None,
+    )
+
+
 # 日本語: カーソルは「更新日時~ID」形式（更新日時の降順ページング用）。
 # English: The cursor is "updated_at~id", used for paging in descending updated_at order.
 def _encode_cursor(fact: dict[str, Any]) -> str | None:
@@ -167,7 +181,7 @@ async def list_facts(
             next_cursor = _encode_cursor(rows[safe_limit - 1])
             rows = rows[:safe_limit]
         return ContextFactListResponse(
-            facts=[_to_response(row) for row in rows],
+            facts=[_to_list_item_response(row) for row in rows],
             total_active=await _repository(db).count_active(user_id),
             next_cursor=next_cursor,
         )

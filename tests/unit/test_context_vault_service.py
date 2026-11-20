@@ -25,6 +25,7 @@ from services.request_models import (
     ContextFactUpdateRequest,
     McpContextFactSaveRequest,
 )
+from services.response_models import ContextFactListItemResponse, ContextFactResponse
 
 
 # 日本語: 事実テーブルの 1 行分の辞書を作ります。
@@ -191,6 +192,57 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(confirmed.last_confirmed_at, "2026-09-01T10:00:00")
         self.assertIsNone(unconfirmed.confidence)
         self.assertIsNone(unconfirmed.last_confirmed_at)
+
+    async def test_list_reports_the_reason_only_for_deprecated_facts(self):
+        # 旧バージョンのコードが復元した行には理由が残るので、有効な事実には返さない。理由が無い無効化済みの行は None。
+        # An older code color leaves the reason on restore, so an active fact never reports one; a deprecated row without one is None.
+        cases = (
+            ({"status": "deprecated", "deprecated_reason": "capacity"}, "capacity"),
+            ({"status": "deprecated", "deprecated_reason": "user"}, "user"),
+            ({"status": "deprecated", "deprecated_reason": None}, None),
+            ({"status": "deprecated"}, None),
+            ({"status": "active", "deprecated_reason": "capacity"}, None),
+        )
+        for row, expected in cases:
+            repo = _repo()
+            repo.list_facts.return_value = [fact_row(**row)]
+            repo.count_active.return_value = 0
+            with self.subTest(row=row), patch("services.context_vault_service._repository", return_value=repo):
+                result = await list_facts(7, status="deprecated", session=object())
+            self.assertEqual(result.facts[0].deprecated_reason, expected)
+
+    async def test_only_the_web_list_carries_deprecated_reason(self):
+        # 理由は記憶の画面の一覧だけが返す。単体取得・更新・MCP の応答・ダイジェスト・検索は、理由の項目を持たない main と同じ形で、
+        # AI に渡る内容と、ダイジェストの文字予算を測る JSON の長さを変えない。
+        # Only the memory screen's list returns the reason. Single reads, updates, MCP responses, the digest and search keep
+        # the shape without the field, so what reaches the AI and the JSON length the digest budget measures are unchanged.
+        expected_keys = {
+            "id", "fact_type", "title", "content", "status", "revision", "source_kind", "importance",
+            "confidence", "last_confirmed_at", "created_at", "updated_at",
+        }  # fmt: skip
+        self.assertEqual(set(ContextFactResponse.model_fields), expected_keys)
+        self.assertEqual(set(ContextFactListItemResponse.model_fields), expected_keys | {"deprecated_reason"})
+
+        repo = _repo()
+        row = fact_row(status="deprecated", deprecated_reason="capacity")
+        repo.get_fact.return_value = row
+        repo.update_fact.return_value = row
+        repo.list_active_for_digest.return_value = [fact_row(deprecated_reason="capacity")]
+        repo.text_search.return_value = [fact_row(deprecated_reason="capacity")]
+        with patch("services.context_vault_service._repository", return_value=repo), patch(
+            "services.context_vault_service.session_scope", return_value=_TransactionSession()
+        ), patch("services.context_vault_service.schedule_embedding"):
+            fetched = await get_fact(7, 3, session=object())
+            updated = await update_fact(7, 3, expected_revision=1, status="deprecated")
+            digest = await build_digest(7, session=object())
+            search = await search_facts(7, "editor", session=object())
+
+        self.assertNotIsInstance(fetched, ContextFactListItemResponse)
+        self.assertEqual(set(fetched.model_dump()), expected_keys)
+        self.assertEqual(set(updated.model_dump()), expected_keys)
+        self.assertEqual(set(digest.groups[0].facts[0].model_dump()), expected_keys)
+        self.assertEqual(set(search.facts[0].model_dump()), expected_keys)
+        self.assertNotIn("deprecated_reason", digest.model_dump_json())
 
     async def test_update_is_unconfirmed_unless_the_owner_edits(self):
         for owner, expected in ((None, False), (True, True)):

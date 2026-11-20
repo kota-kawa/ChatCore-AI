@@ -3,12 +3,8 @@
 import type {
   ContextExtractionSettingsResponse,
   ContextExtractionSettingsUpdateRequest,
-  ContextFactCandidateApprovalResponse,
-  ContextFactCandidateApproveRequest,
-  ContextFactCandidateListResponse,
-  ContextFactCandidateRejectRequest,
-  ContextFactCandidateResponse,
   ContextFactCreateRequest,
+  ContextFactListItemResponse,
   ContextFactListResponse,
   ContextFactResponse,
   ContextFactUpdateRequest,
@@ -20,7 +16,10 @@ import type {
 
 // 型の多くは生成スキーマ（types/generated/api_schemas）から派生させ、サーバーとの契約を一か所に保つ。
 // Most types derive from the generated schema (types/generated/api_schemas) to keep the server contract in one place.
-export type ContextFact = ContextFactResponse;
+export type ContextFact = ContextFactListItemResponse;
+// 作成・更新の応答。一覧の 1 件と違い、無効化の理由（deprecated_reason）は含まない。
+// The create/update response; unlike a list item, it carries no deprecation reason (deprecated_reason).
+export type ContextFactMutationResult = ContextFactResponse;
 export type ContextFactType = ContextFact["fact_type"];
 export type ContextFactStatus = ContextFact["status"];
 
@@ -34,7 +33,7 @@ export type ContextFactListPayload = ContextFactListResponse & {
 
 export type ContextFactMutationPayload = {
   status?: string;
-  fact?: ContextFact;
+  fact?: ContextFactMutationResult;
   error?: string;
 };
 
@@ -47,35 +46,6 @@ type ContextFactUpdateFields = Pick<
 
 export type ContextFactUpdateInput = Pick<ContextFactUpdateRequest, "revision"> & {
   [Field in keyof ContextFactUpdateFields]?: Exclude<ContextFactUpdateFields[Field], null>;
-};
-
-export type ContextFactCandidate = ContextFactCandidateResponse;
-export type ContextCandidateStatus = ContextFactCandidate["status"];
-
-export type ContextCandidateListPayload = ContextFactCandidateListResponse & {
-  error?: string;
-};
-
-type ContextCandidateApproveFields = Pick<
-  ContextFactCandidateApproveRequest,
-  "title" | "content" | "fact_type" | "importance"
->;
-
-export type ContextCandidateApproveInput = Pick<
-  ContextFactCandidateApproveRequest,
-  "revision"
-> & {
-  [Field in keyof ContextCandidateApproveFields]?: Exclude<
-    ContextCandidateApproveFields[Field],
-    null
-  >;
-};
-
-export type ContextCandidateRejectInput = ContextFactCandidateRejectRequest;
-
-export type ContextCandidateMutationPayload = Partial<ContextFactCandidateApprovalResponse> & {
-  status?: string;
-  error?: string;
 };
 
 export type ContextExtractionSettings = ContextExtractionSettingsResponse;
