@@ -4520,9 +4520,15 @@ body.memo-page {
   color: #fff;
 }
 
-/* 会話からの記憶の自動保存の設定行。スイッチは見た目の軌道（::before）と、44px 四方のタップ領域（ボタン本体）を分けている。
-  Setting row for saving memory from chats automatically. The switch keeps the visible track (::before) apart from the 44px tap area (the button itself) */
-:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting {
+/* 記憶の設定行（チャットから自動で記憶する・記憶を回答に使う）。スイッチは見た目の軌道（::before）と、44px 四方のタップ領域（ボタン本体）を分けている。
+  Memory setting rows (remember from chats automatically, use memory in answers). The switch keeps the visible track (::before) apart from the 44px tap area (the button itself) */
+:where(body.memo-page, .memo-page-shell) .memo-context-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-setting {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -4533,18 +4539,18 @@ body.memo-page {
   background: var(--memo-card);
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__copy strong {
+:where(body.memo-page, .memo-page-shell) .memo-context-setting__copy strong {
   font-size: 0.9rem;
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__copy p {
+:where(body.memo-page, .memo-page-shell) .memo-context-setting__copy p {
   margin: 0.2rem 0 0;
   color: var(--memo-text-muted);
   font-size: 0.8rem;
   line-height: 1.55;
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__toggle {
+:where(body.memo-page, .memo-page-shell) .memo-context-setting__toggle {
   position: relative;
   flex: 0 0 auto;
   width: 3rem;
@@ -4555,7 +4561,7 @@ body.memo-page {
   cursor: pointer;
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__toggle::before {
+:where(body.memo-page, .memo-page-shell) .memo-context-setting__toggle::before {
   content: "";
   position: absolute;
   top: 50%;
@@ -4570,7 +4576,7 @@ body.memo-page {
   transition: background 0.18s ease, border-color 0.18s ease;
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__toggle > span:first-child {
+:where(body.memo-page, .memo-page-shell) .memo-context-setting__toggle > span:first-child {
   position: absolute;
   top: calc(50% - 0.5rem);
   left: calc(50% - 1.175rem);
@@ -4581,23 +4587,23 @@ body.memo-page {
   transition: transform 0.18s ease, background 0.18s ease;
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__toggle.is-enabled::before {
+:where(body.memo-page, .memo-page-shell) .memo-context-setting__toggle.is-enabled::before {
   border-color: var(--memo-amber-strong);
   background: var(--memo-amber-strong);
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__toggle.is-enabled > span:first-child {
+:where(body.memo-page, .memo-page-shell) .memo-context-setting__toggle.is-enabled > span:first-child {
   background: #fff;
   transform: translateX(1.2rem);
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__toggle:focus-visible {
+:where(body.memo-page, .memo-page-shell) .memo-context-setting__toggle:focus-visible {
   outline: 2px solid var(--memo-amber-strong);
   outline-offset: 2px;
   border-radius: 999px;
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__toggle:disabled {
+:where(body.memo-page, .memo-page-shell) .memo-context-setting__toggle:disabled {
   opacity: 0.55;
   cursor: default;
 }

@@ -104,7 +104,7 @@ flowchart LR
 - `services/`: 複数のルートから使う業務処理、外部連携、共通エラー、セキュリティ、キャッシュ、バックグラウンド処理を担当します。ルートから直接呼ぶ必要がある場合も、処理をサービスへ寄せてハンドラを薄く保ちます。
 - `services/repositories/`: 複数機能で共有する DB アクセスの配置先です（メモの DB アクセスも `services/repositories/memo_repository.py` にあります）。機能配下にデータアクセスが残っている場合も、移動を目的にした大規模リファクタリングは行わず、新規の共有アクセスからこの境界を優先します。
 - `services/repositories/auth_identity_repository.py`: メール・Google・Passkey認証が参照するユーザーと認証プロバイダーの専用永続化境界です。一般ユーザー機能のRepositoryへ認証情報の読み書きを追加しません。
-- チャット周辺の永続化は機能ごとにRepositoryを分けています。`chat_repository.py` はルーム・履歴・分岐・共有・ルーム内メモリ、`project_repository.py` はプロジェクトと部屋の所属、`task_repository.py` はタスクテンプレート、`user_skill_repository.py` は `user_skills` と既定スキルの ON/OFF（`users.generative_ui_skill_enabled`、`users.memo_tools_skill_enabled`）、`user_repository.py` は `users` のプロフィール・メール・言語設定とアカウント削除、`chat_tool_approval_repository.py` は承認カード（`chat_tool_approvals`）と「常に承認」の付与（`chat_tool_auto_approvals`）を所有します。別機能の行をこれらへ追加しないでください。
+- チャット周辺の永続化は機能ごとにRepositoryを分けています。`chat_repository.py` はルーム・履歴・分岐・共有・要約、`project_repository.py` はプロジェクトと部屋の所属、`task_repository.py` はタスクテンプレート、`user_skill_repository.py` は `user_skills` と既定スキルの ON/OFF（`users.generative_ui_skill_enabled`、`users.memo_tools_skill_enabled`）、`user_repository.py` は `users` のプロフィール・メール・言語設定とアカウント削除、`chat_tool_approval_repository.py` は承認カード（`chat_tool_approvals`）と「常に承認」の付与（`chat_tool_auto_approvals`）を所有します。別機能の行をこれらへ追加しないでください。
 - `services/repositories/chat_room_access.py`: `chat_rooms` の所有者確認とルームのシリアライズを、チャットとプロジェクトの双方から使う共通境界です。ロックとエラー契約を重複実装しないでください。
 - `services/request_models.py` / `services/response_models.py`: API 契約を定義します。フロントエンドの型を手書きで先行変更しないでください。
 - `services/api_errors.py` / `services/error_messages.py`: API エラーの型と利用者向け文言を集約します。
@@ -118,7 +118,7 @@ flowchart LR
 | `blueprints/chat/` | チャット、部屋、タスク、プロフィール、設定、プロジェクト | `/api` |
 | `blueprints/prompt_share/` | 公開プロンプト、検索、管理、メディア | `/prompt_share`, `/prompt_manage`, `/search` |
 | `blueprints/memo/` | メモ、コレクション、共有、エクスポート | `/memo` |
-| `blueprints/context_vault/` | パーソナル・コンテキスト（画面名は「記憶」）、自動抽出の設定 | `/api/context-facts` |
+| `blueprints/context_vault/` | パーソナル・コンテキスト（画面名は「記憶」）、自動保存と回答への利用の設定 | `/api/context-facts` |
 | `blueprints/admin/` | 管理画面と管理 API（デモ用アクセスコードの発行・停止を含む） | `/admin` |
 | `blueprints/mcp_oauth.py` | MCP OAuth クライアント・接続管理 | `/api/mcp/oauth` |
 
@@ -201,6 +201,8 @@ SSE は回答ごとの `generation_id` と、その回答内のイベント連�
 検索根拠を持つターンには、引用 marker と回答方針を定める system 指示（`build_web_search_evidence_policy_message`）を1つだけ添えます。検索結果と取得本文は信頼できない参照データとして扱い、含まれる指示を実行しません。本文を読み直した場合も、既存の evidence ID と URL を引用解決に再利用します。コンテキスト予算が厳しい場合は、モデルによる状態更新と必要な Evidence の読み取りで対処します。
 
 プロンプトは「固定の指示 → 会話履歴 → ターンやステップで変わる文脈（現在時刻、参照元・過去の検索結果、`TurnState`、検索の引用方針、判断ループの契約）→ 最新のユーザー発話」の順に組み立てます。プロバイダのプロンプトキャッシュは先頭からの一致にしか効かないため、変わる文脈は `services/chat_prompt.py` の `insert_before_latest_user_message` で履歴の後ろへ差し込みます。ツール一覧も、予算切れによる取り下げを除いて 1 ターンの間は変えません。Adapter は基本プロンプトの末尾と履歴の末尾にプロバイダごとのキャッシュの区切りを付けます（理由は [ADR 0011](docs/decisions/0011-prompt-cache-friendly-ordering.md)）。
+
+ログイン中の利用者の通常ルームでは、固定の指示のうち利用者のプロフィールの直後に、記憶のまとめ `<user_memory>` を毎ターン置きます（[ADR 0025](docs/decisions/0025-always-on-memory-with-provenance.md)）。`services/user_memory.py` が、有効で本人由来（本人が確認した事実、またはチャットから抽出した事実。MCP・import で入って本人が確認していない事実は除く）の `context_facts` を 1 回の読み取りで取り、重要度の高い順に約 700 見積もりトークンまで LLM を使わず決定的に組みます。日付は絶対表記で、記憶が変わらなければ文面も変わらないため、履歴より前に置いてもプロンプトキャッシュを壊しません（記憶が変わった次のターンだけ、記憶より後ろのキャッシュが外れます）。文脈の予算はプロジェクトの指示・タスク・要約より先に取り、直近の履歴の枠は別に確保されます。モデルに拒否されたときの縮小文脈での再試行（`services/chat_context_recovery.py`）では、プロフィールや要約と同じくまとめも落ちます。新しいルームの最初のターン、再生成、編集して再生成でも入れ、一時チャット・ゲスト・利用者が設定（`users.memory_use_enabled`）で切ったとき・ユーザー行が読めないときは入れません。読み込みに失敗しても回答は続けます。このまとめは本人由来だけなので、読んだターンでも「常に承認」の自動実行は止めません（検索の結果に未確認の事実が含まれたターンの抑止は従来どおりです）。入れたターンの件数と見積もりトークンは生成テレメトリ（`user_memory_fact_count`・`user_memory_estimated_tokens`）に残ります。
 
 モデル／プロバイダ差は `services/llm.py` と `services/llm_tool_schema.py` の薄い Adapter 境界へ閉じ込めます。Adapter が吸収するのはツール呼び出し形式、ストリームイベント、出力上限などの最低限の差だけです。Qwen を含む特定モデル向けに検索 Planner、独自のまとめフェーズ、別の状態機械、別プロンプトによるワークフローを追加しません。この判断の理由と旧調査フローからの移行境界は [ADR 0009](docs/decisions/0009-single-turn-state-chat-loop.md) にあります。
 

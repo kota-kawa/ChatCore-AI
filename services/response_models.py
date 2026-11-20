@@ -396,6 +396,12 @@ class ContextExtractionSettingsResponse(ResponsePayloadModel):
     enabled: bool = False
 
 
+# 日本語: 保存した記憶をチャットの回答に使うかどうか。
+# English: Whether saved memory is used in chat answers.
+class ContextMemoryUseSettingsResponse(ResponsePayloadModel):
+    enabled: bool = False
+
+
 # 日本語: fact_type ごとにまとめた active な事実のグループ。
 # English: Group of active facts collected under one fact_type.
 class ContextDigestGroup(ResponsePayloadModel):

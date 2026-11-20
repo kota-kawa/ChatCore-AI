@@ -8,6 +8,8 @@ import type {
   ContextFactListResponse,
   ContextFactResponse,
   ContextFactUpdateRequest,
+  ContextMemoryUseSettingsResponse,
+  ContextMemoryUseSettingsUpdateRequest,
   ContextVaultImportConfirmRequest,
   ContextVaultImportPreviewRequest,
   ContextVaultImportPreviewResponse,
@@ -50,6 +52,8 @@ export type ContextFactUpdateInput = Pick<ContextFactUpdateRequest, "revision"> 
 
 export type ContextExtractionSettings = ContextExtractionSettingsResponse;
 export type ContextExtractionSettingsUpdateInput = ContextExtractionSettingsUpdateRequest;
+export type ContextMemoryUseSettings = ContextMemoryUseSettingsResponse;
+export type ContextMemoryUseSettingsUpdateInput = ContextMemoryUseSettingsUpdateRequest;
 
 export type ContextVaultExportFormat = ContextVaultImportPreviewRequest["format"];
 export type ContextVaultImportPreviewInput = ContextVaultImportPreviewRequest;

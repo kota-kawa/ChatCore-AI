@@ -9,7 +9,7 @@ import secrets
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any, NamedTuple
+from typing import Any
 
 from sqlalchemy import and_, delete, func, literal, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -34,7 +34,6 @@ from services.models import (
     ChatHistory,
     ChatRoom,
     ChatRoomSummary,
-    MemoryFact,
     SharedChatRoom,
 )
 from services.repositories.chat_room_access import load_owned_room, serialize_room
@@ -146,17 +145,9 @@ _TREE_TURN_CONTEXT_COLUMNS: tuple[Any, ...] = (
 )
 
 
-class RememberedFact(NamedTuple):
-    # ルーム内の記憶と、最後に言及した時刻をnaive UTCで保持する。
-    """A room memory fact and when the user last mentioned it (naive UTC)."""
-
-    fact: str
-    last_mentioned_at: datetime
-
-
 class ChatRepository:
-    # ルーム・履歴・分岐・共有・記憶の永続化を担う。commitはサービスが所有する。
-    """Repository for chat rooms, message history, branches, sharing and room memory.
+    # ルーム・履歴・分岐・共有・要約の永続化を担う。commitはサービスが所有する。
+    """Repository for chat rooms, message history, branches, sharing and summaries.
 
     The repository never commits.  Services own the transaction and pass an
     isolated ``AsyncSession`` for one unit of work.
@@ -747,96 +738,8 @@ class ChatRepository:
             },
         }
 
-    # 記憶した事実と要約。
-    # Memory facts and summaries -------------------------------------------
-
-    async def list_room_memory_facts(
-        self,
-        chat_room_id: str,
-        *,
-        mentioned_since: datetime,
-        limit: int = 8,
-    ) -> list[RememberedFact]:
-        # updated_at は同じ事実が再び抽出されるたびに進むので、最後に言及された時刻として使う。
-        # updated_at advances each time the same fact is extracted again, so it is the last mention.
-        rows = (
-            await self.session.execute(
-                select(MemoryFact.fact, MemoryFact.updated_at)
-                .where(
-                    MemoryFact.chat_room_id == chat_room_id,
-                    MemoryFact.scope == "room",
-                    MemoryFact.is_active.is_(True),
-                    MemoryFact.updated_at >= mentioned_since,
-                )
-                .order_by(MemoryFact.updated_at.desc(), MemoryFact.id.desc())
-                .limit(limit)
-            )
-        ).all()
-        return [RememberedFact(str(fact), updated_at) for fact, updated_at in rows if fact]
-
-    async def remember_facts(
-        self,
-        chat_room_id: str,
-        user_id: int,
-        facts: list[str],
-        *,
-        source_message_id: int | None = None,
-    ) -> None:
-        # 同じ発話から同義の fact が複数返ることがあるため、正規化キーで1件に畳む。
-        # The extractor can return the same fact twice, so collapse on the normalized key.
-        wanted: dict[str, str] = {}
-        for fact in facts:
-            wanted[fact.lower()] = fact
-        if not wanted:
-            return
-
-        # 1 fact ごとに SELECT ... FOR UPDATE を撃つと、fact 数だけ往復が増える。
-        # idx_memory_facts_room_scope_lower_fact が効く 1 本のクエリへまとめる。
-        # Querying per fact cost one round trip each; this is a single lookup served by
-        # idx_memory_facts_room_scope_lower_fact.
-        rows = (
-            await self.session.execute(
-                select(MemoryFact, func.lower(MemoryFact.fact).label("normalized_fact"))
-                .where(
-                    MemoryFact.chat_room_id == chat_room_id,
-                    MemoryFact.scope == "room",
-                    func.lower(MemoryFact.fact).in_(list(wanted)),
-                )
-                .order_by(MemoryFact.id)
-                .with_for_update(of=MemoryFact)
-            )
-        ).all()
-        existing_by_key: dict[str, MemoryFact] = {}
-        for row, normalized_fact in rows:
-            # PostgreSQL の lower() と Python の str.lower() が割れる文字でも取り違えないよう、
-            # DB 側の正規化結果と Python 側の正規化結果の両方を鍵にする。
-            # Key on both normalizations so a character where PostgreSQL's lower() and Python's
-            # str.lower() disagree still resolves to the row it came from.
-            for key in (str(normalized_fact), str(row.fact).lower()):
-                existing_by_key.setdefault(key, row)
-
-        now = datetime.utcnow()
-        for key, fact in wanted.items():
-            existing = existing_by_key.get(key)
-            if existing is not None:
-                existing.fact = fact
-                existing.user_id = user_id
-                if source_message_id is not None:
-                    existing.source_message_id = source_message_id
-                existing.is_active = True
-                existing.updated_at = now
-            else:
-                self.session.add(
-                    MemoryFact(
-                        user_id=user_id,
-                        chat_room_id=chat_room_id,
-                        scope="room",
-                        fact=fact,
-                        source_message_id=source_message_id,
-                        is_active=True,
-                    )
-                )
-        await self.session.flush()
+    # 会話の要約。
+    # Conversation summaries -----------------------------------------------
 
     async def get_room_summary(self, chat_room_id: str) -> dict[str, Any] | None:
         summary = (

@@ -86,6 +86,9 @@ OCCURRENCE_FIELDS = (
     "workspace_write_proposals",
     "workspace_auto_executions",
     "workspace_read_calls",
+    # 記憶のまとめ（`<user_memory>`）を文脈に入れたターンの割合。
+    # Turns whose context carried the memory summary.
+    "user_memory_fact_count",
 )
 
 # 中央値で報告する分量の指標。
@@ -96,6 +99,9 @@ MEDIAN_FIELDS = (
     "web_search_count",
     "continuation_count",
     "final_answer_input_tokens",
+    # 記憶のまとめを入れなかったターン（0 を記録）も含めた中央値。入れたターンだけの代表値ではない。
+    # The median includes turns that carried no memory summary (recorded as 0); it is not the typical size of an included summary.
+    "user_memory_estimated_tokens",
     "final_answer_output_chars",
     "first_visible_text_ms",
     "first_visible_ui_ms",

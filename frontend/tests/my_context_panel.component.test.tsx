@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MyContextPanel } from "../components/memo/MyContextPanel";
 import type { ContextExtractionApi } from "../components/memo/ContextExtractionSetting";
+import type { ContextMemoryUseApi } from "../components/memo/ContextMemoryUseSetting";
 import type { ContextFact } from "../lib/memo/context_types";
 
 function renderPanel(props: Parameters<typeof MyContextPanel>[0]) {
@@ -15,9 +16,14 @@ function renderPanel(props: Parameters<typeof MyContextPanel>[0]) {
     update: vi.fn().mockImplementation(async ({ enabled }) => ({ enabled })),
     ...props.extractionApi,
   };
+  const memoryUseApi: ContextMemoryUseApi = {
+    load: vi.fn().mockResolvedValue({ enabled: true }),
+    update: vi.fn().mockImplementation(async ({ enabled }) => ({ enabled })),
+    ...props.memoryUseApi,
+  };
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <MyContextPanel {...props} extractionApi={extractionApi} />
+      <MyContextPanel {...props} extractionApi={extractionApi} memoryUseApi={memoryUseApi} />
     </SWRConfig>,
   );
 }
@@ -104,6 +110,32 @@ describe("MyContextPanel", () => {
     expect(screen.queryByText("承認待ちの提案")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "承認" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "却下" })).not.toBeInTheDocument();
+  });
+
+  it("shows saving and using as two separate switches that change independently", async () => {
+    const load = vi.fn().mockResolvedValue({ facts: [sampleFact], totalActive: 1, nextCursor: null });
+    const extractionUpdate = vi.fn().mockImplementation(async ({ enabled }) => ({ enabled }));
+    const memoryUseUpdate = vi.fn().mockImplementation(async ({ enabled }) => ({ enabled }));
+    renderPanel({
+      isLoggedIn: true,
+      api: { load },
+      extractionApi: { load: vi.fn().mockResolvedValue({ enabled: true }), update: extractionUpdate },
+      memoryUseApi: { load: vi.fn().mockResolvedValue({ enabled: true }), update: memoryUseUpdate },
+    });
+
+    const saving = await screen.findByRole("switch", { name: "チャットからの自動保存" });
+    const using = await screen.findByRole("switch", { name: "記憶を回答に使う" });
+    await waitFor(() => expect(saving).toHaveAttribute("aria-checked", "true"));
+    await waitFor(() => expect(using).toHaveAttribute("aria-checked", "true"));
+    expect(screen.getByText("チャットから自動で記憶する")).toBeInTheDocument();
+    expect(screen.getByText("記憶を回答に使う", { selector: "strong" })).toBeInTheDocument();
+
+    fireEvent.click(using);
+
+    await waitFor(() => expect(memoryUseUpdate).toHaveBeenCalledWith({ enabled: false }));
+    await waitFor(() => expect(using).toHaveAttribute("aria-checked", "false"));
+    expect(saving).toHaveAttribute("aria-checked", "true");
+    expect(extractionUpdate).not.toHaveBeenCalled();
   });
 
   it("marks only the facts the memory limit deactivated in the deactivated list", async () => {

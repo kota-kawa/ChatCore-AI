@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: fe3e339ef15e52c7e9d469ade727244b793ab723ab45653ff78a60f5619144cb
+// Schema fingerprint: b33cf546104761b1535e2f5d615f0ec4489354d16375c6769854c8d45c7d8388
 
 import { z } from "zod";
 
@@ -124,6 +124,9 @@ export type ContextVaultImportConfirmRequest = z.infer<typeof ContextVaultImport
 
 export const ContextExtractionSettingsUpdateRequestSchema = z.object({ "enabled": z.boolean() });
 export type ContextExtractionSettingsUpdateRequest = z.infer<typeof ContextExtractionSettingsUpdateRequestSchema>;
+
+export const ContextMemoryUseSettingsUpdateRequestSchema = z.object({ "enabled": z.boolean() });
+export type ContextMemoryUseSettingsUpdateRequest = z.infer<typeof ContextMemoryUseSettingsUpdateRequestSchema>;
 
 export const UserProfileUpdateRequestSchema = z.object({ "username": z.string().max(255).default(""), "email": z.string().max(254).default(""), "bio": z.string().max(2000).default(""), "llm_profile_context": z.string().max(20000).default("") });
 export type UserProfileUpdateRequest = z.infer<typeof UserProfileUpdateRequestSchema>;
@@ -250,6 +253,9 @@ export type ContextVaultImportResponse = z.infer<typeof ContextVaultImportRespon
 
 export const ContextExtractionSettingsResponseSchema = z.object({ "enabled": z.boolean().default(false) }).catchall(z.any());
 export type ContextExtractionSettingsResponse = z.infer<typeof ContextExtractionSettingsResponseSchema>;
+
+export const ContextMemoryUseSettingsResponseSchema = z.object({ "enabled": z.boolean().default(false) }).catchall(z.any());
+export type ContextMemoryUseSettingsResponse = z.infer<typeof ContextMemoryUseSettingsResponseSchema>;
 
 export const ContextDigestGroupSchema = z.object({ "fact_type": z.string(), "facts": z.array(z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "status": z.enum(["active","deprecated"]), "revision": z.number().int(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("manual"), "importance": z.number().int().gte(0).lte(100).default(50), "confidence": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "last_confirmed_at": z.union([z.string(), z.null()]).default(null), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())).optional() }).catchall(z.any());
 export type ContextDigestGroup = z.infer<typeof ContextDigestGroupSchema>;

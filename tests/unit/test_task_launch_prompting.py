@@ -14,7 +14,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from blueprints.chat.messages import chat
-from services.chat_context import build_memory_system_message, build_project_instructions_message
+from services.chat_context import build_project_instructions_message
 from services.chat_prompt import (
     BASE_SYSTEM_PROMPT,
     build_runtime_context_message,
@@ -223,12 +223,9 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         # A format instruction never drops citation markers or fenced-block contracts.
         self.assertIn("Required citation markers and fenced-block contracts still apply", BASE_SYSTEM_PROMPT)
 
-    # 日本語: メモリ・プロフィール・Project の指示が、最新の明示的な依頼に譲ることを検証します（issue #774）。
-    # English: Verify memory, profile, and Project blocks yield to the latest explicit request (issue #774).
-    def test_memory_profile_and_project_blocks_yield_to_the_latest_message(self):
-        memory = build_memory_system_message(["ユーザーは普段Pythonで開発している"])["content"]
-        self.assertIn("When the latest message contradicts one, follow the latest message", memory)
-        self.assertNotIn("must keep honoring", memory)
+    # 日本語: プロフィール・Project の指示が、最新の明示的な依頼に譲ることを検証します（issue #774）。
+    # English: Verify profile and Project blocks yield to the latest explicit request (issue #774).
+    def test_profile_and_project_blocks_yield_to_the_latest_message(self):
         profile = _build_user_profile_prompt({"llm_profile_context": "教師です"})
         self.assertIn("when the latest message says otherwise, follow the latest message", profile)
         project = build_project_instructions_message("英語で答える")["content"]

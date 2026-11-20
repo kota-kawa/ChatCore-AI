@@ -503,7 +503,6 @@ class InteractiveButtonsPromptContractTests(unittest.TestCase):
             user_profile_prompt=None,
             task_prompt=None,
             room_summary="",
-            memory_facts=[],
             recent_messages=[{"role": "user", "content": "どれにするか選ばせて"}],
             user_skills_prompt=skills_prompt,
             generative_ui_enabled=enabled,

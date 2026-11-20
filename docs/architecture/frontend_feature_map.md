@@ -23,7 +23,7 @@ FastAPI endpoint（Cookie / CSRF / JSON または SSE）
 | `/` | `pages/index.tsx` | `components/chat_page/`、`HomePageContextProvider`、`hooks/chat_page/`、`SkillSection` | `/api/chat`、チャット部屋・タスク・個人Skill・プロジェクト API、SSE、`/api/chat/tool-approvals/{id}/decision` |
 | `/login`, `/register`, `/oauth/authorize` | `pages/login.tsx`, `pages/register.tsx`, `pages/oauth/authorize.tsx` | `components/auth/auth_gateway_page.tsx` と `components/auth/auth_gateway_modules/` | `/api/current_user`、メール認証、Google OAuth、Passkey |
 | `/settings` | `pages/settings.tsx` | `components/settings/` | `/api/user/*`、`/api/passkeys`、`/prompt_manage/api/*`、`/prompt_share/api/like`、`/api/chat/tool-auto-approvals` |
-| `/memo` | `pages/memo.tsx` → `components/memo/page/MemoPage.tsx` | `components/memo/`、`MemoPageContextProvider`、`hooks/memo_page/`、`lib/memo/` | `/memo/api/*`、`/api/context-facts/*` |
+| `/memo` | `pages/memo.tsx` → `components/memo/page/MemoPage.tsx` | `components/memo/`（記憶の画面の設定スイッチは `ContextSettingToggle`）、`MemoPageContextProvider`、`hooks/memo_page/`、`lib/memo/` | `/memo/api/*`、`/api/context-facts/*` |
 | `/prompt_share` | `pages/prompt_share/index.tsx` | `components/prompt_share/`、プロンプト共有 hook 群 | `/prompt_share/api/*`、`/search/prompts`、`/api/*` |
 | `/prompt_share/category/[category]` | `pages/prompt_share/category/[category].tsx` | SSRカテゴリガイド、カテゴリ固有SEOコピー、公開プロンプトへのクロール可能なリンク | `/prompt_share/api/prompts?category={category}` |
 | `/shared/[token]` | `pages/shared/[token].tsx` | `components/shared_chat/` | 共有チャット取得・fork API |

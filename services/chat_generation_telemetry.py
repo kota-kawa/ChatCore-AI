@@ -111,6 +111,12 @@ class ChatGenerationTelemetry:
     # モデル判断の上限に達してループを打ち切ったか。
     # Whether the loop stopped because the model-decision budget ran out.
     llm_turn_budget_exhausted: bool = False
+    # このターンの文脈に入れた記憶のまとめ（`<user_memory>`）の件数と見積もりトークン数。入れなかったターンは 0。
+    # 本文は持たない。
+    # Fact count and estimated tokens of the memory summary (`<user_memory>`) put into this turn's context; 0 when none was.
+    # Never the text itself.
+    user_memory_fact_count: int = 0
+    user_memory_estimated_tokens: int = 0
     # 利用者のデータを読み書きするツール（メモなど）の利用。読み取りの回数、書き込みの提案数、
     # 「常に承認」でその場で実行した数、引数の不備で差し戻した数。
     # Use of the tools that read and write the user's data (memos and so on): reads, write
@@ -266,6 +272,8 @@ class ChatGenerationTelemetry:
             "answer_draft_discards": self.answer_draft_discards,
             "first_visible_text_ms": self.first_visible_text_ms,
             "llm_turn_budget_exhausted": self.llm_turn_budget_exhausted,
+            "user_memory_fact_count": self.user_memory_fact_count,
+            "user_memory_estimated_tokens": self.user_memory_estimated_tokens,
             "workspace_read_calls": self.workspace_read_calls,
             "workspace_write_proposals": self.workspace_write_proposals,
             "workspace_auto_executions": self.workspace_auto_executions,

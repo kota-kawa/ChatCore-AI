@@ -1,7 +1,7 @@
 """Point a memory fact replaced by a newer one at its replacement.
 
-Revision ID: 20261120_04
-Revises: 20261120_03
+Revision ID: 20261120_05
+Revises: 20261120_04
 Create Date: 2026-11-20
 
 When a newly extracted memory contradicts an active one (the user moved, changed jobs, dropped a policy), the old
@@ -23,8 +23,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "20261120_04"
-down_revision: str | Sequence[str] | None = "20261120_03"
+revision: str = "20261120_05"
+down_revision: str | Sequence[str] | None = "20261120_04"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

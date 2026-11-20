@@ -75,6 +75,9 @@ class User(Base):
     created_at: Mapped[datetime | None] = _timestamp()
     llm_profile_context: Mapped[str | None] = mapped_column(Text)
     context_auto_extract_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
+    # 保存した記憶をチャットの回答に毎ターン使うか。保存するか（context_auto_extract_enabled）とは別の設定。
+    # Whether saved memory is used in chat answers every turn; separate from whether memory is saved from chats.
+    memory_use_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
     generative_ui_skill_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
     memo_tools_skill_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
     prompt_tools_skill_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))

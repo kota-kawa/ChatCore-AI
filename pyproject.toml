@@ -71,7 +71,6 @@ ignore = [
 "services/context_vault_reconcile.py" = ["E501"]
 "services/email_service.py" = ["E501"]
 "services/memo_agent_actions.py" = ["E501"]
-"services/memory_extraction.py" = ["E501"]
 "services/page_actions.py" = ["E501"]
 "services/prompt_assist.py" = ["E501"]
 "services/user_skills.py" = ["E501"]

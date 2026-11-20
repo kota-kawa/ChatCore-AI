@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy.dialects.postgresql import dialect
 
-from services.api_errors import ApiServiceError
+from services.api_errors import ApiServiceError, ResourceNotFoundError
 from services.repositories.context_fact_repository import (
     MAX_ACTIVE_CONTEXT_FACTS,
     ContextFactRepository,
@@ -523,6 +523,34 @@ class ContextFactConfirmationTestCase(unittest.IsolatedAsyncioTestCase):
         unconfirmed = ContextFactRepository._serialize_row(_fact_row())
         self.assertIsNone(unconfirmed["confidence"])
         self.assertIsNone(unconfirmed["last_confirmed_at"])
+
+
+# 日本語: 記憶を回答に使う設定。列は NOT NULL なので、None はユーザー行が読めないときだけ。
+# English: The memory-use setting. The column is NOT NULL, so None only means the user row could not be read.
+class MemoryUseSettingTestCase(unittest.IsolatedAsyncioTestCase):
+    async def test_unreadable_user_row_counts_as_not_used(self):
+        session = MagicMock()
+        session.scalar = AsyncMock(side_effect=[None, False, True])
+        repo = ContextFactRepository(session)
+
+        self.assertFalse(await repo.get_memory_use_enabled(7))
+        self.assertFalse(await repo.get_memory_use_enabled(7))
+        self.assertTrue(await repo.get_memory_use_enabled(7))
+
+    async def test_update_returns_the_stored_value_and_rejects_a_missing_user(self):
+        session = MagicMock()
+        stored = MagicMock()
+        stored.scalar_one_or_none.return_value = False
+        missing = MagicMock()
+        missing.scalar_one_or_none.return_value = None
+        session.execute = AsyncMock(side_effect=[stored, missing])
+        repo = ContextFactRepository(session)
+
+        self.assertFalse(await repo.update_memory_use_enabled(7, False))
+        statement = " ".join(str(session.execute.await_args_list[0].args[0].compile(dialect=dialect())).split())
+        self.assertIn("UPDATE users SET memory_use_enabled=%(memory_use_enabled)s", statement)
+        with self.assertRaises(ResourceNotFoundError):
+            await repo.update_memory_use_enabled(8, True)
 
 
 if __name__ == "__main__":

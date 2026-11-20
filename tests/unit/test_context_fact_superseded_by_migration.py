@@ -1,6 +1,6 @@
-"""alembic マイグレーション 20261120_04（context_facts に superseded_by_fact_id を追加）の連鎖と SQL、モデルとの一致を検証するテスト。
+"""alembic マイグレーション 20261120_05（context_facts に superseded_by_fact_id を追加）の連鎖と SQL、モデルとの一致を検証するテスト。
 
-Tests the revision chain and SQL of alembic migration 20261120_04, which adds superseded_by_fact_id to
+Tests the revision chain and SQL of alembic migration 20261120_05, which adds superseded_by_fact_id to
 context_facts, and its agreement with the model.
 """
 
@@ -15,7 +15,7 @@ from sqlalchemy.schema import CreateIndex
 from services.models import ContextFact
 
 migration_path = (
-    Path(__file__).resolve().parents[2] / "alembic" / "versions" / "20261120_04_add_context_fact_superseded_by.py"
+    Path(__file__).resolve().parents[2] / "alembic" / "versions" / "20261120_05_add_context_fact_superseded_by.py"
 )
 spec = importlib.util.spec_from_file_location("context_fact_superseded_by_migration", migration_path)
 if spec is None or spec.loader is None:  # pragma: no cover - importlib invariant
@@ -43,9 +43,9 @@ def _run_upgrade():
 
 
 class ContextFactSupersededByMigrationTestCase(unittest.TestCase):
-    def test_revision_follows_the_candidate_promotion_migration(self):
-        self.assertEqual(migration.revision, "20261120_04")
-        self.assertEqual(migration.down_revision, "20261120_03")
+    def test_revision_follows_the_memory_use_setting_migration(self):
+        self.assertEqual(migration.revision, "20261120_05")
+        self.assertEqual(migration.down_revision, "20261120_04")
 
     def test_upgrade_adds_a_nullable_self_reference_that_clears_on_delete(self):
         recorder = _run_upgrade()
