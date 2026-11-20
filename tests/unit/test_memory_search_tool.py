@@ -308,7 +308,8 @@ class ToolCallTestCase(unittest.TestCase):
                     self.assertNotIn(_SECRET, json.dumps(payload, ensure_ascii=False))
 
     def test_memo_and_shared_prompt_events_keep_the_query(self):
-        for name, event_prefix in (("personal_knowledge_search", "personal_knowledge_search"), ("shared_prompt_search", "shared_prompt_search")):
+        for name in ("personal_knowledge_search", "shared_prompt_search"):
+            event_prefix = name
             with self.subTest(name):
                 job, events = _job()
                 state = job._build_turn_run_state()

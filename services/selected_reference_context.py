@@ -177,7 +177,7 @@ class CandidateQueryPlan:
                 self._rewritten = rewritten if isinstance(rewritten, list) else []
             return self._rewritten
 
-    # 日本語: 元の発話 → 言い換えの順に、空と重複（lookup_query_key が同じもの）を除いて最大 MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS 件まで出す。
+    # 日本語: 元の発話 → 言い換えの順に、空と重複（lookup_query_key が同じもの）を除いて、最大試行回数まで出す。
     # English: Yield the original turn, then the rewrites, skipping blanks and duplicates (same lookup_query_key), up to
     # MAX_SELECTED_REFERENCE_QUERY_ATTEMPTS.
     def __iter__(self) -> Iterator[str]:

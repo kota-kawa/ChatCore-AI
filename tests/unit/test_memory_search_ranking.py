@@ -161,7 +161,10 @@ def _custom_rows(*memories, distances=None):
 
 
 class WordMatchCoverageTestCase(unittest.TestCase):
-    """語の一致は、検索語の証拠のトークンの一定割合が記憶に現れたときだけ数える。A word match counts only at a minimum share of the query's evidence tokens."""
+    """語の一致は、証拠のトークンの一定割合が記憶に現れたときだけ数える。
+
+    A word match counts only at a minimum share of the query's evidence tokens.
+    """
 
     COMMIT = (1, "コミットメッセージ", "コミットメッセージは日本語と英語を併記する。")
     REPORT = (2, "週報のフォーマット", "週報は箇条書きで、毎週金曜に出す。")
