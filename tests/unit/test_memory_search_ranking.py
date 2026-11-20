@@ -79,6 +79,12 @@ class FusionTestCase(unittest.TestCase):
         rows = _rows({2: 0.3, 8: 0.1})
         self.assertEqual(_ids(rows, "ラーメン"), [2, 8])
 
+    def test_memories_found_by_meaning_alone_are_ordered_by_distance(self):
+        # 語の一致が無いので、順位は意味の近さだけで決まる（id の大きい順ではない）。
+        # With no word match, the order comes from semantic closeness alone (not from the larger id).
+        self.assertEqual(_ids(_rows({4: 0.3, 8: 0.5}), "pet"), [4, 8])
+        self.assertEqual(_ids(_rows({4: 0.5, 8: 0.3}), "pet"), [8, 4])
+
     def test_the_result_is_capped_at_the_limit(self):
         rows = [
             {**_rows()[0], "id": number, "title": "alpha", "content": f"alpha {'x' * number}"} for number in range(1, 13)
@@ -227,6 +233,18 @@ class DeterminismTestCase(unittest.TestCase):
         twins = [{**base, "id": 3}, {**base, "id": 8}, {**base, "id": 5}]
 
         self.assertEqual(_ids(twins, "犬の散歩"), [8, 5, 3])
+
+    def test_an_exact_tie_across_the_two_lists_is_broken_by_the_larger_id(self):
+        # 3 は語の一致が 1 位・意味が 2 位、8 は語の一致が 2 位・意味が 1 位。融合した点は完全に同じで、加点も同じ。
+        # 3 is first by word and second by meaning; 8 is second by word and first by meaning. Fused scores and boosts are exactly equal.
+        base = _rows()[3]
+        rows = [
+            {**base, "id": 3, "title": "犬", "content": "犬の散歩", "distance": 0.5},
+            {**base, "id": 8, "title": "犬", "content": "犬の散歩 と 長い補足の文章がここに続く", "distance": 0.2},
+        ]
+
+        self.assertEqual(_ids(rows, "犬の散歩"), [8, 3])
+        self.assertEqual(_ids(list(reversed(rows)), "犬の散歩"), [8, 3])
 
     def test_the_same_rows_in_any_order_give_the_same_ranking(self):
         distances = {2: 0.2, 4: 0.5, 8: 0.6}
