@@ -137,7 +137,9 @@ type UrlRoomRequest = {
   phase: "pending" | "awaiting_auth" | "opening" | "done";
   // 認証待ちにした時点で開いていたルーム。待つ間に利用者が別のルームへ移っていたら、URL のルームは開かない。
   // The room open when waiting for auth began; if the user moved to another room meanwhile, the URL's room is not opened.
-  roomIdWhenDeferred: string | null;
+  // undefined は、まだ待機に入っていない（記録していない）ことを表す。
+  // undefined means waiting has not started yet (nothing recorded).
+  roomIdWhenDeferred: string | null | undefined;
 };
 
 // ホーム画面の全状態を組み立てて返す。UI 状態、タスク、チャット、共有などの hook を呼び出し、それらをつなぐ処理と副作用をここに置く
@@ -1223,7 +1225,7 @@ export function useHomePageController() {
     // re-run of this effect (Strict Mode in development, or a callback changing) never starts opening it twice.
     if (!urlRoomRequestRef.current) {
       const roomId = consumeRoomIdFromUrl();
-      urlRoomRequestRef.current = { roomId, phase: roomId ? "pending" : "done", roomIdWhenDeferred: null };
+      urlRoomRequestRef.current = { roomId, phase: roomId ? "pending" : "done", roomIdWhenDeferred: undefined };
     }
     const request = urlRoomRequestRef.current;
     if (request.phase === "opening") return;
@@ -1244,7 +1246,11 @@ export function useHomePageController() {
     }
 
     restoreHomeViewFromStorage();
-    if (request.phase === "awaiting_auth") request.roomIdWhenDeferred = currentRoomIdRef.current;
+    // 待機に入った最初の 1 回だけ記録する。再実行のたびに上書きすると、その間に利用者が移った先が基準になってしまう。
+    // Record only the first time waiting begins; overwriting on every re-run would make wherever the user moved to the baseline.
+    if (request.phase === "awaiting_auth" && request.roomIdWhenDeferred === undefined) {
+      request.roomIdWhenDeferred = currentRoomIdRef.current;
+    }
   }, [currentRoomIdRef, openRoomFromUrl, restoreHomeViewFromStorage]);
 
   useEffect(() => {

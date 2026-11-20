@@ -15,6 +15,26 @@ import {
 import { resilientFetch } from "../scripts/core/resilient_fetch";
 import { showToast } from "../scripts/core/toast";
 
+// 履歴・保存まわりのコールバックの参照を、テストの指示で作り直せるようにする（復元の effect を再実行させるため）。
+// Lets a test recreate a callback's identity on demand, to make the restore effect re-run.
+const generationActionsIdentity = vi.hoisted(() => ({ version: 0 }));
+vi.mock("../hooks/chat_page/use_home_page_generation_actions", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../hooks/chat_page/use_home_page_generation_actions")>();
+  const React = await import("react");
+  return {
+    ...actual,
+    useHomePageGenerationActions: (...args: Parameters<typeof actual.useHomePageGenerationActions>) => {
+      const result = actual.useHomePageGenerationActions(...args);
+      const version = generationActionsIdentity.version;
+      const persistCurrentRoomId = React.useCallback(
+        (...persistArgs: Parameters<typeof result.persistCurrentRoomId>) => result.persistCurrentRoomId(...persistArgs),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [result.persistCurrentRoomId, version],
+      );
+      return { ...result, persistCurrentRoomId };
+    },
+  };
+});
 vi.mock("../scripts/core/toast", () => ({ showToast: vi.fn() }));
 vi.mock("../scripts/components/prompt_assist", () => ({ initPromptAssist: vi.fn(() => ({ destroy: vi.fn() })) }));
 vi.mock("../scripts/core/resilient_fetch", () => ({ resilientFetch: vi.fn() }));
@@ -296,6 +316,44 @@ describe("useHomePageController opening a room from the URL", () => {
     expect(result.current.currentRoomId).toBe("url-room");
     expect(historyRequests()).toEqual(["url-room"]);
     expect(readStoredActiveChatRoom()).toEqual({ roomId: "url-room", roomMode: "normal" });
+  });
+
+  // 認証待ちの間に利用者が別のルームへ移ったら、認証確定後に URL のルームで上書きしない。
+  // effect の再実行（temporary への切り替えでコールバックが変わる）を挟んでも、基準は待機に入った時点のルームのまま。
+  // If the user moves to another room while waiting for auth, the URL's room must not override it once auth settles,
+  // even when the effect re-runs in between (switching to a temporary room changes the callbacks).
+  it("does not open the URL room after auth settles when the user moved to another room while waiting", async () => {
+    historyByRoom["url-room"] = { messages: [{ sender: "user", message: "URL の会話" }] };
+    historyByRoom["picked-room"] = { messages: [{ sender: "user", message: "選んだ会話" }] };
+    window.history.replaceState(null, "", buildHomeRoomUrl("url-room"));
+    let resolveCurrentUser!: (response: Response) => void;
+    const currentUserPromise = new Promise<Response>((resolve) => {
+      resolveCurrentUser = resolve;
+    });
+    currentUserResponse = () => currentUserPromise;
+
+    const { result, rerender } = renderHook(() => useHomePageController());
+    expect(historyRequests()).toEqual([]);
+
+    act(() => {
+      result.current.switchChatRoom("picked-room", "normal", { forceReload: true });
+    });
+    await waitFor(() => expect(result.current.messages.map((message) => message.text)).toEqual(["選んだ会話"]));
+
+    // コールバックの参照を変えて再描画し、復元の effect を認証待ちのまま再実行させる。
+    // Change a callback's identity and re-render so the restore effect re-runs while still waiting for auth.
+    generationActionsIdentity.version += 1;
+    rerender();
+
+    await act(async () => {
+      resolveCurrentUser(jsonResponse({ logged_in: true, user: { id: 1 } }));
+    });
+    await waitFor(() => expect(result.current.authResolved).toBe(true));
+    await act(async () => {});
+
+    expect(result.current.currentRoomId).toBe("picked-room");
+    expect(result.current.messages.map((message) => message.text)).toEqual(["選んだ会話"]);
+    expect(historyRequests()).not.toContain("url-room");
   });
 
   it("drops the room when the auth check shows a guest and there was no auth cache", async () => {
