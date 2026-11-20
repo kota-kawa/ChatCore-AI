@@ -320,6 +320,36 @@ describe("MyContextPanel search", () => {
     expect(screen.queryByText("住所")).not.toBeInTheDocument();
   });
 
+  it("offers neither the previous page's cursor nor its extra pages in the first render after the key changed", async () => {
+    // 時間や effect の実行順に依らず、取得のキーが変わった最初の描画を見る。SWR は取得を layout effect で始めるので、2 回目の取得が始まる時点の DOM が、
+    // 新しいキーの最初の描画の結果になる（その後の effect による再描画はまだ起きていない）。
+    // Independent of timing: look at the first render with the new fetch key. SWR starts fetching in a layout effect, so the DOM at the moment the
+    // second fetch starts is the result of the first render with the new key (no effect-driven re-render has happened yet).
+    let atSecondFetch: { cursorButton: boolean; extraCard: boolean; firstPageCard: boolean } | undefined;
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(page([fact()], 2, "cursor-1"))
+      .mockResolvedValueOnce(page([fact({ id: 2, title: "追加分" })], 2, "cursor-2"))
+      .mockImplementationOnce(() => {
+        atSecondFetch = {
+          cursorButton: screen.queryByRole("button", { name: "さらに読み込む" }) !== null,
+          extraCard: screen.queryByText("追加分") !== null,
+          firstPageCard: screen.queryByText("住所") !== null,
+        };
+        return new Promise(() => {});
+      });
+    renderPanel({ load });
+    await screen.findByText("住所");
+    fireEvent.click(screen.getByRole("button", { name: "さらに読み込む" }));
+    await screen.findByText("追加分");
+    expect(screen.getByRole("button", { name: "さらに読み込む" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "記憶を検索" }), { target: { value: "東京" } });
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(3), { timeout: 4000 });
+
+    expect(atSecondFetch).toEqual({ cursorButton: false, extraCard: false, firstPageCard: true });
+  });
+
   it("shows the skeleton instead of the previous results when the status filter changes", async () => {
     // 状態を切り替えたときに、前の状態の記憶が別の一覧として見えてしまわないようにする。
     // Switching the status must not show the other status's memories as if they were this list.

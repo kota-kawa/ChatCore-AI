@@ -16,6 +16,7 @@ import {
   normalizeContextSearchQuery,
   revertContextFactReplacement as defaultRevert,
   updateContextFact as defaultUpdate,
+  type ContextFactListResult,
 } from "../../lib/memo/context_api";
 import {
   CONTEXT_FACT_IMPORTANCE_OPTIONS,
@@ -57,6 +58,16 @@ const MAX_SEARCH_LENGTH = 200;
 
 // 通信関数の束。テストでは props で差し替えられる。
 // Bundle of API functions, overridable through props in tests.
+// 取得結果。どの取得キーで取ったかを添える。
+// A fetched page, carrying the fetch key it was fetched with.
+type ContextFactsPage = ContextFactListResult & { requestKey: string };
+
+// 「さらに読み込む」で足した分。base は、それが続きになっている先頭ページ。
+// What "load more" added; base is the first page it continues.
+type LoadedMore = { base: ContextFactsPage; facts: ContextFact[]; nextCursor: string | null };
+
+const NO_FACTS: ContextFact[] = [];
+
 type ContextApi = {
   load: typeof defaultLoad;
   create: typeof defaultCreate;
@@ -124,12 +135,9 @@ export function MyContextPanel({
   const [submitting, setSubmitting] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [busyFactId, setBusyFactId] = useState<number | null>(null);
-  const [additionalFacts, setAdditionalFacts] = useState<ContextFact[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [isPortabilityOpen, setIsPortabilityOpen] = useState(false);
   const [noticeText, setNoticeText] = useState<string | null>(null);
-  const activeLoadMoreRef = useRef<string | null>(null);
+  const activeLoadMoreRef = useRef<ContextFactsPage | null>(null);
   const activeFilterKeyRef = useRef<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -162,6 +170,18 @@ export function MyContextPanel({
   // status or type changed, or the previous result was empty, the skeleton is shown so that no other content is displayed.
   const keepsPreviousResult = data !== undefined && data.facts.length > 0 && data.requestKey.startsWith(filterKeyPrefix);
 
+  // 「さらに読み込む」の状態は、どの先頭ページ（data）に続くものかを添えて持ち、描画のたびにいまのキーの先頭ページと一致するものだけを使う。
+  // キーが変わった直後や取り直した直後に、前の結果の続きのカーソル・追加分・読み込み中の印が一瞬でも残らない（effect で合わせる形にしない）。
+  // The "load more" state carries the first page (data) it continues, and each render uses only what matches the first page of the current key, so a
+  // cursor, extra facts or loading flag of a previous result never lingers for a render after the key changed or the list was refetched (no effect sync).
+  const currentPage = data !== undefined && data.requestKey === swrKey ? data : null;
+  const [loadedMore, setLoadedMore] = useState<LoadedMore | null>(null);
+  const [loadingMoreOf, setLoadingMoreOf] = useState<ContextFactsPage | null>(null);
+  const extra = loadedMore !== null && loadedMore.base === currentPage ? loadedMore : null;
+  const additionalFacts = extra?.facts ?? NO_FACTS;
+  const nextCursor = extra ? extra.nextCursor : (currentPage?.nextCursor ?? null);
+  const loadingMore = loadingMoreOf !== null && loadingMoreOf === currentPage;
+
   // 削除の確認モーダルと実行。成功したら通知を出して一覧を取り直す。
   // The delete confirmation modals and their execution; on success the notice is shown and the list is reloaded.
   const deletion = useContextFactDeletion({
@@ -169,19 +189,10 @@ export function MyContextPanel({
     deleteAll,
     onDeleted: async (message) => {
       setNoticeText(message);
-      setAdditionalFacts([]);
+      setLoadedMore(null);
       await mutate();
     },
   });
-
-  useEffect(() => {
-    setAdditionalFacts([]);
-    // 前の結果を残している間は、その続きのカーソルをいまの検索語で使わない。
-    // While a previous result is kept, its cursor is not used with the current query.
-    setNextCursor(data?.requestKey === swrKey ? data.nextCursor : null);
-    setLoadingMore(false);
-    activeLoadMoreRef.current = null;
-  }, [data, swrKey]);
 
   useEffect(() => {
     setErrorText(null);
@@ -311,12 +322,13 @@ export function MyContextPanel({
   // 次のページを読み込む。多重実行を避け、絞り込み条件が変わった後に届いた古い結果は反映しない。
   // Loads the next page, avoiding concurrent runs and ignoring a result that arrives after the filter changed.
   const handleLoadMore = async () => {
-    if (!nextCursor || loadingMore || activeLoadMoreRef.current) return;
+    if (!currentPage || !nextCursor || loadingMore || activeLoadMoreRef.current === currentPage) return;
 
     const requestedCursor = nextCursor;
     const requestedFilterKey = swrKey;
-    activeLoadMoreRef.current = requestedCursor;
-    setLoadingMore(true);
+    const requestedPage = currentPage;
+    activeLoadMoreRef.current = requestedPage;
+    setLoadingMoreOf(requestedPage);
     setErrorText(null);
     try {
       const page = await load({
@@ -334,15 +346,18 @@ export function MyContextPanel({
         knownIds.add(fact.id);
         newFacts.push(fact);
       }
-      setAdditionalFacts((currentFacts) => [...currentFacts, ...newFacts]);
-      setNextCursor(page.nextCursor === requestedCursor ? null : page.nextCursor);
+      setLoadedMore((current) => ({
+        base: requestedPage,
+        facts: [...(current?.base === requestedPage ? current.facts : NO_FACTS), ...newFacts],
+        nextCursor: page.nextCursor === requestedCursor ? null : page.nextCursor,
+      }));
     } catch (err) {
       if (activeFilterKeyRef.current === requestedFilterKey) {
         setErrorText(err instanceof Error ? err.message : t("memo.loadMoreContextFailed"));
       }
     } finally {
-      if (activeFilterKeyRef.current === requestedFilterKey) setLoadingMore(false);
-      if (activeLoadMoreRef.current === requestedCursor) activeLoadMoreRef.current = null;
+      setLoadingMoreOf((current) => (current === requestedPage ? null : current));
+      if (activeLoadMoreRef.current === requestedPage) activeLoadMoreRef.current = null;
     }
   };
 
@@ -385,7 +400,7 @@ export function MyContextPanel({
         isOpen={isPortabilityOpen}
         onClose={() => setIsPortabilityOpen(false)}
         onImported={async () => {
-          setAdditionalFacts([]);
+          setLoadedMore(null);
           await mutate();
         }}
         api={portabilityApi}
