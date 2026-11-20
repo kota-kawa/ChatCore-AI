@@ -840,6 +840,31 @@ class ContextFactCandidate(Base):
     )
 
 
+# 記憶の事実ごとの出典。1 行が 1 回の言及（本人の発話の逐語引用、発話、ルーム、時刻）で、言及回数や最終言及日はこの行から導く。
+# One mention of a memory fact (a verbatim quote of the owner's words, its message, room and time);
+# how often and how recently a fact was mentioned is derived from these rows.
+class ContextFactSource(Base):
+    __tablename__ = "context_fact_sources"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    fact_id: Mapped[int] = mapped_column(Integer, ForeignKey("context_facts.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    chat_room_id: Mapped[str] = mapped_column(String(255), ForeignKey("chat_rooms.id", ondelete="CASCADE"), nullable=False)
+    user_message_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("chat_history.id", ondelete="SET NULL"))
+    evidence: Mapped[str] = mapped_column(Text, nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+
+    __table_args__ = (
+        CheckConstraint("char_length(evidence) BETWEEN 1 AND 1000", name="ck_context_fact_sources_evidence"),
+        Index("idx_context_fact_sources_fact_observed", "fact_id", desc("observed_at"), desc("id")),
+        Index("idx_context_fact_sources_room", "chat_room_id"),
+        Index("idx_context_fact_sources_user", "user_id"),
+        Index("uq_context_fact_sources_fact_message", "fact_id", "user_message_id", unique=True,
+              postgresql_where=text("user_message_id IS NOT NULL")),
+        Index("idx_context_fact_sources_message", "user_message_id", postgresql_where=text("user_message_id IS NOT NULL")),
+    )
+
+
 # SKILL に添付されるファイル。本文は text_content かストレージ上の storage_key のどちらか一方に持つ。
 # A file attached to a SKILL; its content lives in exactly one of text_content or a storage_key in storage.
 class PromptResource(Base):
