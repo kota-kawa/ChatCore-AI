@@ -25,12 +25,14 @@ from services.context_vault_service import (
     create_fact,
     get_memory_use_settings,
     list_facts,
+    revert_replacement,
     update_fact,
     update_memory_use_settings,
 )
 from services.csrf import require_csrf
 from services.error_messages import (
     ERROR_CONTEXT_EXTRACTION_SETTINGS_PAYLOAD_INVALID,
+    ERROR_CONTEXT_FACT_REVISION_REQUIRED,
     ERROR_CONTEXT_FACT_SEARCH_QUERY_TOO_LONG,
     ERROR_CONTEXT_MEMORY_USE_SETTINGS_PAYLOAD_INVALID,
     ERROR_CONTEXT_VAULT_EXPORT_FORMAT_INVALID,
@@ -43,6 +45,7 @@ from services.repositories.memo_helpers import user_id_from_session
 from services.request_models import (
     ContextExtractionSettingsUpdateRequest,
     ContextFactCreateRequest,
+    ContextFactRevertReplacementRequest,
     ContextFactUpdateRequest,
     ContextMemoryUseSettingsUpdateRequest,
     ContextVaultImportConfirmRequest,
@@ -74,6 +77,18 @@ _VALID_FACT_TYPES = {"preference", "profile", "project", "decision", "reference"
 _VALID_STATUSES = {"active", "deprecated"}
 _VALID_PORTABILITY_FORMATS = {"json", "markdown"}
 _MAX_CONTEXT_VAULT_IMPORT_REQUEST_BYTES = 32 * 1024 * 1024
+
+
+# 日本語: 例外を記録して 500 を返す。SQLAlchemy の例外は SQL のパラメータ（記憶の文面など）を文面に含むので、例外そのものや
+# トレースバックは記録せず、種類と SQLSTATE だけを残す。応答にも例外の内容は出さない。
+# English: Log a failure and return 500. A SQLAlchemy exception carries the SQL parameters (memory wording and the like) in its text,
+# so the exception and its traceback are not logged, only its type and SQLSTATE; the response carries no exception detail either.
+def _internal_error_without_parameters(context: str, exc: Exception, message: str):
+    logger.error(
+        context,
+        extra={"error_type": type(exc).__name__, "sqlstate": getattr(getattr(exc, "orig", None), "sqlstate", None)},
+    )
+    return jsonify({"status": "fail", "error": message, "code": "internal_error"}, status_code=500)
 
 
 async def _require_bounded_import_json(request: Request):
@@ -438,3 +453,33 @@ async def api_update_context_fact(request: Request, fact_id: int):
         return jsonify_service_error(exc, status="fail")
     except Exception:
         return log_and_internal_server_error(logger, CONTEXT_FACT_UPDATE_ERROR, status="fail")
+
+
+@context_vault_bp.post("/{fact_id:int}/revert-replacement", name="context_vault.api_revert_replacement")
+async def api_revert_context_fact_replacement(request: Request, fact_id: int):
+    # 置き換えで入った新しい記憶を無効化し、置き換えられた古い記憶を有効へ戻す（revision は新しい記憶のもの）。
+    # Deprecate the memory that came in by replacement and restore the older one it replaced; revision is the new memory's.
+    """置き換えで入った新しい記憶を無効化し、置き換えられた古い記憶を有効へ戻す。"""
+    user_id = user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
+
+    data, error_response = await require_json_dict(request, status="fail")
+    if error_response is not None:
+        return error_response
+    payload, validation_error = validate_payload_model(
+        data,
+        ContextFactRevertReplacementRequest,
+        error_message=ERROR_CONTEXT_FACT_REVISION_REQUIRED,
+        status="fail",
+    )
+    if validation_error is not None:
+        return validation_error
+
+    try:
+        result = await revert_replacement(user_id, fact_id, expected_revision=payload.revision)
+        return jsonify({"status": "success", **result.model_dump()})
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc, status="fail")
+    except Exception as exc:
+        return _internal_error_without_parameters("Failed to revert a memory replacement.", exc, CONTEXT_FACT_UPDATE_ERROR)

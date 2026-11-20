@@ -170,6 +170,10 @@ ERROR_CONTEXT_FACT_LIMIT_REACHED = (
 )
 # 日本語: 置き換えの取り消し・完全削除・検索の入力に関するメッセージ（記憶の画面）。
 # English: Messages for undoing a replacement, permanent deletion and search input (the memory screen).
+ERROR_CONTEXT_FACT_REPLACEMENT_NOT_REVERTIBLE = (
+    "この置き換えはすでに変更されているため、元に戻せません。最新の内容を読み込み直してください。"
+)
+ERROR_CONTEXT_FACT_REVISION_REQUIRED = "revisionを1以上の整数で指定してください。"
 ERROR_CONTEXT_FACT_SEARCH_QUERY_TOO_LONG = "検索語が長すぎます。"
 ERROR_CONTEXT_VAULT_IMPORT_TOO_LARGE = "インポートファイルは10MiB以下にしてください。"
 ERROR_CONTEXT_VAULT_IMPORT_REQUEST_TOO_LARGE = (

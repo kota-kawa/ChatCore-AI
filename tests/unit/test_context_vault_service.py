@@ -18,6 +18,7 @@ from services.context_vault_service import (
     get_fact,
     get_memory_use_settings,
     list_facts,
+    revert_replacement,
     search_facts,
     update_fact,
     update_memory_use_settings,
@@ -332,6 +333,35 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(newer.superseded_by)
         self.assertEqual(older.superseded_by.id, 4)
         self.assertEqual((older.source_count, older.sources, older.replaces), (0, [], None))
+
+    async def test_revert_replacement_returns_both_facts_and_schedules_the_restored_embedding(self):
+        curation = MagicMock()
+        curation.revert_replacement = AsyncMock(
+            return_value=(
+                fact_row(id=4, status="deprecated", revision=3),
+                fact_row(id=3, status="active", revision=5, title="旧住所", content="大阪に住んでいる"),
+            )
+        )
+        with patch("services.context_vault_service.ContextFactCurationRepository", return_value=curation), patch(
+            "services.context_vault_service.session_scope", return_value=_TransactionSession()
+        ), patch("services.context_vault_service.schedule_embedding") as schedule:
+            result = await revert_replacement(7, 4, expected_revision=2)
+
+        curation.revert_replacement.assert_awaited_once_with(7, 4, 2)
+        self.assertEqual((result.fact.id, result.fact.status), (4, "deprecated"))
+        self.assertEqual((result.restored_fact.id, result.restored_fact.status), (3, "active"))
+        schedule.assert_called_once_with(3, "preference", "旧住所", "大阪に住んでいる", 5)
+
+    async def test_revert_replacement_does_not_schedule_when_the_caller_owns_the_session(self):
+        curation = MagicMock()
+        curation.revert_replacement = AsyncMock(
+            return_value=(fact_row(id=4, status="deprecated"), fact_row(id=3, status="active"))
+        )
+        with patch("services.context_vault_service.ContextFactCurationRepository", return_value=curation), patch(
+            "services.context_vault_service.schedule_embedding"
+        ) as schedule:
+            await revert_replacement(7, 4, expected_revision=2, session=object())
+        schedule.assert_not_called()
 
     async def test_digest_groups_and_search_falls_back_from_semantic(self):
         repo = _repo()

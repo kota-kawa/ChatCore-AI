@@ -177,6 +177,31 @@ class ContextVaultEndpointIntegrationTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_memory_screen_writes_reject_missing_csrf_and_login_through_router(self):
+        # 置き換えを元に戻すは、既存の書き込みと同じく CSRF とログインを要る。
+        # Undoing a replacement needs CSRF and login like the existing writes.
+        requests = (
+            ("POST", "/api/context-facts/4/revert-replacement", {"json": {"revision": 2}}),
+        )
+
+        async def scenario():
+            async with self._make_client() as client:
+                for method, path, kwargs in requests:
+                    anonymous = await client.request(method, path, **kwargs)
+                    self.assertEqual(anonymous.status_code, 403, path)
+                await self._set_session(client, {"user_id": 7})
+                for method, path, kwargs in requests:
+                    without_token = await client.request(method, path, **kwargs)
+                    self.assertEqual(without_token.status_code, 403, path)
+                    self.assertIn("CSRF", without_token.json()["detail"])
+                token = "context-vault-csrf-token"
+                await self._set_session(client, {"user_id": None, CSRF_SESSION_KEY: token})
+                for method, path, kwargs in requests:
+                    logged_out = await client.request(method, path, headers={CSRF_HEADER_NAME: token}, **kwargs)
+                    self.assertEqual(logged_out.status_code, 401, path)
+
+        asyncio.run(scenario())
+
 
 if __name__ == "__main__":
     unittest.main()

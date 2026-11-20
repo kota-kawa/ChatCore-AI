@@ -24,6 +24,7 @@ from services.api_errors import ApiServiceError
 from services.context_vault_embeddings import schedule_embedding
 from services.db import is_retryable_db_error, session_scope
 from services.embeddings import embeddings_available, generate_embedding
+from services.repositories.context_fact_curation_repository import ContextFactCurationRepository
 from services.repositories.context_fact_provenance_repository import ContextFactProvenanceRepository, FactProvenance
 from services.repositories.context_fact_repository import ContextFactRepository
 from services.request_models import (
@@ -40,6 +41,7 @@ from services.response_models import (
     ContextFactListItemResponse,
     ContextFactListResponse,
     ContextFactResponse,
+    ContextFactRevertReplacementResponse,
     ContextMemoryUseSettingsResponse,
 )
 
@@ -335,6 +337,33 @@ async def deprecate_fact(
         status="deprecated",
         session=session,
     )
+
+
+# 日本語: 置き換えで入った新しい記憶を無効化し(この内容は再び覚えない)、置き換えられた古い記憶を有効へ戻す(記憶の画面の「元に戻す」)。
+# 古い記憶は有効へ戻るので、update_fact の復元と同じく埋め込みを予約する。
+# English: Deprecate the memory that came in by replacement (that content is not remembered again) and make the older memory it
+# replaced active again (the memory screen's "undo"). The older memory is active again, so an embedding is scheduled as
+# update_fact's restore does.
+async def revert_replacement(
+    user_id: int,
+    fact_id: int,
+    *,
+    expected_revision: int,
+    session: AsyncSession | None = None,
+) -> ContextFactRevertReplacementResponse:
+    deprecated, restored = await _transaction(
+        session,
+        lambda db: ContextFactCurationRepository(db).revert_replacement(user_id, fact_id, expected_revision),
+    )
+    if session is None:
+        schedule_embedding(
+            int(restored["id"]),
+            str(restored["fact_type"]),
+            str(restored["title"]),
+            str(restored["content"]),
+            int(restored["revision"]),
+        )
+    return ContextFactRevertReplacementResponse(fact=_to_response(deprecated), restored_fact=_to_response(restored))
 
 
 async def build_digest(

@@ -350,6 +350,13 @@ class ContextFactListItemResponse(ContextFactResponse):
     replaces: ContextFactReplacesResponse | None = None
 
 
+# 日本語: 置き換えを元に戻した結果。fact は無効化した新しい記憶、restored_fact は有効へ戻した古い記憶。
+# English: The result of undoing a replacement: fact is the newer memory now deprecated, restored_fact the older one made active again.
+class ContextFactRevertReplacementResponse(ResponsePayloadModel):
+    fact: ContextFactResponse
+    restored_fact: ContextFactResponse
+
+
 # 日本語: コンテキスト事実の一覧と keyset ページングカーソルを返す応答モデル。
 # English: Response model returning a list of context facts with a keyset cursor.
 class ContextFactListResponse(ResponsePayloadModel):

@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: de478838d76b0a120572cb50837599c22374f72e1dddb4b50cb34b8868a4184d
+// Schema fingerprint: ee38799be64becf339f2373d641ec7ff5631154068dc9caaf106094bd510bb78
 
 import { z } from "zod";
 
@@ -115,6 +115,9 @@ export type ContextFactCreateRequest = z.infer<typeof ContextFactCreateRequestSc
 
 export const ContextFactUpdateRequestSchema = z.object({ "revision": z.number().int().gte(1), "title": z.union([z.string().min(1).max(100), z.null()]).default(null), "content": z.union([z.string().min(1).max(2000), z.null()]).default(null), "fact_type": z.union([z.enum(["preference","profile","project","decision","reference"]), z.null()]).default(null), "status": z.union([z.enum(["active","deprecated"]), z.null()]).default(null), "importance": z.union([z.number().int().gte(0).lte(100), z.null()]).default(null) });
 export type ContextFactUpdateRequest = z.infer<typeof ContextFactUpdateRequestSchema>;
+
+export const ContextFactRevertReplacementRequestSchema = z.object({ "revision": z.number().int().gte(1) });
+export type ContextFactRevertReplacementRequest = z.infer<typeof ContextFactRevertReplacementRequestSchema>;
 
 export const ContextVaultImportPreviewRequestSchema = z.object({ "format": z.enum(["json","markdown"]), "content": z.string().min(1).max(10485760) }).strict();
 export type ContextVaultImportPreviewRequest = z.infer<typeof ContextVaultImportPreviewRequestSchema>;
@@ -238,6 +241,9 @@ export type ContextFactListItemResponse = z.infer<typeof ContextFactListItemResp
 
 export const ContextFactListResponseSchema = z.object({ "facts": z.array(z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "status": z.enum(["active","deprecated"]), "revision": z.number().int(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("manual"), "importance": z.number().int().gte(0).lte(100).default(50), "confidence": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "last_confirmed_at": z.union([z.string(), z.null()]).default(null), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null), "deprecated_reason": z.union([z.enum(["user","superseded","merged","capacity"]), z.null()]).default(null), "source_count": z.number().int().gte(0).default(0), "last_mentioned_at": z.union([z.string(), z.null()]).default(null), "sources": z.array(z.object({ "chat_room_id": z.string(), "evidence": z.string(), "observed_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())).optional(), "superseded_by": z.union([z.object({ "id": z.number().int(), "title": z.string() }).catchall(z.any()), z.null()]).default(null), "replaces": z.union([z.object({ "id": z.number().int(), "title": z.string(), "content": z.string() }).catchall(z.any()), z.null()]).default(null) }).catchall(z.any())).optional(), "total_active": z.number().int().default(0), "next_cursor": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type ContextFactListResponse = z.infer<typeof ContextFactListResponseSchema>;
+
+export const ContextFactRevertReplacementResponseSchema = z.object({ "fact": z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "status": z.enum(["active","deprecated"]), "revision": z.number().int(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("manual"), "importance": z.number().int().gte(0).lte(100).default(50), "confidence": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "last_confirmed_at": z.union([z.string(), z.null()]).default(null), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any()), "restored_fact": z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "status": z.enum(["active","deprecated"]), "revision": z.number().int(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("manual"), "importance": z.number().int().gte(0).lte(100).default(50), "confidence": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "last_confirmed_at": z.union([z.string(), z.null()]).default(null), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any()) }).catchall(z.any());
+export type ContextFactRevertReplacementResponse = z.infer<typeof ContextFactRevertReplacementResponseSchema>;
 
 export const ContextVaultPortableFactSchema = z.object({ "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string().min(1).max(100), "content": z.string().min(1).max(2000), "status": z.enum(["active","deprecated"]), "importance": z.number().int().gte(0).lte(100), "confidence": z.union([z.number().gte(0).lte(1), z.null()]).default(null), "last_confirmed_at": z.union([z.string().max(64), z.null()]).default(null) }).strict();
 export type ContextVaultPortableFact = z.infer<typeof ContextVaultPortableFactSchema>;
