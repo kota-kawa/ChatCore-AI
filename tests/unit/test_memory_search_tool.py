@@ -408,6 +408,51 @@ class ProvisionWiringTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(build_memory_searcher(user_id=7, memory_enabled=False, search_memory=search))
 
 
+class TelemetryTestCase(unittest.TestCase):
+    def _run(self, search, *queries):
+        job, _ = _job(memory_search=DeduplicatedLookup(_bound(search), source_label="memory"))
+        state = job._build_turn_run_state()
+        job._configure_agent_tools(state)
+        for index, query in enumerate(queries, start=1):
+            job._dispatch_tool_calls(state, [_tool_call(query, call_id=f"call_{index}")], llm_step=index)
+        return state.telemetry.as_log_extra()
+
+    def test_a_turn_without_a_memory_call_records_zeros(self):
+        job, _ = _job(memory_search=lambda query: {})
+
+        payload = job._telemetry.as_log_extra()
+
+        self.assertEqual(
+            (payload["memory_search_call_count"], payload["memory_search_fact_count"], payload["memory_search_untrusted_memory_seen"]),
+            (0, 0, False),
+        )
+
+    def test_calls_and_returned_memories_are_counted_and_no_text_is_recorded(self):
+        payload = self._run(_ok(_fact(content=_SECRET), _fact(2, title=_SECRET)), "犬", "猫", "犬")
+
+        # 3 回目は同じ検索語なので、呼び出しには数えるが、返した記憶は増えない。
+        # The third call repeats a query: it counts as a call but returns no new memory.
+        self.assertEqual(payload["memory_search_call_count"], 3)
+        self.assertEqual(payload["memory_search_fact_count"], 4)
+        self.assertFalse(payload["memory_search_untrusted_memory_seen"])
+        self.assertNotIn(_SECRET, json.dumps(payload, ensure_ascii=False))
+
+    def test_unconfirmed_non_owner_memory_sets_the_flag_only_for_that_kind(self):
+        self.assertTrue(self._run(_ok(_fact(source_kind="mcp")), "犬")["memory_search_untrusted_memory_seen"])
+        self.assertFalse(self._run(_ok(_fact(source_kind="chat")), "犬")["memory_search_untrusted_memory_seen"])
+        self.assertFalse(
+            self._run(_ok(_fact(source_kind="mcp", last_confirmed_at=datetime(2026, 10, 1))), "犬")["memory_search_untrusted_memory_seen"]
+        )
+
+    def test_a_failed_search_counts_the_call_and_returns_nothing(self):
+        async def failing(user_id, query):
+            return build_memory_search_tool_payload(query, None)
+
+        payload = self._run(failing, "犬")
+
+        self.assertEqual((payload["memory_search_call_count"], payload["memory_search_fact_count"]), (1, 0))
+
+
 class StepSummaryTestCase(unittest.TestCase):
     def test_memory_and_memo_steps_are_told_apart_in_the_summary(self):
         from services.web_search_trace import build_answer_trace

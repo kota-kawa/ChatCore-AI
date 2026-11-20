@@ -148,6 +148,29 @@ class SummarizeGenerationTelemetryTestCase(unittest.TestCase):
         self.assertEqual(summary["occurrence_rates"]["user_memory_fact_count"], {"turns": 2, "rate": 0.5})
         self.assertEqual(summary["medians"]["user_memory_estimated_tokens"], 150.0)
 
+    def test_memory_search_turns_are_reported_as_rates(self):
+        """
+        記憶の検索ツールを呼んだターン、記憶を返したターン、本人由来でない未確認の記憶を含んだターンの割合が集計されることを検証します。
+        Verify the shares of turns that called memory search, returned memory, and held unconfirmed non-owner memory are reported.
+        """
+        lines = [
+            *_completed_turn("req-1", memory_search_call_count=2, memory_search_fact_count=3),
+            *_completed_turn(
+                "req-2",
+                memory_search_call_count=1,
+                memory_search_fact_count=1,
+                memory_search_untrusted_memory_seen=True,
+            ),
+            *_completed_turn("req-3", memory_search_call_count=1, memory_search_fact_count=0),
+            *_completed_turn("req-4"),
+        ]
+
+        rates = self._summary_of(lines)["occurrence_rates"]
+
+        self.assertEqual(rates["memory_search_call_count"], {"turns": 3, "rate": 0.75})
+        self.assertEqual(rates["memory_search_fact_count"], {"turns": 2, "rate": 0.5})
+        self.assertEqual(rates["memory_search_untrusted_memory_seen"], {"turns": 1, "rate": 0.25})
+
     def test_tool_call_rejections_are_counted_by_reason_and_tool(self):
         """
         ツール呼び出しの拒否が「理由:ツール名」で数えられ、引き直しが発生率に入ることを検証します。

@@ -117,6 +117,15 @@ class ChatGenerationTelemetry:
     # Never the text itself.
     user_memory_fact_count: int = 0
     user_memory_estimated_tokens: int = 0
+    # モデルが呼んだ記憶の検索ツール（memory_search）の利用。呼んだ回数、返した記憶の件数の合計、結果に本人由来でない未確認の記憶
+    # （MCP・取り込みで入り、本人が確認していないもの）が含まれたか（含まれると、そのターンは「常に承認」の自動実行を止める）。
+    # 本文も検索語も持たない。
+    # Use of the model-called memory_search tool: how often it was called, the total memories returned, and whether a result
+    # held unconfirmed memory that does not originate from the owner (saved through MCP or import; it stops auto-run under
+    # "always approve" for the turn). Never any text or query.
+    memory_search_call_count: int = 0
+    memory_search_fact_count: int = 0
+    memory_search_untrusted_memory_seen: bool = False
     # 利用者のデータを読み書きするツール（メモなど）の利用。読み取りの回数、書き込みの提案数、
     # 「常に承認」でその場で実行した数、引数の不備で差し戻した数。
     # Use of the tools that read and write the user's data (memos and so on): reads, write
@@ -274,6 +283,9 @@ class ChatGenerationTelemetry:
             "llm_turn_budget_exhausted": self.llm_turn_budget_exhausted,
             "user_memory_fact_count": self.user_memory_fact_count,
             "user_memory_estimated_tokens": self.user_memory_estimated_tokens,
+            "memory_search_call_count": self.memory_search_call_count,
+            "memory_search_fact_count": self.memory_search_fact_count,
+            "memory_search_untrusted_memory_seen": self.memory_search_untrusted_memory_seen,
             "workspace_read_calls": self.workspace_read_calls,
             "workspace_write_proposals": self.workspace_write_proposals,
             "workspace_auto_executions": self.workspace_auto_executions,

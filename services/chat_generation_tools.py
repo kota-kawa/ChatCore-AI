@@ -411,6 +411,7 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
                 continue
 
             if func_name == MEMORY_SEARCH_TOOL_NAME and self._memory_search is not None:
+                state.telemetry.memory_search_call_count += 1
                 memory_payload = self._run_lookup_tool_call(
                     tc,
                     tool_name=MEMORY_SEARCH_TOOL_NAME,
@@ -426,12 +427,14 @@ class ChatGenerationToolsMixin(ChatGenerationJobBase):
                     trace_steps=state.web_search_trace_steps,
                     format_result=format_memory_search_tool_result,
                 )
+                state.telemetry.memory_search_fact_count += int((memory_payload or {}).get("memory_count") or 0)
                 if _contains_non_owner_unconfirmed_memories(memory_payload, "memories"):
                     # MCP や取り込みで入り、本人が確認していない記憶は、外部入力と同様に扱う。「常に承認」でも、それを根拠にした書き込みが
                     # 黙って実行されないようにする。本人が確認した記憶とチャットから抽出した記憶は止めない（ADR 0025）。
                     # Memory that arrived through MCP or import and was never confirmed counts as external input, so "always approve"
                     # cannot turn it into a silent write. Memory the owner confirmed or extracted from chat does not stop it (ADR 0025).
                     state.untrusted_input_ingested = True
+                    state.telemetry.memory_search_untrusted_memory_seen = True
                 continue
 
             if (
