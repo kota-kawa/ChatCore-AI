@@ -22,20 +22,16 @@ from services.error_messages import (
 )
 from services.models import ContextFact, ContextFactCandidate
 from services.repositories.context_fact_repository import (
-    _CONTEXT_FACT_LOCK_NAMESPACE,
     _FACT_RETURNING_COLUMNS,
     ContextFactRepository,
+    lock_user_fact_writes,
+    superseded_fact_clause,
 )
 
 
 class ContextFactCurationRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
-
-    # 日本語: 事実の書き込みと同じ、トランザクション終了までのユーザー単位ロック。
-    # English: The same transaction-scoped per-user lock the fact writes take.
-    async def _lock_user_writes(self, user_id: int) -> None:
-        await self.session.execute(select(func.pg_advisory_xact_lock(_CONTEXT_FACT_LOCK_NAMESPACE, user_id)))
 
     # 日本語: 本人の事実の行を FOR UPDATE で読み、revision が expected_revision と一致することを確かめる。無ければ 404、不一致なら 409。
     # English: Reads the owner's fact row FOR UPDATE and checks its revision against expected_revision: 404 when it is missing,
@@ -68,7 +64,7 @@ class ContextFactCurationRepository:
     async def revert_replacement(
         self, user_id: int, fact_id: int, expected_revision: int
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        await self._lock_user_writes(user_id)
+        await lock_user_fact_writes(self.session, user_id)
         newer = await self._lock_fact_row(user_id, fact_id, expected_revision)
         if newer.status != "active":
             raise ApiServiceError(ERROR_CONTEXT_FACT_REPLACEMENT_NOT_REVERTIBLE, 409, status="fail")
@@ -76,8 +72,7 @@ class ContextFactCurationRepository:
             select(ContextFact.id)
             .where(
                 ContextFact.user_id == user_id,
-                ContextFact.status == "deprecated",
-                ContextFact.deprecated_reason == "superseded",
+                superseded_fact_clause(),
                 ContextFact.superseded_by_fact_id == fact_id,
             )
             .order_by(ContextFact.updated_at.desc(), ContextFact.id.desc())
@@ -104,8 +99,7 @@ class ContextFactCurationRepository:
             .where(
                 ContextFact.id == older_id,
                 ContextFact.user_id == user_id,
-                ContextFact.status == "deprecated",
-                ContextFact.deprecated_reason == "superseded",
+                superseded_fact_clause(),
                 ContextFact.superseded_by_fact_id == fact_id,
             )
             .values(
@@ -131,7 +125,7 @@ class ContextFactCurationRepository:
     # leave the wording in the candidate). Replacement links are left to the foreign key's SET NULL, so an older fact that
     # pointed at this one stays deprecated.
     async def delete_fact(self, user_id: int, fact_id: int, expected_revision: int) -> None:
-        await self._lock_user_writes(user_id)
+        await lock_user_fact_writes(self.session, user_id)
         await self._lock_fact_row(user_id, fact_id, expected_revision)
         await self.session.execute(
             delete(ContextFactCandidate).where(
@@ -146,7 +140,7 @@ class ContextFactCurationRepository:
     # ones included) together, and returns how many memories were deleted. The saving and use-in-answers settings are users columns
     # and stay as they are.
     async def delete_all_facts(self, user_id: int) -> int:
-        await self._lock_user_writes(user_id)
+        await lock_user_fact_writes(self.session, user_id)
         await self.session.execute(delete(ContextFactCandidate).where(ContextFactCandidate.user_id == user_id))
         result = await self.session.execute(delete(ContextFact).where(ContextFact.user_id == user_id))
         return int(result.rowcount or 0)

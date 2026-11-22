@@ -154,6 +154,40 @@ def _last_mentioned_at():
     ).label("last_mentioned_at")
 
 
+# 日本語: トランザクション終了までのユーザー単位ロック。件数上限の確認と挿入の間に別の書き込みが入らないようにする。記憶の画面の
+# 書き込み(context_fact_curation_repository)も同じロックを使う。
+# English: Transaction-scoped per-user lock, so no other write lands between the cap check and the insert. The memory screen's writes
+# (context_fact_curation_repository) take the same lock.
+async def lock_user_fact_writes(session: AsyncSession, user_id: int) -> None:
+    await session.execute(select(func.pg_advisory_xact_lock(_CONTEXT_FACT_LOCK_NAMESPACE, user_id)))
+
+
+# 日本語: 新しい事実に置き換えられて無効化された事実の条件(状態が無効化済みで、理由が superseded)。置き換え先の指定と本人の絞り込みは
+# 呼び出し側が足す。置き換えの履歴の表示と「元に戻す」が同じ条件を使う。is_superseded_fact は同じ条件を、読み込み済みの行で
+# 問い合わせを省くための判定にしたもので、2 つはこの場所で一緒に直す。
+# English: The condition for a fact deprecated because a newer fact replaced it (status deprecated, reason superseded); callers add the
+# replacement target and the owner scoping. The replacement history shown on the screen and "undo" share this condition.
+# is_superseded_fact is the same condition on an already loaded row, to skip a query; change the two together, here.
+def superseded_fact_clause():
+    return and_(ContextFact.status == "deprecated", ContextFact.deprecated_reason == "superseded")
+
+
+def is_superseded_fact(fact: dict[str, Any]) -> bool:
+    return fact["status"] == "deprecated" and fact["deprecated_reason"] == "superseded"
+
+
+# 日本語: 検索語を語に分け、すべての語を title か content に含む(大文字小文字を区別しない部分一致、LIKE のワイルドカードはエスケープ)ための
+# 条件を、語ごとに 1 つずつ返す(AND で重ねる)。記憶の一覧の検索と、キーワード検索(MCP の search_context)が同じ条件を使う。
+# English: One condition per term for "every term appears in the title or content" (case-insensitive substring match, LIKE wildcards
+# escaped), to be ANDed together. The memory list search and the keyword search (MCP search_context) share this condition.
+def _term_match_conditions(query: str | None) -> list[Any]:
+    conditions: list[Any] = []
+    for term in split_search_terms(query or ""):
+        pattern = build_like_pattern(term)
+        conditions.append(ContextFact.title.ilike(pattern, escape="\\") | ContextFact.content.ilike(pattern, escape="\\"))
+    return conditions
+
+
 class ContextFactRepository:
     # context_factsの永続化境界。複数操作を原子的にまとめるため、commitとrollbackは呼び出し元が担う。
     """Persistence boundary for ``context_facts``.
@@ -169,13 +203,6 @@ class ContextFactRepository:
     @staticmethod
     def _serialize_row(row: Any) -> dict[str, Any]:
         return _serialize_record(_record_from_row(row))
-
-    # 日本語: トランザクション終了までのユーザー単位ロック。件数上限の確認と挿入の間に別の書き込みが入らないようにする。
-    # English: Transaction-scoped per-user lock, so no other write lands between the cap check and the insert.
-    async def _lock_user_writes(self, user_id: int) -> None:
-        await self.session.execute(
-            select(func.pg_advisory_xact_lock(_CONTEXT_FACT_LOCK_NAMESPACE, user_id))
-        )
 
     # 日本語: 列は NOT NULL なので None はユーザー行が読めなかったときだけ。その場合は「使わない」として扱い、
     # 読めない相手の記憶を回答へ入れない。初期オンは列の server_default（と migration）だけで表す。
@@ -205,9 +232,9 @@ class ContextFactRepository:
         return int(count or 0)
 
     # 日本語: (updated_at, id) の降順によるキーセットページング。before_* より古い行だけを返す。query があれば、語に分けて
-    # すべての語を title か content に含む(大文字小文字を区別しない部分一致、LIKE のワイルドカードはエスケープ)行に絞る。
+    # すべての語を title か content に含む行に絞る(条件は _term_match_conditions)。
     # English: Keyset pagination ordered by (updated_at, id) descending; only rows older than before_* are returned. With query, rows
-    # are narrowed to those whose title or content contains every term (case-insensitive substring match, LIKE wildcards escaped).
+    # are narrowed to those whose title or content contains every term (see _term_match_conditions).
     async def list_facts(
         self,
         user_id: int,
@@ -222,11 +249,7 @@ class ContextFactRepository:
         conditions = [ContextFact.user_id == user_id, ContextFact.status == status]
         if fact_type is not None:
             conditions.append(ContextFact.fact_type == fact_type)
-        for term in split_search_terms(query or ""):
-            pattern = build_like_pattern(term)
-            conditions.append(
-                ContextFact.title.ilike(pattern, escape="\\") | ContextFact.content.ilike(pattern, escape="\\")
-            )
+        conditions.extend(_term_match_conditions(query))
         if before_updated_at is not None and before_id is not None:
             conditions.append(
                 tuple_(ContextFact.updated_at, ContextFact.id)
@@ -497,8 +520,8 @@ class ContextFactRepository:
         )
         return [dict(row) for row in result.mappings().all()]
 
-    # 日本語: 語ごとに title/content の部分一致(ILIKE)を AND で重ねる簡易検索。新しい更新順に返す。
-    # English: Simple search that ANDs a title/content ILIKE match per term, newest update first.
+    # 日本語: 語ごとの title/content の部分一致(_term_match_conditions)を AND で重ねる簡易検索。新しい更新順に返す。
+    # English: Simple search that ANDs the per-term title/content match (_term_match_conditions), newest update first.
     async def text_search(
         self,
         user_id: int,
@@ -508,12 +531,7 @@ class ContextFactRepository:
         status: str = "active",
     ) -> list[dict[str, Any]]:
         conditions = [ContextFact.user_id == user_id, ContextFact.status == status]
-        for term in split_search_terms(query):
-            pattern = build_like_pattern(term)
-            conditions.append(
-                ContextFact.title.ilike(pattern, escape="\\")
-                | ContextFact.content.ilike(pattern, escape="\\")
-            )
+        conditions.extend(_term_match_conditions(query))
         result = await self.session.execute(
             select(ContextFact)
             .where(*conditions)
@@ -538,7 +556,7 @@ class ContextFactRepository:
     ) -> dict[str, Any]:
         # 日本語: 同じ idempotency キーの再送は、内容が同じなら既存行を再生(_idempotent_replay)し、内容が違えば 409 にする。
         # English: A retry with the same idempotency key replays the existing row (_idempotent_replay) if the payload matches, else 409.
-        await self._lock_user_writes(user_id)
+        await lock_user_fact_writes(self.session, user_id)
         if idempotency_key_hash is not None:
             existing = await self.session.scalar(
                 select(ContextFact).where(
@@ -618,7 +636,7 @@ class ContextFactRepository:
 
         Append an import batch atomically and skip exact duplicates.
         """
-        await self._lock_user_writes(user_id)
+        await lock_user_fact_writes(self.session, user_id)
 
         def signature(fact: dict[str, Any]) -> tuple[str, str, str, str, int]:
             return (
@@ -711,7 +729,7 @@ class ContextFactRepository:
         # 日本語: deprecated などから active に戻すときだけ、有効件数の上限を確認する(既に active なら件数は増えない)。
         # English: The active-count cap is checked only when reactivating a non-active fact, since an already-active fact adds no count.
         if status == "active":
-            await self._lock_user_writes(user_id)
+            await lock_user_fact_writes(self.session, user_id)
             current_status = await self.session.scalar(
                 select(ContextFact.status).where(
                     ContextFact.id == fact_id,

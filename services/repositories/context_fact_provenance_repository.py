@@ -20,6 +20,7 @@ from sqlalchemy.orm import aliased
 
 from services.datetime_serialization import serialize_datetime_iso
 from services.models import ContextFact, ContextFactSource
+from services.repositories.context_fact_repository import is_superseded_fact, superseded_fact_clause
 
 # 日本語: 1 つの記憶について一覧に載せる出典の最大件数(新しい順)。
 # English: The most sources listed per memory (newest first).
@@ -51,9 +52,7 @@ class ContextFactProvenanceRepository:
         if not provenance:
             return provenance
         await self._load_sources(user_id, provenance)
-        replaced_ids = [
-            int(fact["id"]) for fact in facts if fact["status"] == "deprecated" and fact["deprecated_reason"] == "superseded"
-        ]
+        replaced_ids = [int(fact["id"]) for fact in facts if is_superseded_fact(fact)]
         if replaced_ids:
             await self._load_replacements(user_id, provenance, replaced_ids)
         active_ids = [int(fact["id"]) for fact in facts if fact["status"] == "active"]
@@ -110,8 +109,7 @@ class ContextFactProvenanceRepository:
             .where(
                 ContextFact.user_id == user_id,
                 ContextFact.id.in_(replaced_ids),
-                ContextFact.status == "deprecated",
-                ContextFact.deprecated_reason == "superseded",
+                superseded_fact_clause(),
                 replacement.user_id == user_id,
             )
         )
@@ -132,8 +130,7 @@ class ContextFactProvenanceRepository:
             )
             .where(
                 ContextFact.user_id == user_id,
-                ContextFact.status == "deprecated",
-                ContextFact.deprecated_reason == "superseded",
+                superseded_fact_clause(),
                 ContextFact.superseded_by_fact_id.in_(active_ids),
             )
             .order_by(ContextFact.superseded_by_fact_id, ContextFact.updated_at.desc(), ContextFact.id.desc())
