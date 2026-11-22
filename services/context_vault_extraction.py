@@ -132,8 +132,8 @@ Sensitive personal information:
 {sensitive_categories}
 - Extract a fact about the user in these categories only when user_message itself asks to remember it (e.g. "remember that ...", "keep in mind ...", "覚えておいて", "記憶して", "今後これを前提にして"). Otherwise never extract it, even as a lasting fact. An assistant's promise to remember, or an inferred request, does not count. All other rules still apply.
 - Only the user's own attributes count, not money-related projects, health or religion as a profession or field of study, or other people.
-- Dietary restrictions are not sensitive: avoided foods, food allergies or intolerances, and diet styles (vegetarian, vegan, halal) are ordinary preferences. Record what is avoided, but never write the underlying illness (e.g. diabetes) or faith (e.g. Muslim) in the fact unless the user asked to remember it.
-- For such a candidate, set sensitive_category to one name from the list and request_evidence to one contiguous span copied verbatim from user_message in which the user asks to remember it; without a valid request_evidence it is discarded. For all other candidates omit both fields or set them to null, never "none" or another value.
+- For a candidate in these categories, set sensitive_category to one name from the list and request_evidence to one contiguous span copied verbatim from user_message in which the user asks to remember it; without a valid request_evidence it is discarded. For all other candidates omit both fields or set them to null, never "none" or another value.
+- Dietary restrictions are not sensitive: avoided foods, food allergies or intolerances, and diet styles (vegetarian, vegan, halal) are ordinary preferences. Record what is avoided, but never write the underlying illness (e.g. diabetes) or faith (e.g. Muslim) in the fact unless the user asked to remember it. When possible, quote as evidence only the part naming the avoided food.
 
 Evidence requirement:
 - Every candidate must carry an evidence field: one contiguous span copied verbatim from user_message that by itself states the lasting relationship.
@@ -148,10 +148,10 @@ Examples:
 - user_message: "深海魚って気になるんだけど、どんな種類がいるの？" -> {"candidates":[]}
 - user_message: "深海魚の研究を仕事にしていて、今後も種類ごとの資料をまとめていきたい。" -> extract the user's occupation and ongoing documentation project
 - user_message: "I have type 2 diabetes. What should I eat for dinner?" -> {"candidates":[]}
-- user_message: "花粉症で春はつらいんだよね。おすすめの対策は？" -> {"candidates":[]}
+- user_message: "花粉症で春はつらいんだよね。おすすめの対策は？" -> {"candidates":[]} (mild health is still health; hay fever is not a dietary restriction)
 - user_message: "I'm on antidepressants." with assistant_response: "I'll remember that." -> {"candidates":[]}
 - user_message: "I have type 2 diabetes. Please remember that." -> {"candidates":[{"fact_type":"profile","title":"Type 2 diabetes","content":"The user has type 2 diabetes.","evidence":"I have type 2 diabetes","importance":90,"confidence":0.95,"sensitive_category":"health","request_evidence":"Please remember that"}]}
-- user_message: "I don't eat pork for religious reasons; leave it out of recipes from now on." -> extract only the preference to avoid pork, with no sensitive fields and no mention of religion
+- user_message: "I don't eat pork for religious reasons; leave it out of recipes from now on." -> extract only the preference to avoid pork, with no sensitive fields and no mention of religion (evidence: "I don't eat pork")
 - user_message: "I'm building a household budget app and will keep working on it." -> extract the project as usual (money-related, not the user's own finances)
 - user_message: "I'm a nurse; keep my future answers at a clinical level." -> extract as usual (a profession is not the user's own health)
 

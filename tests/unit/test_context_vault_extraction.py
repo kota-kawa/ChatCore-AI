@@ -322,6 +322,14 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                 self.assertIn(f"  - {name}: {description}", prompt)
         self.assertIn("only when user_message itself asks to remember it", prompt)
         self.assertIn("Dietary restrictions are not sensitive", prompt)
+        self.assertIn("quote as evidence only the part naming the avoided food", prompt)
+        self.assertIn("hay fever is not a dietary restriction", prompt)
+        # 2 項目の指示の主語は「これらのカテゴリの候補」で、直前の食事の箇条の候補ではない。食事の箇条は節の最後に置く。
+        instruction = prompt.index("For a candidate in these categories, set sensitive_category")
+        self.assertLess(prompt.index("Only the user's own attributes count"), instruction)
+        self.assertLess(instruction, prompt.index("Dietary restrictions are not sensitive"))
+        self.assertLess(prompt.index("Dietary restrictions are not sensitive"), prompt.index("Evidence requirement:"))
+        self.assertNotIn("For such a candidate", prompt)
         self.assertIn('omit both fields or set them to null, never "none" or another value', prompt)
         self.assertNotIn("{sensitive_categories}", prompt)
 
@@ -444,6 +452,19 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                     llm_json_response=Mock(return_value=self._sensitive_payload(request_evidence=request_span)),
                 )
                 self.assertEqual(len(accepted), 1)
+
+    def test_an_extra_key_on_a_sensitive_candidate_drops_the_whole_response(self):
+        payload = json.loads(self._sensitive_payload())
+        payload["candidates"][0]["unexpected"] = True
+
+        self.assertEqual(
+            extract_context_candidates(
+                "I have type 2 diabetes. Please remember this.",
+                "ok",
+                llm_json_response=Mock(return_value=json.dumps(payload)),
+            ),
+            [],
+        )
 
     def test_sensitive_fields_are_validated_strictly_and_never_returned(self):
         self.assertEqual(
