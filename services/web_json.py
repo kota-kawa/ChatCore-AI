@@ -12,6 +12,7 @@ and localization of system messages. Routers use them through services/web.py.
 from __future__ import annotations
 
 import logging
+import sys
 from typing import Any, TypeVar
 
 from fastapi import Request
@@ -140,10 +141,24 @@ def log_and_internal_server_error(
     status: str | None = None,
     message: str = DEFAULT_INTERNAL_ERROR_MESSAGE,
     error_key: str = "error",
+    log_exception_text: bool = True,
 ) -> JSONResponse:
-    # ログ出力と500レスポンス生成を共通化する
-    # Centralize exception logging and HTTP 500 response creation.
-    logger.exception(context)
+    # ログ出力と500レスポンス生成を共通化する。log_exception_text=False は、例外の文面に SQL のパラメータ(本人の記憶の文面など)が入り得る
+    # ときに使い、例外とトレースバックは記録せず、種類と SQLSTATE だけを残す(except の中で呼ぶ)。
+    # Centralize exception logging and HTTP 500 response creation. log_exception_text=False is for failures whose text can carry SQL
+    # parameters (such as the owner's memory wording): the exception and traceback are not logged, only its type and SQLSTATE
+    # (call it inside the except block).
+    if log_exception_text:
+        logger.exception(context)
+    else:
+        exc = sys.exc_info()[1]
+        logger.error(
+            context,
+            extra={
+                "error_type": type(exc).__name__,
+                "sqlstate": getattr(getattr(exc, "orig", None), "sqlstate", None),
+            },
+        )
     localized_message = (
         translate("common.internal_error")
         if message == DEFAULT_INTERNAL_ERROR_MESSAGE

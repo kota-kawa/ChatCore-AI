@@ -7,6 +7,7 @@ import type {
   ContextFactListItemResponse,
   ContextFactListResponse,
   ContextFactResponse,
+  ContextFactRevertReplacementResponse,
   ContextFactUpdateRequest,
   ContextMemoryUseSettingsResponse,
   ContextMemoryUseSettingsUpdateRequest,
@@ -22,6 +23,9 @@ export type ContextFact = ContextFactListItemResponse;
 // 作成・更新の応答。一覧の 1 件と違い、無効化の理由（deprecated_reason）は含まない。
 // The create/update response; unlike a list item, it carries no deprecation reason (deprecated_reason).
 export type ContextFactMutationResult = ContextFactResponse;
+// 置き換えを元に戻した結果。fact は無効化した新しい記憶、restored_fact は有効へ戻した古い記憶。
+// The result of undoing a replacement: fact is the newer memory now deprecated, restored_fact the older one made active again.
+export type ContextFactRevertResult = ContextFactRevertReplacementResponse;
 export type ContextFactType = ContextFact["fact_type"];
 export type ContextFactStatus = ContextFact["status"];
 

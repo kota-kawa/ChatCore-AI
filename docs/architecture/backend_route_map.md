@@ -25,7 +25,7 @@
 | `search_bp` | `/search/prompts` | `blueprints/prompt_share/prompt_search.py` | 公開プロンプト検索 |
 | `prompt_manage_api_bp` | `/prompt_manage/api/*` | `blueprints/prompt_share/prompt_manage_api.py` | 自分の投稿、保存・いいね一覧、編集・削除 |
 | `memo_bp` | `/memo/api/*`、`/memo` | `blueprints/memo/{memos,suggest,bulk,reorder,export,collections,share,pages}.py`, `export_formats.py` | メモ、コレクション、共有、並び替え、エクスポート |
-| `context_vault_bp` | `/api/context-facts/*` | `blueprints/context_vault/routes.py`, `services/context_vault_*` | コンテキスト事実（無効化の理由を含む）、import/export、自動抽出の設定（`extraction-settings`）、記憶を回答に使う設定（`memory-use-settings`） |
+| `context_vault_bp` | `/api/context-facts/*` | `blueprints/context_vault/routes.py`, `services/context_vault_*` | コンテキスト事実（一覧は種類・状態・検索語 `q` で絞り、無効化の理由・出典・置き換えの関係を含む。`POST /{id}/revert-replacement` が置き換えの取り消し、`DELETE /{id}?revision=` が 1 件の完全な削除、`DELETE ?confirm=delete-all` がすべての削除）、import/export、自動抽出の設定（`extraction-settings`）、記憶を回答に使う設定（`memory-use-settings`） |
 | `admin_bp` | `/admin/*` | `blueprints/admin/views.py`, `demo_codes.py` | 管理ログイン、ダッシュボード、管理用 DB 操作、デモ用アクセスコードの発行・一覧・停止 |
 | `mcp_oauth_bp` | `/api/mcp/oauth/*` | `blueprints/mcp_oauth.py`, `services/mcp_oauth.py` | MCP 同意、クライアント、接続の管理 |
 

@@ -7,11 +7,14 @@ import test from "node:test";
 import {
   confirmContextVaultImport,
   createContextFact,
+  deleteAllContextFacts,
+  deleteContextFact,
   exportContextVault,
   loadContextExtractionSettings,
   loadContextFacts,
   loadContextMemoryUseSettings,
   previewContextVaultImport,
+  revertContextFactReplacement,
   updateContextFact,
   updateContextExtractionSettings,
   updateContextMemoryUseSettings,
@@ -47,6 +50,163 @@ test("loadContextFacts sends filters and an opaque cursor", async () => {
     assert.equal(parsed.searchParams.get("cursor"), "cursor/value+safe");
     assert.equal(result.totalActive, 12);
     assert.equal(result.nextCursor, "next/value+safe");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("loadContextFacts sends the trimmed search query as q and omits an empty one", async () => {
+  const requestedUrls: string[] = [];
+  globalThis.fetch = (async (input) => {
+    requestedUrls.push(String(input));
+    return jsonResponse({ facts: [], total_active: 0, next_cursor: null });
+  }) as typeof fetch;
+
+  try {
+    await loadContextFacts({ status: "active", query: "  東京 100%_  " });
+    await loadContextFacts({ status: "active", query: "   " });
+    await loadContextFacts({ status: "active", query: null });
+    await loadContextFacts({ status: "deprecated", factType: "profile", cursor: "c1", query: "住所" });
+    await loadContextFacts({ status: "active", query: " 、。 ,; " });
+
+    const [searched, blank, none, combined, punctuationOnly] = requestedUrls.map((url) => new URL(url, "https://example.com").searchParams);
+    // 記号は URL エンコードされて 1 つの値として届く（クエリの区切りや LIKE の記号をここで加工しない）。
+    // Symbols are URL-encoded into one value (the client does not touch query separators or LIKE symbols).
+    assert.equal(searched?.get("q"), "東京 100%_");
+    assert.equal(blank?.has("q"), false);
+    assert.equal(none?.has("q"), false);
+    // 語が 1 つも残らない検索語はサーバーが「検索なし」として扱うので、送らない。
+    // A query that leaves no term is "no search" to the server, so it is not sent.
+    assert.equal(punctuationOnly?.has("q"), false);
+    assert.deepEqual(
+      [combined?.get("q"), combined?.get("status"), combined?.get("fact_type"), combined?.get("cursor")],
+      ["住所", "deprecated", "profile", "c1"],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("loadContextFacts fills source and replacement defaults for a response from an older server", async () => {
+  globalThis.fetch = (async () =>
+    jsonResponse({
+      facts: [
+        { id: 1, fact_type: "profile", title: "旧応答", content: "x", status: "active", revision: 1, source_kind: "chat", importance: 50 },
+        {
+          id: 2,
+          fact_type: "profile",
+          title: "新応答",
+          content: "y",
+          status: "active",
+          revision: 1,
+          source_kind: "chat",
+          importance: 50,
+          source_count: 4,
+          last_mentioned_at: "2026-11-01T00:00:00+00:00",
+          sources: [{ chat_room_id: "room-1", evidence: "引用", observed_at: "2026-11-01T00:00:00+00:00" }],
+          replaces: { id: 9, title: "旧", content: "古い内容" },
+        },
+      ],
+      total_active: 2,
+      next_cursor: null,
+    })) as typeof fetch;
+
+  try {
+    const { facts } = await loadContextFacts({ status: "active" });
+    assert.deepEqual(
+      [facts[0]?.source_count, facts[0]?.last_mentioned_at, facts[0]?.sources, facts[0]?.superseded_by, facts[0]?.replaces],
+      [0, null, [], null, null],
+    );
+    assert.equal(facts[1]?.source_count, 4);
+    assert.equal(facts[1]?.sources?.[0]?.chat_room_id, "room-1");
+    assert.equal(facts[1]?.replaces?.content, "古い内容");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("revertContextFactReplacement POSTs the new memory's revision and returns both facts", async () => {
+  const requests: { url: string; init?: RequestInit }[] = [];
+  const fact = { id: 4, status: "deprecated", revision: 3 };
+  const restored = { id: 3, status: "active", revision: 6 };
+  globalThis.fetch = (async (input, init) => {
+    requests.push({ url: String(input), init });
+    return jsonResponse({ status: "success", fact, restored_fact: restored });
+  }) as typeof fetch;
+
+  try {
+    const result = await revertContextFactReplacement(4, 2);
+    assert.equal(requests[0]?.url, "/api/context-facts/4/revert-replacement");
+    assert.equal(requests[0]?.init?.method, "POST");
+    assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), { revision: 2 });
+    assert.deepEqual([result.fact.id, result.restored_fact.id], [4, 3]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("revertContextFactReplacement exposes a conflict and treats a body without both facts as a failure", async () => {
+  globalThis.fetch = (async () => jsonResponse({ error: "この置き換えは元に戻せません。" }, 409)) as typeof fetch;
+  try {
+    // 画面が 409 を見分けて一覧を取り直せるよう、エラーは HTTP ステータスを持つ。
+    // The error carries its HTTP status so the screen can tell a 409 and reload the list.
+    await assert.rejects(
+      () => revertContextFactReplacement(4, 2),
+      (error: Error & { status?: number }) => /この置き換えは元に戻せません。/.test(error.message) && error.status === 409,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  globalThis.fetch = (async () => jsonResponse({ status: "success" })) as typeof fetch;
+  try {
+    await assert.rejects(() => revertContextFactReplacement(4, 2));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("deleteContextFact sends DELETE with the revision in the query", async () => {
+  const requests: { url: string; init?: RequestInit }[] = [];
+  globalThis.fetch = (async (input, init) => {
+    requests.push({ url: String(input), init });
+    return jsonResponse({ status: "success" });
+  }) as typeof fetch;
+
+  try {
+    await deleteContextFact(21, 7);
+    assert.equal(requests[0]?.url, "/api/context-facts/21?revision=7");
+    assert.equal(requests[0]?.init?.method, "DELETE");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  globalThis.fetch = (async () => jsonResponse({ error: "他の場所で先に更新されました。" }, 409)) as typeof fetch;
+  try {
+    await assert.rejects(() => deleteContextFact(21, 7), /他の場所で先に更新されました。/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("deleteAllContextFacts sends the confirmation value and returns the deleted count", async () => {
+  const requests: { url: string; init?: RequestInit }[] = [];
+  globalThis.fetch = (async (input, init) => {
+    requests.push({ url: String(input), init });
+    return jsonResponse({ status: "success", deleted_count: 12 });
+  }) as typeof fetch;
+
+  try {
+    assert.equal(await deleteAllContextFacts(), 12);
+    assert.equal(requests[0]?.url, "/api/context-facts?confirm=delete-all");
+    assert.equal(requests[0]?.init?.method, "DELETE");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  globalThis.fetch = (async () => jsonResponse({ status: "success" })) as typeof fetch;
+  try {
+    assert.equal(await deleteAllContextFacts(), 0);
   } finally {
     globalThis.fetch = originalFetch;
   }

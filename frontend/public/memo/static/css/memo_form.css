@@ -4498,6 +4498,74 @@ body.memo-page {
   min-width: 12rem;
 }
 
+/* 記憶の検索欄。語の一致で絞る。クリアボタンは 44px 四方のタップ領域を持つ。
+  Memory search box; it narrows by term matching. The clear button keeps a 44px tap area */
+:where(body.memo-page, .memo-page-shell) .memo-context__search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-width: 28rem;
+  min-height: 46px;
+  padding: 0 0 0 0.9rem;
+  border: 1px solid var(--memo-border);
+  border-radius: var(--radius-full);
+  background: var(--memo-card);
+  color: var(--memo-text);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__search:focus-within {
+  border-color: var(--memo-amber);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__search > i {
+  flex: 0 0 auto;
+  color: var(--memo-text-muted);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  box-shadow: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__search input::placeholder {
+  color: var(--memo-text-muted);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--memo-text-muted);
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__search-clear:hover {
+  color: var(--memo-text);
+}
+
 :where(body.memo-page, .memo-page-shell) .memo-context__status-toggle {
   display: inline-flex;
   border: 1px solid var(--memo-border);
@@ -4619,6 +4687,10 @@ body.memo-page {
     justify-content: center;
   }
 
+  :where(body.memo-page, .memo-page-shell) .memo-context__search {
+    flex-basis: 100%;
+    max-width: none;
+  }
 }
 
 /* 事実のカード。
@@ -4643,8 +4715,14 @@ body.memo-page {
   box-shadow: var(--memo-shadow);
 }
 
+/* 無効化済みのカードは、不透明度ではなく破線の枠と副次色の文字で区別する（操作や出典の文字まで薄くしない）。
+  A deactivated card is told apart by a dashed border and secondary-colored text, not by opacity (which would dim its actions and sources too) */
 :where(body.memo-page, .memo-page-shell) .memo-context-card.is-deprecated {
-  opacity: 0.62;
+  border-style: dashed;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card.is-deprecated :is(.memo-context-card__title, .memo-context-card__body) {
+  color: var(--memo-text-muted);
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-context-card__head {
@@ -4687,6 +4765,7 @@ body.memo-page {
 
 :where(body.memo-page, .memo-page-shell) .memo-context-card__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: auto;
   padding-top: 0.3rem;
@@ -4716,6 +4795,161 @@ body.memo-page {
   cursor: default;
 }
 
+/* 完全に削除は、元に戻せる操作から離して右端に置く（失敗の色は使わない）。
+  Delete for good sits apart from the reversible actions, at the end (no failure color) */
+:where(body.memo-page, .memo-page-shell) .memo-context-card__action--delete {
+  margin-left: auto;
+}
+
+/* 置き換えの履歴。無効化済みのカードには置き換えた新しい記憶、有効なカードには「以前の記憶」と元に戻す操作を出す。
+  Replacement history: a deactivated card names the newer memory that replaced it; an active one shows the previous memory and the undo action */
+:where(body.memo-page, .memo-page-shell) .memo-context-card__note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 0;
+  color: var(--memo-text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__note i {
+  color: var(--memo-amber-strong);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__note-hint {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--memo-text-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__replaced {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 8px;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__replaced-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  margin: 0;
+  color: var(--memo-text);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__replaced-label {
+  color: var(--memo-text-muted);
+  font-weight: 700;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__replaced .memo-context-card__action {
+  flex: 0 0 auto;
+}
+
+/* 出典。開くと本人の発話の引用（素のテキスト）と、その会話を開くリンクが出る。
+  Sources: opened, they show quotes of the owner's words (plain text) and a link that opens that conversation */
+:where(body.memo-page, .memo-page-shell) .memo-context-card__sources-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--memo-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__sources-toggle i {
+  color: var(--memo-amber-strong);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__sources-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-source {
+  padding: 0.1rem 0 0.1rem 0.75rem;
+  border-left: 3px solid var(--memo-amber);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-source__quote {
+  margin: 0;
+  color: var(--memo-text);
+  font-size: 0.86rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-source__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.85rem;
+  margin-top: 0.2rem;
+  color: var(--memo-text-muted);
+  font-size: 0.78rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-source__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  color: var(--memo-text);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--memo-amber-strong);
+  text-underline-offset: 0.2em;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__sources-more {
+  margin: 0;
+  color: var(--memo-text-muted);
+  font-size: 0.76rem;
+}
+
+/* タッチ端末では、カード内の操作を 44px 以上のタップ領域にする。
+  On touch devices, the card's controls get a tap area of at least 44px */
+@media (pointer: coarse) {
+  :where(body.memo-page, .memo-page-shell) .memo-context-card__action,
+  :where(body.memo-page, .memo-page-shell) .memo-context-card__sources-toggle,
+  :where(body.memo-page, .memo-page-shell) .memo-context-source__link {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 640px) {
+  :where(body.memo-page, .memo-page-shell) .memo-context-card__replaced {
+    flex-direction: column;
+  }
+}
+
 :where(body.memo-page, .memo-page-shell) .memo-context__pagination {
   display: flex;
   justify-content: center;
@@ -4740,6 +4974,83 @@ body.memo-page {
 :where(body.memo-page, .memo-page-shell) .memo-context__load-more:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* 操作の結果の通知（元に戻した・削除した）。
+  Result notice for an action (undone, deleted) */
+:where(body.memo-page, .memo-page-shell) .memo-context__notice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 8px;
+  background: var(--memo-card);
+  color: var(--memo-text);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__notice i {
+  color: var(--success-color);
+}
+
+/* すべての記憶を削除。画面の下に分けて置く。取り消せない操作だが失敗ではないので、失敗の色は使わず罫線と余白で区切る。
+  Delete all memories, set apart at the bottom. It cannot be undone but is not a failure, so no failure color: a rule and spacing set it apart */
+:where(body.memo-page, .memo-page-shell) .memo-context__delete-all {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--memo-border);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__delete-all-copy {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__delete-all-title {
+  margin: 0;
+  color: var(--memo-text);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__delete-all-copy p {
+  margin: 0.25rem 0 0;
+  color: var(--memo-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__delete-all-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  border: 1px solid var(--memo-border);
+  border-radius: var(--radius-full);
+  padding: 0.5rem 1rem;
+  color: var(--memo-text);
+  background: var(--memo-card);
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__delete-all-btn:hover {
+  border-color: var(--memo-amber);
+}
+
+@media (max-width: 640px) {
+  :where(body.memo-page, .memo-page-shell) .memo-context__delete-all-btn {
+    width: 100%;
+  }
 }
 
 /* 空の一覧とゲストの表示。
@@ -4864,6 +5175,59 @@ body.memo-page {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+/* 削除の確認モーダル。本文を縦に積み、確認のチェックは枠で囲む。削除ボタンは危険色ではなくモーダルのアクセントで示す。
+   Delete confirmation modals: the body stacks vertically and the confirmation box is outlined. The delete button uses the modal accent, not a danger color */
+.memo-context-confirm .cc-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.memo-context-confirm .memo-context-confirm__target {
+  margin: 0;
+  color: var(--modal-text);
+  font-size: 0.95rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.memo-context-confirm .memo-context-confirm__text {
+  margin: 0;
+  color: var(--modal-text-muted);
+  font-size: 0.88rem;
+  line-height: 1.65;
+}
+
+.memo-context-confirm .memo-context-confirm__acknowledge {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--modal-border);
+  border-radius: 10px;
+  color: var(--modal-text);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.memo-context-confirm .memo-context-confirm__acknowledge input {
+  flex: 0 0 auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+  accent-color: var(--modal-accent);
+}
+
+/* タッチ端末では、取り消せない操作の確認ボタンを 44px 以上にして押し間違いと押しにくさを避ける。
+   On touch devices the confirmation buttons for an irreversible action are at least 44px, so they are neither mistapped nor hard to hit. */
+@media (pointer: coarse) {
+  .memo-context-confirm .cc-modal__footer .cc-modal__btn {
+    min-height: 44px;
+  }
 }
 
 /* ヘッダー直下に置くタブ行 / Tab row placed right under the header */

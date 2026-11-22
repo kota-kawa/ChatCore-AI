@@ -795,6 +795,12 @@ class ContextFactUpdateRequest(RequestPayloadModel):
         return self
 
 
+# 日本語: 置き換えで入った新しい記憶を無効化し、置き換えられた古い記憶を有効へ戻すリクエスト。revision は新しい記憶のもの。
+# English: Request to deprecate the memory that came in by replacement and restore the older one it replaced; revision is the new memory's.
+class ContextFactRevertReplacementRequest(RequestPayloadModel):
+    revision: int = Field(ge=1)
+
+
 # 日本語: JSON/Markdown形式のコンテキスト金庫インポートを検証するリクエスト。
 # English: Request for validating a JSON/Markdown context-vault import.
 class ContextVaultImportPreviewRequest(RequestPayloadModel):

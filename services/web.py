@@ -126,6 +126,7 @@ def log_and_internal_server_error(
     status: str | None = None,
     message: str = DEFAULT_INTERNAL_ERROR_MESSAGE,
     error_key: str = "error",
+    log_exception_text: bool = True,
 ) -> JSONResponse:
     # 例外をログ出力し、500エラーレスポンスを返す
     # Log exception and return a 500 internal server error response
@@ -135,6 +136,7 @@ def log_and_internal_server_error(
         status=status,
         message=message,
         error_key=error_key,
+        log_exception_text=log_exception_text,
     )
 
 

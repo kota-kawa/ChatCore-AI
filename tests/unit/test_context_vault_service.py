@@ -15,13 +15,17 @@ from services.api_errors import ApiServiceError
 from services.context_vault_service import (
     build_digest,
     create_fact,
+    delete_all_facts,
+    delete_fact,
     get_fact,
     get_memory_use_settings,
     list_facts,
+    revert_replacement,
     search_facts,
     update_fact,
     update_memory_use_settings,
 )
+from services.repositories.context_fact_provenance_repository import FactProvenance
 from services.request_models import (
     ContextFactCreateRequest,
     ContextFactUpdateRequest,
@@ -80,6 +84,19 @@ def _repo():
         "text_search",
     ):
         setattr(repo, name, AsyncMock())
+    return repo
+
+
+# 日本語: 一覧が出典・置き換えの関係を読む ContextFactProvenanceRepository の代役。load は行の id ごとの FactProvenance を返します。
+# English: Build a stand-in for ContextFactProvenanceRepository (the list reads sources and replacement relations from it);
+# load returns a FactProvenance per row id.
+def _provenance_repo(by_id=None):
+    repo = MagicMock()
+
+    async def load(_user_id, rows):
+        return {int(row["id"]): (by_id or {}).get(int(row["id"]), FactProvenance()) for row in rows}
+
+    repo.load = AsyncMock(side_effect=load)
     return repo
 
 
@@ -209,21 +226,27 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
             repo = _repo()
             repo.list_facts.return_value = [fact_row(**row)]
             repo.count_active.return_value = 0
-            with self.subTest(row=row), patch("services.context_vault_service._repository", return_value=repo):
+            with self.subTest(row=row), patch("services.context_vault_service._repository", return_value=repo), patch(
+                "services.context_vault_service.ContextFactProvenanceRepository", return_value=_provenance_repo()
+            ):
                 result = await list_facts(7, status="deprecated", session=object())
             self.assertEqual(result.facts[0].deprecated_reason, expected)
 
     async def test_only_the_web_list_carries_deprecated_reason(self):
-        # 理由は記憶の画面の一覧だけが返す。単体取得・更新・MCP の応答・ダイジェスト・検索は、理由の項目を持たない main と同じ形で、
-        # AI に渡る内容と、ダイジェストの文字予算を測る JSON の長さを変えない。
-        # Only the memory screen's list returns the reason. Single reads, updates, MCP responses, the digest and search keep
-        # the shape without the field, so what reaches the AI and the JSON length the digest budget measures are unchanged.
+        # 理由・出典・置き換えの関係は記憶の画面の一覧だけが返す。単体取得・更新・MCP の応答・ダイジェスト・検索は、これらの項目を持たない
+        # main と同じ形で、AI に渡る内容と、ダイジェストの文字予算を測る JSON の長さを変えない。
+        # Only the memory screen's list returns the reason, sources and replacement relations. Single reads, updates, MCP responses,
+        # the digest and search keep the shape without them, so what reaches the AI and the JSON length the digest budget measures
+        # are unchanged.
         expected_keys = {
             "id", "fact_type", "title", "content", "status", "revision", "source_kind", "importance",
             "confidence", "last_confirmed_at", "created_at", "updated_at",
         }  # fmt: skip
         self.assertEqual(set(ContextFactResponse.model_fields), expected_keys)
-        self.assertEqual(set(ContextFactListItemResponse.model_fields), expected_keys | {"deprecated_reason"})
+        self.assertEqual(
+            set(ContextFactListItemResponse.model_fields),
+            expected_keys | {"deprecated_reason", "source_count", "last_mentioned_at", "sources", "superseded_by", "replaces"},
+        )
 
         repo = _repo()
         row = fact_row(status="deprecated", deprecated_reason="capacity")
@@ -244,7 +267,8 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(set(updated.model_dump()), expected_keys)
         self.assertEqual(set(digest.groups[0].facts[0].model_dump()), expected_keys)
         self.assertEqual(set(search.facts[0].model_dump()), expected_keys)
-        self.assertNotIn("deprecated_reason", digest.model_dump_json())
+        for name in ("deprecated_reason", "source_count", "sources", "superseded_by", "replaces", "last_mentioned_at"):
+            self.assertNotIn(name, digest.model_dump_json())
 
     async def test_update_is_unconfirmed_unless_the_owner_edits(self):
         for owner, expected in ((None, False), (True, True)):
@@ -264,13 +288,92 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
         repo = _repo()
         repo.list_facts.return_value = [fact_row(id=4), fact_row(id=3)]
         repo.count_active.return_value = 2
-        with patch("services.context_vault_service._repository", return_value=repo):
+        provenance = _provenance_repo()
+        with patch("services.context_vault_service._repository", return_value=repo), patch(
+            "services.context_vault_service.ContextFactProvenanceRepository", return_value=provenance
+        ):
             result = await list_facts(7, limit=1, session=object())
         self.assertEqual(len(result.facts), 1)
+        # 出典・置き換えの関係は、返す行だけを 1 回でまとめて読む（余分に取った 1 行は含めない）。
+        # Sources and replacement relations are read once for the returned rows only (not the extra row fetched to detect a next page).
+        provenance.load.assert_awaited_once()
+        self.assertEqual([row["id"] for row in provenance.load.await_args.args[1]], [4])
         self.assertEqual(result.total_active, 2)
         self.assertIsNotNone(result.next_cursor)
         repo.list_facts.assert_awaited_once()
         repo.count_active.assert_awaited_once_with(7)
+
+    async def test_list_passes_the_search_query_and_attaches_provenance_per_fact(self):
+        repo = _repo()
+        repo.list_facts.return_value = [
+            fact_row(id=4, status="active"),
+            fact_row(id=3, status="deprecated", deprecated_reason="superseded"),
+        ]
+        repo.count_active.return_value = 1
+        provenance = _provenance_repo(
+            {
+                4: FactProvenance(
+                    source_count=5,
+                    last_mentioned_at="2026-11-01T00:00:00+00:00",
+                    sources=[{"chat_room_id": "room-1", "evidence": "東京に住んでいます", "observed_at": "2026-11-01T00:00:00+00:00"}],
+                    replaces={"id": 3, "title": "旧住所", "content": "大阪に住んでいる"},
+                ),
+                3: FactProvenance(superseded_by={"id": 4, "title": "住所"}),
+            }
+        )
+        with patch("services.context_vault_service._repository", return_value=repo), patch(
+            "services.context_vault_service.ContextFactProvenanceRepository", return_value=provenance
+        ):
+            result = await list_facts(7, query="東京", session=object())
+
+        self.assertEqual(repo.list_facts.await_args.kwargs["query"], "東京")
+        newer, older = result.facts
+        self.assertEqual(newer.source_count, 5)
+        self.assertEqual(newer.last_mentioned_at, "2026-11-01T00:00:00+00:00")
+        self.assertEqual(newer.sources[0].evidence, "東京に住んでいます")
+        self.assertEqual(newer.replaces.title, "旧住所")
+        self.assertIsNone(newer.superseded_by)
+        self.assertEqual(older.superseded_by.id, 4)
+        self.assertEqual((older.source_count, older.sources, older.replaces), (0, [], None))
+
+    async def test_revert_replacement_returns_both_facts_and_schedules_the_restored_embedding(self):
+        curation = MagicMock()
+        curation.revert_replacement = AsyncMock(
+            return_value=(
+                fact_row(id=4, status="deprecated", revision=3),
+                fact_row(id=3, status="active", revision=5, title="旧住所", content="大阪に住んでいる"),
+            )
+        )
+        with patch("services.context_vault_service.ContextFactCurationRepository", return_value=curation), patch(
+            "services.context_vault_service.session_scope", return_value=_TransactionSession()
+        ), patch("services.context_vault_service.schedule_embedding") as schedule:
+            result = await revert_replacement(7, 4, expected_revision=2)
+
+        curation.revert_replacement.assert_awaited_once_with(7, 4, 2)
+        self.assertEqual((result.fact.id, result.fact.status), (4, "deprecated"))
+        self.assertEqual((result.restored_fact.id, result.restored_fact.status), (3, "active"))
+        schedule.assert_called_once_with(3, "preference", "旧住所", "大阪に住んでいる", 5)
+
+    async def test_revert_replacement_does_not_schedule_when_the_caller_owns_the_session(self):
+        curation = MagicMock()
+        curation.revert_replacement = AsyncMock(
+            return_value=(fact_row(id=4, status="deprecated"), fact_row(id=3, status="active"))
+        )
+        with patch("services.context_vault_service.ContextFactCurationRepository", return_value=curation), patch(
+            "services.context_vault_service.schedule_embedding"
+        ) as schedule:
+            await revert_replacement(7, 4, expected_revision=2, session=object())
+        schedule.assert_not_called()
+
+    async def test_delete_use_cases_delegate_to_the_curation_repository(self):
+        curation = MagicMock()
+        curation.delete_fact = AsyncMock()
+        curation.delete_all_facts = AsyncMock(return_value=12)
+        with patch("services.context_vault_service.ContextFactCurationRepository", return_value=curation):
+            self.assertIsNone(await delete_fact(7, 3, expected_revision=2, session=object()))
+            self.assertEqual(await delete_all_facts(7, session=object()), 12)
+        curation.delete_fact.assert_awaited_once_with(7, 3, 2)
+        curation.delete_all_facts.assert_awaited_once_with(7)
 
     async def test_digest_groups_and_search_falls_back_from_semantic(self):
         repo = _repo()

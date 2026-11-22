@@ -25,6 +25,8 @@ from services.context_vault_embeddings import schedule_embedding
 from services.db import is_retryable_db_error, session_scope
 from services.embeddings import embeddings_available, generate_embedding
 from services.memory_search_ranking import MEMORY_SEARCH_RESULT_LIMIT, rank_memory_facts
+from services.repositories.context_fact_curation_repository import ContextFactCurationRepository
+from services.repositories.context_fact_provenance_repository import ContextFactProvenanceRepository, FactProvenance
 from services.repositories.context_fact_repository import ContextFactRepository
 from services.request_models import (
     DEFAULT_CONTEXT_FACT_IMPORTANCE,
@@ -40,6 +42,7 @@ from services.response_models import (
     ContextFactListItemResponse,
     ContextFactListResponse,
     ContextFactResponse,
+    ContextFactRevertReplacementResponse,
     ContextMemoryUseSettingsResponse,
 )
 
@@ -116,16 +119,21 @@ def _to_response(fact: dict[str, Any]) -> ContextFactResponse:
     )
 
 
-# 日本語: 記憶の画面の一覧用に、_to_response の内容へ無効化の理由を足す。旧バージョンのコードが復元した行は理由が残るので、
-# 有効な事実には返さない。MCP・ダイジェスト・検索は理由を持たない _to_response のまま使い、AI に渡る内容を変えない。
-# English: For the memory screen's list: _to_response plus the deprecation reason. An older code color leaves the reason when
-# it restores a fact, so an active fact never reports one. MCP, the digest and search keep using _to_response without it,
-# so what reaches the AI is unchanged.
-def _to_list_item_response(fact: dict[str, Any]) -> ContextFactListItemResponse:
+# 日本語: 記憶の画面の一覧用に、_to_response の内容へ無効化の理由と、出典・置き換えの関係を足す。旧バージョンのコードが復元した行は理由が
+# 残るので、有効な事実には返さない。MCP・ダイジェスト・検索は _to_response のまま使い、AI に渡る内容を変えない。
+# English: For the memory screen's list: _to_response plus the deprecation reason and the sources and replacement relations. An older
+# code color leaves the reason when it restores a fact, so an active fact never reports one. MCP, the digest and search keep using
+# _to_response, so what reaches the AI is unchanged.
+def _to_list_item_response(fact: dict[str, Any], provenance: FactProvenance) -> ContextFactListItemResponse:
     base = _to_response(fact)
     return ContextFactListItemResponse(
         **base.model_dump(),
         deprecated_reason=fact.get("deprecated_reason") if base.status == "deprecated" else None,
+        source_count=provenance.source_count,
+        last_mentioned_at=provenance.last_mentioned_at,
+        sources=provenance.sources,
+        superseded_by=provenance.superseded_by,
+        replaces=provenance.replaces,
     )
 
 
@@ -161,12 +169,14 @@ async def list_facts(
     *,
     fact_type: ContextFactType | None = None,
     status: ContextFactStatus = "active",
+    query: str | None = None,
     limit: int = DEFAULT_CONTEXT_LIST_LIMIT,
     cursor: str | None = None,
     session: AsyncSession | None = None,
 ) -> ContextFactListResponse:
-    # 1 件多く取得して次ページの有無を判定し、next_cursor を作る。
-    # Fetch one extra row to detect whether a next page exists, then build next_cursor.
+    # 1 件多く取得して次ページの有無を判定し、next_cursor を作る。出典と置き換えの関係は、返す行ぶんをまとめて読む(行ごとに問い合わせない)。
+    # Fetch one extra row to detect whether a next page exists, then build next_cursor. Sources and replacement relations are read
+    # for the returned rows together, not one query per row.
     async def operation(db: AsyncSession) -> ContextFactListResponse:
         safe_limit = _safe_list_limit(limit)
         decoded = _decode_cursor(cursor)
@@ -174,6 +184,7 @@ async def list_facts(
             user_id,
             fact_type=fact_type,
             status=status,
+            query=query,
             limit=safe_limit + 1,
             before_updated_at=decoded[0] if decoded else None,
             before_id=decoded[1] if decoded else None,
@@ -182,8 +193,9 @@ async def list_facts(
         if len(rows) > safe_limit:
             next_cursor = _encode_cursor(rows[safe_limit - 1])
             rows = rows[:safe_limit]
+        provenance = await ContextFactProvenanceRepository(db).load(user_id, rows)
         return ContextFactListResponse(
-            facts=[_to_list_item_response(row) for row in rows],
+            facts=[_to_list_item_response(row, provenance[int(row["id"])]) for row in rows],
             total_active=await _repository(db).count_active(user_id),
             next_cursor=next_cursor,
         )
@@ -326,6 +338,51 @@ async def deprecate_fact(
         status="deprecated",
         session=session,
     )
+
+
+# 日本語: 置き換えで入った新しい記憶を無効化し(この内容は再び覚えない)、置き換えられた古い記憶を有効へ戻す(記憶の画面の「元に戻す」)。
+# 古い記憶は有効へ戻るので、update_fact の復元と同じく埋め込みを予約する。
+# English: Deprecate the memory that came in by replacement (that content is not remembered again) and make the older memory it
+# replaced active again (the memory screen's "undo"). The older memory is active again, so an embedding is scheduled as
+# update_fact's restore does.
+async def revert_replacement(
+    user_id: int,
+    fact_id: int,
+    *,
+    expected_revision: int,
+    session: AsyncSession | None = None,
+) -> ContextFactRevertReplacementResponse:
+    deprecated, restored = await _transaction(
+        session,
+        lambda db: ContextFactCurationRepository(db).revert_replacement(user_id, fact_id, expected_revision),
+    )
+    if session is None:
+        schedule_embedding(
+            int(restored["id"]),
+            str(restored["fact_type"]),
+            str(restored["title"]),
+            str(restored["content"]),
+            int(restored["revision"]),
+        )
+    return ContextFactRevertReplacementResponse(fact=_to_response(deprecated), restored_fact=_to_response(restored))
+
+
+# 日本語: 記憶 1 件を、有効・無効化済みのどちらでも完全に削除する(出典と、その記憶を指す候補も消える)。
+# English: Delete one memory for good, active or deprecated (its sources and the candidates pointing at it go too).
+async def delete_fact(
+    user_id: int,
+    fact_id: int,
+    *,
+    expected_revision: int,
+    session: AsyncSession | None = None,
+) -> None:
+    await _transaction(session, lambda db: ContextFactCurationRepository(db).delete_fact(user_id, fact_id, expected_revision))
+
+
+# 日本語: 利用者の記憶・出典・候補をすべて削除し、消した記憶の件数を返す。
+# English: Delete all of the user's memories, sources and candidates, and return how many memories were deleted.
+async def delete_all_facts(user_id: int, *, session: AsyncSession | None = None) -> int:
+    return await _transaction(session, lambda db: ContextFactCurationRepository(db).delete_all_facts(user_id))
 
 
 async def build_digest(

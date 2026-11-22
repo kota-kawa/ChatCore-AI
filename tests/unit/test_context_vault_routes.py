@@ -80,6 +80,7 @@ class ContextVaultRouteTestCase(unittest.TestCase):
             7,
             fact_type=None,
             status="active",
+            query=None,
             limit=20,
             cursor=None,
         )

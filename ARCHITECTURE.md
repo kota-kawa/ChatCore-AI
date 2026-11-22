@@ -118,7 +118,7 @@ flowchart LR
 | `blueprints/chat/` | チャット、部屋、タスク、プロフィール、設定、プロジェクト | `/api` |
 | `blueprints/prompt_share/` | 公開プロンプト、検索、管理、メディア | `/prompt_share`, `/prompt_manage`, `/search` |
 | `blueprints/memo/` | メモ、コレクション、共有、エクスポート | `/memo` |
-| `blueprints/context_vault/` | パーソナル・コンテキスト（画面名は「記憶」）、自動保存と回答への利用の設定 | `/api/context-facts` |
+| `blueprints/context_vault/` | パーソナル・コンテキスト（画面名は「記憶」）、一覧（検索・出典・置き換えの関係）、置き換えの取り消し、完全な削除、自動保存と回答への利用の設定 | `/api/context-facts` |
 | `blueprints/admin/` | 管理画面と管理 API（デモ用アクセスコードの発行・停止を含む） | `/admin` |
 | `blueprints/mcp_oauth.py` | MCP OAuth クライアント・接続管理 | `/api/mcp/oauth` |
 
@@ -252,6 +252,12 @@ HTTPクライアントは`X-ChatCore-UI-Version: 1`で対応を通知します�
 ### チャットからの記憶の保存と照合
 
 通常チャットの完了後、`services/context_vault_extraction.py` がバックグラウンドで GPT-6 Luna から候補を抽出し（機微な個人情報は、本人が同じ発話の中で覚えるよう頼んだ一節が本人の発話に在る候補だけを通し、カテゴリと一節は保存しません）、`services/context_vault_candidate_service.py` の `store_extracted_facts` が保存します。保存の前に、重複判定（BM25）を通った候補と、BM25 の最良一致が有効な記憶だった候補（語の重なりで重複とみなされる食い違いを再言及として吸収しないため）を既存の記憶と照合します。近い記憶（BM25 で一致した有効な記憶を先頭に、候補の埋め込みで意味が近い有効な記憶と本人が無効化した記憶を合わせて最大 5 件。埋め込みが使えなくても BM25 の一致は入れる）が 1 件でもあるときだけ、同じモデルが追加・更新・言い換えを判定します（プロンプトの組み立てと応答の検証、適用の規則は `services/context_vault_reconcile.py`）。更新は古い記憶を無効化（`deprecated_reason` は `superseded`、置き換え先は `superseded_by_fact_id`）して新しい記憶に置き換え、言い換えは既存の記憶へ出典だけを足し、本人が無効化した記憶の言い換えは保存しません。埋め込みと LLM の呼び出しは、利用者単位の advisory lock と DB のトランザクションの外で行い（短い読み取りが 2 回あるだけ）、保存側（`services/repositories/context_fact_candidate_repository.py`）がロックの中で対象が判定の時点の `revision` のままであることを確かめて適用します。照合が何もしないとき（近い記憶が無い、LLM や検証が失敗した、判定が無い）は、BM25 で有効な記憶に一致していた候補は従来どおり再言及、それ以外は新しい記憶として保存します。保存側はロックの中で BM25 をもう一度見て、有効な記憶への一致が事前と同じ記憶のときだけ事前の判定を使い、有効な記憶に一致した候補が新しい記憶になる結果のときは、本人が無効化した記憶と却下済みの候補だけを対象にした BM25 を読み取り済みの比較対象にかけ（追加の読み取りは無い）、重複していれば新しい記憶を作らず再言及にします。埋め込みと LLM の費用は、投入時のコンテキストの複製を引き継ぐバックグラウンドのタスクとして、依頼した利用者の使用量に計上されます。呼び出し側がトランザクションを渡す場合は照合をしません。判断の経緯は [ADR 0025](docs/decisions/0025-always-on-memory-with-provenance.md)、保存後の挙動は `docs/architecture/data_model.md` と `docs/architecture/system_design_deep_dive.md` の 13.2 節にあります。
+
+### 記憶の画面の一覧・置き換えの取り消し・削除
+
+記憶の画面（`components/memo/MyContextPanel.tsx`）は `/api/context-facts` だけを使います。一覧（`GET`）は、種類・状態・検索語 `q`（タイトルと内容の語の一致。語の分け方と LIKE のエスケープは `services/search_terms.py`。埋め込みの意味検索は使わない。長すぎる検索語と、空白以外の制御文字（NUL など。PostgreSQL の text に入らない）を含む検索語は 400）で絞り、keyset で続きを返します。返す行ごとの出典（件数、最後に話題に出た時刻、新しい順に最大 3 件の引用・ルーム ID・時刻）と置き換えの関係（置き換えで無効化された記憶には置き換えた新しい記憶、有効な記憶には直近で置き換えた古い記憶）は、`services/repositories/context_fact_provenance_repository.py` が一覧 1 ページぶんをまとめて読むので、読み取りは件数に比例せず、一覧の本体と件数の取得に、最大 2 本が加わります（出典 1 本と、置き換えの関係のどちらか一方 1 本。1 ページは 1 つの状態だけを返すので、無効化済みの一覧は置き換えた新しい記憶、有効の一覧は置き換えた古い記憶だけを引きます）。どれも `user_id` で絞り、出典は本人の記憶・ルームのものだけです。この項目は Web の一覧の応答モデル（`ContextFactListItemResponse`）にだけ足し、MCP・ダイジェスト・検索が AI に返す形は変えません。
+
+書き込みは `services/repositories/context_fact_curation_repository.py` が行います。置き換えの取り消し（`POST /{id}/revert-replacement`）と完全な削除（`DELETE /{id}?revision=`）、すべての削除（`DELETE ?confirm=delete-all`）は、いずれも利用者単位の advisory lock（事実・候補の書き込みと同じ）を取った 1 トランザクションの中で、対象の状態を `FOR UPDATE` で読み直してから書きます。取り消しは新しい記憶を理由 `user` で無効化し、それが直接置き換えた古い記憶（本人の無効化済みで理由 `superseded`、置き換え先が新しい記憶、直近の 1 件）を有効へ戻します（有効件数は差し引き 0 なので上限は確認せず、出典は残す）。1 件の削除は、その記憶を指す候補の行（`promoted_fact_id`）を先に消してから事実を消します（先に事実を消すと外部キーの SET NULL で参照が外れ、文面が候補に残るため）。出典は外部キーの CASCADE、置き換えの関係は SET NULL に任せます。すべての削除は利用者の事実・候補（全状態）を消し、`users` の設定は触りません。次のターンの `<user_memory>` は毎ターン事実から組むので、削除は追加の処理なしで反映されます。一覧と書き込みの想定外の失敗は、SQL のパラメータ（検索語・記憶の文面）をログに残さないよう、例外の種類と SQLSTATE だけを記録します。
 
 ### チャットの書き込みツールと承認カード
 
