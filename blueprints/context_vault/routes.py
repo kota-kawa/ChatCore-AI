@@ -88,18 +88,6 @@ _VALID_PORTABILITY_FORMATS = {"json", "markdown"}
 _MAX_CONTEXT_VAULT_IMPORT_REQUEST_BYTES = 32 * 1024 * 1024
 
 
-# 日本語: 例外を記録して 500 を返す。SQLAlchemy の例外は SQL のパラメータ（記憶の文面など）を文面に含むので、例外そのものや
-# トレースバックは記録せず、種類と SQLSTATE だけを残す。応答にも例外の内容は出さない。
-# English: Log a failure and return 500. A SQLAlchemy exception carries the SQL parameters (memory wording and the like) in its text,
-# so the exception and its traceback are not logged, only its type and SQLSTATE; the response carries no exception detail either.
-def _internal_error_without_parameters(context: str, exc: Exception, message: str):
-    logger.error(
-        context,
-        extra={"error_type": type(exc).__name__, "sqlstate": getattr(getattr(exc, "orig", None), "sqlstate", None)},
-    )
-    return jsonify({"status": "fail", "error": message, "code": "internal_error"}, status_code=500)
-
-
 # 日本語: 検索語に、空白として語を区切る以外の制御文字(NUL など)が入っているか。PostgreSQL は text に NUL を入れられず、そのまま検索へ
 # 渡すと失敗するため、メールアドレスの検証と同じく入力の段階で弾く。
 # English: Whether a search query holds a control character other than the whitespace that separates terms (NUL and the like).
@@ -193,8 +181,10 @@ async def api_list_context_facts(
         return jsonify(result.model_dump())
     except ApiServiceError as exc:
         return jsonify_service_error(exc, status="fail")
-    except Exception as exc:
-        return _internal_error_without_parameters("Failed to list memories.", exc, CONTEXT_FACT_LIST_ERROR)
+    except Exception:
+        return log_and_internal_server_error(
+            logger, "Failed to list memories.", status="fail", message=CONTEXT_FACT_LIST_ERROR, log_exception_text=False
+        )
 
 
 @context_vault_bp.get("/export", name="context_vault.api_export")
@@ -502,8 +492,10 @@ async def api_revert_context_fact_replacement(request: Request, fact_id: int):
         return jsonify({"status": "success", **result.model_dump()})
     except ApiServiceError as exc:
         return jsonify_service_error(exc, status="fail")
-    except Exception as exc:
-        return _internal_error_without_parameters("Failed to revert a memory replacement.", exc, CONTEXT_FACT_UPDATE_ERROR)
+    except Exception:
+        return log_and_internal_server_error(
+            logger, "Failed to revert a memory replacement.", status="fail", message=CONTEXT_FACT_UPDATE_ERROR, log_exception_text=False
+        )
 
 
 @context_vault_bp.delete("/{fact_id:int}", name="context_vault.api_delete")
@@ -522,8 +514,10 @@ async def api_delete_context_fact(request: Request, fact_id: int, revision: int 
         return jsonify({"status": "success"})
     except ApiServiceError as exc:
         return jsonify_service_error(exc, status="fail")
-    except Exception as exc:
-        return _internal_error_without_parameters("Failed to delete a memory.", exc, CONTEXT_FACT_DELETE_ERROR)
+    except Exception:
+        return log_and_internal_server_error(
+            logger, "Failed to delete a memory.", status="fail", message=CONTEXT_FACT_DELETE_ERROR, log_exception_text=False
+        )
 
 
 @context_vault_bp.delete("", name="context_vault.api_delete_all")
@@ -546,5 +540,7 @@ async def api_delete_all_context_facts(request: Request, confirm: str | None = N
         return jsonify({"status": "success", **ContextFactDeleteAllResponse(deleted_count=deleted_count).model_dump()})
     except ApiServiceError as exc:
         return jsonify_service_error(exc, status="fail")
-    except Exception as exc:
-        return _internal_error_without_parameters("Failed to delete all memories.", exc, CONTEXT_FACT_DELETE_ERROR)
+    except Exception:
+        return log_and_internal_server_error(
+            logger, "Failed to delete all memories.", status="fail", message=CONTEXT_FACT_DELETE_ERROR, log_exception_text=False
+        )
