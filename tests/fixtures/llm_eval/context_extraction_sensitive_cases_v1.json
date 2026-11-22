@@ -196,8 +196,8 @@
    "expect_accepted": []
   },
   {
-   "id": "unknown_category_invalidates_the_payload",
-   "description": "カテゴリの値が一覧に無い。応答全体が検証エラーになり、同じ応答の機微でない候補も残らない。",
+   "id": "unlisted_category_drops_only_that_candidate",
+   "description": "カテゴリの値が一覧に無い（\"none\"）候補は、その候補だけを機微として扱い、頼んだ一節が無いので落とす。応答全体は捨てず、同じ応答の機微でない候補は残る。",
    "user_message": "I use Rust for my ongoing compiler project and want future code examples in Rust.",
    "assistant_response": "Sure.",
    "response": {
@@ -208,9 +208,7 @@
       "content": "Rust compiler project",
       "evidence": "I use Rust for my ongoing compiler project",
       "importance": 90,
-      "confidence": 0.95,
-      "sensitive_category": "hobby",
-      "request_evidence": "remember"
+      "confidence": 0.95
      },
      {
       "fact_type": "preference",
@@ -218,7 +216,102 @@
       "content": "Rust",
       "evidence": "want future code examples in Rust",
       "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "none"
+     }
+    ]
+   },
+   "expect_accepted": [
+    "Rust compiler project"
+   ]
+  },
+  {
+   "id": "unlisted_category_with_request_span_passes",
+   "description": "カテゴリの値が一覧に無い（\"religion\"）が、頼んだ一節が本人の発話に在る。その候補は機微として扱い、通る。",
+   "user_message": "私は仏教徒です。今後これを前提にして、行事の相談に乗ってください。",
+   "assistant_response": "はい。",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "仏教徒",
+      "content": "仏教徒",
+      "evidence": "私は仏教徒です",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "religion",
+      "request_evidence": "今後これを前提にして"
+     }
+    ]
+   },
+   "expect_accepted": [
+    "仏教徒"
+   ]
+  },
+  {
+   "id": "blank_category_is_treated_as_sensitive",
+   "description": "カテゴリが空文字や空白だけでも null ではないので、その候補だけを機微として扱い、頼んだ一節が無ければ落とす。",
+   "user_message": "I use Rust for my ongoing compiler project and want future code examples in Rust.",
+   "assistant_response": "Sure.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "project",
+      "title": "Rust compiler project",
+      "content": "Rust compiler project",
+      "evidence": "I use Rust for my ongoing compiler project",
+      "importance": 90,
       "confidence": 0.95
+     },
+     {
+      "fact_type": "preference",
+      "title": "Rust",
+      "content": "Rust",
+      "evidence": "want future code examples in Rust",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": " "
+     },
+     {
+      "fact_type": "project",
+      "title": "Compiler",
+      "content": "Compiler",
+      "evidence": "ongoing compiler project",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": ""
+     }
+    ]
+   },
+   "expect_accepted": [
+    "Rust compiler project"
+   ]
+  },
+  {
+   "id": "non_string_category_invalidates_the_payload",
+   "description": "カテゴリが文字列でない（型の違反）。既存の流儀どおり応答全体を捨てる。",
+   "user_message": "I use Rust for my ongoing compiler project and want future code examples in Rust.",
+   "assistant_response": "Sure.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "project",
+      "title": "Rust compiler project",
+      "content": "Rust compiler project",
+      "evidence": "I use Rust for my ongoing compiler project",
+      "importance": 90,
+      "confidence": 0.95
+     },
+     {
+      "fact_type": "preference",
+      "title": "Rust",
+      "content": "Rust",
+      "evidence": "want future code examples in Rust",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": [
+       "health"
+      ]
      }
     ]
    },
