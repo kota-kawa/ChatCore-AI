@@ -13,6 +13,8 @@ from unittest.mock import Mock, patch
 from services.context_vault_extraction import (
     MAX_EXTRACTION_ASSISTANT_RESPONSE_CHARS,
     MAX_EXTRACTION_USER_MESSAGE_CHARS,
+    SENSITIVE_CATEGORIES,
+    SENSITIVE_CATEGORY_DESCRIPTIONS,
     build_extraction_system_prompt,
     extract_context_candidates,
     schedule_context_extraction,
@@ -308,6 +310,146 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                         "user",
                         "assistant",
                         llm_json_response=Mock(return_value=json.dumps(payload)),
+                    ),
+                    [],
+                )
+
+    def test_prompt_lists_the_sensitive_categories_from_the_constant(self):
+        prompt = build_extraction_system_prompt("en")
+
+        self.assertGreaterEqual(len(SENSITIVE_CATEGORIES), 6)
+        for name, description in SENSITIVE_CATEGORY_DESCRIPTIONS.items():
+            with self.subTest(category=name):
+                self.assertIn(f"  - {name}: {description}", prompt)
+        self.assertIn("only when the user explicitly asks, inside user_message itself, to remember it", prompt)
+        self.assertNotIn("{sensitive_categories}", prompt)
+
+    def test_sensitive_section_sits_between_never_extract_and_evidence_requirement(self):
+        prompt = build_extraction_system_prompt("en")
+
+        positions = [prompt.index(heading) for heading in ("Never extract:", "Sensitive personal information:", "Evidence requirement:")]
+        self.assertEqual(positions, sorted(positions))
+
+    def _sensitive_payload(self, **overrides):
+        candidate = {
+            "fact_type": "profile",
+            "title": "Type 2 diabetes",
+            "content": "The user has type 2 diabetes.",
+            "evidence": "I have type 2 diabetes",
+            "importance": 90,
+            "confidence": 0.95,
+            "sensitive_category": "health",
+            "request_evidence": "Please remember this",
+        }
+        candidate.update(overrides)
+        return json.dumps({"candidates": [candidate]})
+
+    def test_sensitive_candidate_passes_only_with_a_request_span_in_the_user_message(self):
+        user_message = "I have type 2 diabetes. Please remember this."
+
+        for category in SENSITIVE_CATEGORIES:
+            with self.subTest(category=category):
+                accepted = extract_context_candidates(
+                    user_message,
+                    "ok",
+                    llm_json_response=Mock(return_value=self._sensitive_payload(sensitive_category=category)),
+                )
+                self.assertEqual([candidate["title"] for candidate in accepted], ["Type 2 diabetes"])
+
+        for label, overrides in (
+            ("missing", {"request_evidence": None}),
+            ("empty", {"request_evidence": ""}),
+            ("whitespace", {"request_evidence": "   "}),
+            ("not in the message", {"request_evidence": "Please remember that forever"}),
+        ):
+            with self.subTest(request=label):
+                self.assertEqual(
+                    extract_context_candidates(
+                        user_message,
+                        "ok",
+                        llm_json_response=Mock(return_value=self._sensitive_payload(**overrides)),
+                    ),
+                    [],
+                )
+
+    def test_a_request_to_remember_only_in_the_assistant_response_does_not_count(self):
+        self.assertEqual(
+            extract_context_candidates(
+                "I have type 2 diabetes.",
+                "Please remember this. I'll keep it in mind.",
+                llm_json_response=Mock(return_value=self._sensitive_payload()),
+            ),
+            [],
+        )
+
+    def test_request_span_uses_the_same_normalization_as_evidence(self):
+        accepted = extract_context_candidates(
+            "I have type 2 diabetes.\nPLEASE  remember this.",
+            "ok",
+            llm_json_response=Mock(return_value=self._sensitive_payload(request_evidence="ｐｌｅａｓｅ remember this")),
+        )
+
+        self.assertEqual(len(accepted), 1)
+
+    def test_a_category_outside_the_list_is_a_validation_error_that_drops_the_whole_response(self):
+        payload = json.loads(self._sensitive_payload(sensitive_category="hobby"))
+        payload["candidates"].append(
+            {
+                "fact_type": "preference",
+                "title": "Preferred editor",
+                "content": "The user prefers Vim.",
+                "evidence": "I always use Vim",
+                "importance": 90,
+                "confidence": 0.95,
+            }
+        )
+
+        self.assertEqual(
+            extract_context_candidates(
+                "I have type 2 diabetes. Please remember this. I always use Vim",
+                "ok",
+                llm_json_response=Mock(return_value=json.dumps(payload)),
+            ),
+            [],
+        )
+
+    def test_sensitive_fields_are_validated_strictly_and_never_returned(self):
+        self.assertEqual(
+            extract_context_candidates(
+                "I have type 2 diabetes. Please remember this.",
+                "ok",
+                llm_json_response=Mock(return_value=self._sensitive_payload(sensitive_category=1)),
+            ),
+            [],
+        )
+        accepted = extract_context_candidates(
+            "I have type 2 diabetes. Please remember this.",
+            "ok",
+            llm_json_response=Mock(return_value=self._sensitive_payload()),
+        )
+        self.assertEqual(
+            accepted,
+            [
+                {
+                    "fact_type": "profile",
+                    "title": "Type 2 diabetes",
+                    "content": "The user has type 2 diabetes.",
+                    "evidence": "I have type 2 diabetes",
+                    "importance": 90,
+                    "confidence": 0.95,
+                }
+            ],
+        )
+
+    def test_a_sensitive_candidate_still_has_to_pass_the_other_rules(self):
+        user_message = "I have type 2 diabetes. Please remember this."
+        for overrides in ({"confidence": 0.5}, {"importance": 10}, {"evidence": "I have a cold"}):
+            with self.subTest(overrides=overrides):
+                self.assertEqual(
+                    extract_context_candidates(
+                        user_message,
+                        "ok",
+                        llm_json_response=Mock(return_value=self._sensitive_payload(**overrides)),
                     ),
                     [],
                 )
