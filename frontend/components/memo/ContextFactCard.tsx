@@ -66,9 +66,8 @@ export function ContextFactCard({ fact, busy, onEdit, onToggleStatus, onRevert, 
         <p className="memo-context-card__note">
           <i className="bi bi-arrow-repeat" aria-hidden="true"></i>
           <span>
-            {fact.superseded_by
-              ? `${t("memo.supersededBy", { title: fact.superseded_by.title })} ${t("memo.supersededRestoreHint")}`
-              : t("memo.supersededByDeleted")}
+            {fact.superseded_by ? t("memo.supersededBy", { title: fact.superseded_by.title }) : t("memo.supersededByDeleted")}
+            {fact.superseded_by && <span className="memo-context-card__note-hint">{t("memo.supersededRestoreHint")}</span>}
           </span>
         </p>
       )}

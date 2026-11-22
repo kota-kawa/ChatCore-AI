@@ -367,7 +367,7 @@ export const enMessages = {
   "memo.deleteFailed": "Could not delete.", "memo.deleteFactTitle": "Delete this memory permanently?",
   "memo.deleteFactDescription": "Its wording and sources are erased. If you mention the same thing in chat again, it may be remembered again. To keep it from being remembered again, use Deactivate instead of deleting.",
   "memo.deleteFactDone": "Memory deleted permanently.", "memo.deleteAllHeading": "Delete all memories",
-  "memo.deleteAllSectionDescription": "Erases every saved memory and its sources. This cannot be undone.", "memo.deleteAllOpen": "Delete all memories…",
+  "memo.deleteAllSectionDescription": "Erases every saved memory, its sources, and every candidate you rejected. This cannot be undone.", "memo.deleteAllOpen": "Delete all memories…",
   "memo.deleteAllTitle": "Delete all memories?",
   "memo.deleteAllDescription": "This erases {count} active memories, every deactivated memory, all of their sources, and every candidate you rejected. This cannot be undone.",
   "memo.deleteAllSettingsKept": "Your Remember from chats automatically and Use memory in answers settings do not change. Anything you had deactivated or rejected so it would not be remembered again may be remembered again if you mention it in chat afterwards.",

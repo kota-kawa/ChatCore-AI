@@ -170,6 +170,9 @@ describe("MyContextPanel replacement history", () => {
     // 復元すると新しい記憶と両方が有効になる（片方が無効化されるわけではない）ことを、復元の前に伝える。
     // It says before restoring that both this and the newer memory become active (neither is deactivated).
     expect(replaced).toHaveTextContent("「復元」すると、新しい記憶と両方が有効になります。");
+    // 補足は置き換え先の名前と同じ段落に詰めず、別の要素にする。
+    // The hint is its own element, not run into the same text as the name of the newer memory.
+    expect(within(replaced).getByText("「復元」すると、新しい記憶と両方が有効になります。")).toBeInTheDocument();
     expect(within(replaced).getByRole("button", { name: "復元" })).toBeInTheDocument();
     expect(screen.getByText("消された置き換え先").closest("article")).toHaveTextContent("新しい記憶に置き換え済み（置き換えた記憶は削除されました）");
     expect(screen.getByText("消された置き換え先").closest("article")).not.toHaveTextContent("両方が有効");
@@ -502,6 +505,9 @@ describe("MyContextPanel delete all", () => {
     renderPanel({ load, deleteAll });
     await screen.findByText("住所");
 
+    // 常設の説明も、確認の文面と同じく却下した候補が消えることに触れる。
+    // The standing description mentions, like the confirmation text, that rejected candidates are erased too.
+    expect(screen.getByText("保存した記憶と出典、却下した候補をすべて消します。取り消せません。")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "すべての記憶を削除…" }));
     const dialog = await screen.findByRole("dialog", { name: "すべての記憶を削除しますか？" });
     expect(dialog).toHaveTextContent("有効な記憶7件と、無効化済みの記憶、それぞれの出典、あなたが却下した候補をすべて消します。この操作は取り消せません。");

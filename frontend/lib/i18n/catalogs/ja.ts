@@ -681,7 +681,7 @@ export const jaMessages = {
   "memo.deleteFactDescription": "文面と出典を消します。同じ内容をチャットでまた話すと、もう一度覚えることがあります。再び覚えないようにしたいときは、削除ではなく「無効化」を使ってください。",
   "memo.deleteFactDone": "記憶を完全に削除しました。",
   "memo.deleteAllHeading": "すべての記憶を削除",
-  "memo.deleteAllSectionDescription": "保存した記憶と出典をすべて消します。取り消せません。",
+  "memo.deleteAllSectionDescription": "保存した記憶と出典、却下した候補をすべて消します。取り消せません。",
   "memo.deleteAllOpen": "すべての記憶を削除…",
   "memo.deleteAllTitle": "すべての記憶を削除しますか？",
   "memo.deleteAllDescription": "有効な記憶{count}件と、無効化済みの記憶、それぞれの出典、あなたが却下した候補をすべて消します。この操作は取り消せません。",

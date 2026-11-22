@@ -4818,6 +4818,14 @@ body.memo-page {
   color: var(--memo-amber-strong);
 }
 
+:where(body.memo-page, .memo-page-shell) .memo-context-card__note-hint {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--memo-text-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
 :where(body.memo-page, .memo-page-shell) .memo-context-card__replaced {
   display: flex;
   align-items: flex-start;
