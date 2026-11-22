@@ -25,6 +25,7 @@ from services.repositories.context_fact_provenance_repository import (
     ContextFactProvenanceRepository,
 )
 from services.repositories.context_fact_repository import MAX_ACTIVE_CONTEXT_FACTS, ContextFactRepository
+from services.search_terms import split_search_terms
 
 
 # 日本語: 作ったデータはすべて、この試験が作った利用者の行から外部キーの CASCADE で消える。
@@ -310,6 +311,49 @@ class ContextMemoryScreenDatabaseTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(replaced[older].superseded_by, {"id": many, "title": "出典が多い"})
 
             await session.execute(text("DELETE FROM users WHERE id = ANY(:ids)"), {"ids": [user_id, other_user]})
+
+    # 日本語: 一覧の検索(q)とキーワード検索(search_context が使う text_search)は同じ語の一致条件を使う。語の AND、大文字小文字、
+    # LIKE のワイルドカード(% _ \)を含む検索語で、2 つが同じ行を同じ順で返し、語の部分一致の定義とも一致することを実 DB で確かめる。
+    # English: The list search (q) and the keyword search (text_search, used by search_context) share one term-match condition. For
+    # queries with several terms, mixed case and LIKE wildcards (% _ \), both return the same rows in the same order, equal to the
+    # plain definition of the term match, checked against a real database.
+    async def test_list_search_and_keyword_search_match_the_same_rows(self) -> None:
+        facts = [
+            ("Alpha Beta", "x"),
+            ("alpha", "beta 100% done"),
+            ("under_score", "plain"),
+            ("underXscore", "plain"),
+            ("back\\slash", "plain"),
+            ("百分率", "100%"),
+            ("全角", "東京に住んでいる"),
+        ]
+        queries = ["alpha beta", "ALPHA", "100%", "%", "_", "under_score", "\\", "back\\slash", "a%a", "東京 住", "none-such", "alpha,beta"]
+        async with session_scope() as session, session.begin():
+            user_id = await self._create_user(session, "search-equivalence")
+            for title, content in facts:
+                await session.execute(
+                    text(
+                        "INSERT INTO context_facts (user_id, fact_type, title, content, status) "
+                        "VALUES (:user_id, 'profile', :title, :content, 'active')"
+                    ),
+                    {"user_id": user_id, "title": title, "content": content},
+                )
+            repository = ContextFactRepository(session)
+            for query in queries:
+                with self.subTest(query=query):
+                    listed = [row["id"] for row in await repository.list_facts(user_id, query=query, limit=50)]
+                    searched = [row["id"] for row in await repository.text_search(user_id, query, limit=50)]
+                    self.assertEqual(listed, searched)
+                    terms = split_search_terms(query)
+                    expected = {
+                        title
+                        for title, content in facts
+                        if all(term.lower() in title.lower() or term.lower() in content.lower() for term in terms)
+                    }
+                    titles = {row["title"] for row in await repository.list_facts(user_id, query=query, limit=50)}
+                    self.assertEqual(titles, expected)
+
+            await session.execute(text("DELETE FROM users WHERE id = :id"), {"id": user_id})
 
 
 if __name__ == "__main__":
