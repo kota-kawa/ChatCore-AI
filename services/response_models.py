@@ -333,12 +333,14 @@ class ContextFactReplacesResponse(ResponsePayloadModel):
 # 日本語: 記憶の画面の一覧が返す 1 件の事実。AI に渡る応答（MCP・ダイジェスト・検索）の ContextFactResponse には無い項目を持つ。
 # deprecated_reason は無効化した理由（capacity は上限での自動の入れ替え。None は本人が無効化した（この項目の追加前の記録を含む）か、
 # 有効な事実）。
-# 出典は件数と最後に話題に出た時刻（出典の observed_at の最大値）と、新しい順の先頭の数件（件数は context_fact_provenance_repository の MAX_LISTED_SOURCES_PER_FACT）。置き換えは、置き換えで無効化された記憶には
+# 出典は件数と最後に話題に出た時刻（出典の observed_at の最大値）と、新しい順の先頭の数件
+# （件数は context_fact_provenance_repository の MAX_LISTED_SOURCES_PER_FACT）。置き換えは、置き換えで無効化された記憶には
 # 置き換えた新しい記憶（その記憶が完全に削除されていれば None）、有効な記憶には置き換えた古い記憶（無ければ None）。
 # English: A fact as the memory screen's list returns it, with fields the AI-facing responses (MCP, the digest, search) of
 # ContextFactResponse do not carry. deprecated_reason is why a fact was deprecated (capacity is the automatic replacement at the
 # cap; None means the owner deprecated it, including records from before this field, or the fact is active). Sources are the
-# count, when it was last mentioned (the newest observed_at) and the newest few (the cap is MAX_LISTED_SOURCES_PER_FACT in context_fact_provenance_repository). For replacement, a fact deprecated by it
+# count, when it was last mentioned (the newest observed_at) and the newest few (the cap is MAX_LISTED_SOURCES_PER_FACT in
+# context_fact_provenance_repository). For replacement, a fact deprecated by it
 # carries the newer memory that replaced it (None if that memory was deleted for good) and an active one the older memory it
 # replaced (None if none).
 class ContextFactListItemResponse(ContextFactResponse):
