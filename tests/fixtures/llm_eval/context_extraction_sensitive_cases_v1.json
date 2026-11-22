@@ -1,0 +1,459 @@
+{
+ "dataset_id": "context-extraction-sensitive-v1",
+ "cases": [
+  {
+   "id": "health_asked_ja",
+   "description": "健康の内容を、同じ発話で「今後これを前提にして」と頼んでいる。通る。",
+   "user_message": "糖尿病です。今後これを前提にして、食事の相談に乗ってください。",
+   "assistant_response": "承知しました。",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "糖尿病",
+      "content": "ユーザーは糖尿病である。",
+      "evidence": "糖尿病です",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "health",
+      "request_evidence": "今後これを前提にして"
+     }
+    ]
+   },
+   "expect_accepted": [
+    "糖尿病"
+   ]
+  },
+  {
+   "id": "health_asked_en",
+   "description": "健康の内容を、同じ発話で remember that と頼んでいる。通る。",
+   "user_message": "Please remember that I have type 2 diabetes when you suggest meals.",
+   "assistant_response": "Sure.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "Type 2 diabetes",
+      "content": "Type 2 diabetes",
+      "evidence": "I have type 2 diabetes",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "health",
+      "request_evidence": "Please remember that I have type 2 diabetes"
+     }
+    ]
+   },
+   "expect_accepted": [
+    "Type 2 diabetes"
+   ]
+  },
+  {
+   "id": "request_span_differs_in_width_and_case",
+   "description": "頼んだ一節が全角・大文字小文字・空白だけ違っても、evidence と同じ正規化で照合して通る。",
+   "user_message": "I follow a vegetarian diet for my religion.  Keep in mind that I am Buddhist.",
+   "assistant_response": "OK.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "Buddhist",
+      "content": "Buddhist",
+      "evidence": "I am Buddhist",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "religion_or_belief",
+      "request_evidence": "ＫＥＥＰ　ＩＮ　ＭＩＮＤ that I am Buddhist"
+     }
+    ]
+   },
+   "expect_accepted": [
+    "Buddhist"
+   ]
+  },
+  {
+   "id": "sensitive_without_request_span",
+   "description": "機微なカテゴリを申告しているが、頼んだ一節が null。落ちる。",
+   "user_message": "I have a chronic back condition and see a physiotherapist every month.",
+   "assistant_response": "I see.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "Back condition",
+      "content": "Back condition",
+      "evidence": "I have a chronic back condition",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "health",
+      "request_evidence": null
+     }
+    ]
+   },
+   "expect_accepted": []
+  },
+  {
+   "id": "sensitive_with_empty_request_span",
+   "description": "機微なカテゴリを申告しているが、頼んだ一節が空。落ちる。",
+   "user_message": "私は福祉の現場で働いていて、うつ病の治療中です。",
+   "assistant_response": "大変ですね。",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "うつ病の治療",
+      "content": "うつ病の治療",
+      "evidence": "うつ病の治療中です",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "health",
+      "request_evidence": ""
+     }
+    ]
+   },
+   "expect_accepted": []
+  },
+  {
+   "id": "sensitive_with_missing_request_key",
+   "description": "機微なカテゴリを申告しているが、request_evidence のキー自体が無い。落ちる。",
+   "user_message": "I vote for the Green party in every election.",
+   "assistant_response": "Noted.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "Political support",
+      "content": "Political support",
+      "evidence": "I vote for the Green party in every election",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "political_opinion"
+     }
+    ]
+   },
+   "expect_accepted": []
+  },
+  {
+   "id": "request_span_not_in_user_message",
+   "description": "頼んだ一節がモデルの作文で、本人の発話に無い。落ちる。",
+   "user_message": "私は去年、破産を経験しました。",
+   "assistant_response": "そうでしたか。",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "破産の経験",
+      "content": "破産の経験",
+      "evidence": "私は去年、破産を経験しました",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "detailed_finances",
+      "request_evidence": "今後も覚えておいてください"
+     }
+    ]
+   },
+   "expect_accepted": []
+  },
+  {
+   "id": "request_only_in_assistant_response",
+   "description": "覚えておく約束がアシスタントの応答にだけ在る。本人は頼んでいないので落ちる。",
+   "user_message": "I'm on antidepressants.",
+   "assistant_response": "Thank you for telling me. I'll remember that.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "Antidepressants",
+      "content": "Antidepressants",
+      "evidence": "I'm on antidepressants",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "health",
+      "request_evidence": "I'll remember that"
+     }
+    ]
+   },
+   "expect_accepted": []
+  },
+  {
+   "id": "request_span_is_a_stray_substring",
+   "description": "頼んだ一節が発話の言い換え（「please remember」は発話に無い）で、逐語の引用ではない。落ちる。",
+   "user_message": "I was arrested once, many years ago.",
+   "assistant_response": "That sounds hard.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "Arrest history",
+      "content": "Arrest history",
+      "evidence": "I was arrested once",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "criminal_record",
+      "request_evidence": "please remember I was arrested"
+     }
+    ]
+   },
+   "expect_accepted": []
+  },
+  {
+   "id": "unlisted_category_drops_only_that_candidate",
+   "description": "カテゴリの値が一覧に無い（\"none\"）候補は、その候補だけを機微として扱い、頼んだ一節が無いので落とす。応答全体は捨てず、同じ応答の機微でない候補は残る。",
+   "user_message": "I use Rust for my ongoing compiler project and want future code examples in Rust.",
+   "assistant_response": "Sure.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "project",
+      "title": "Rust compiler project",
+      "content": "Rust compiler project",
+      "evidence": "I use Rust for my ongoing compiler project",
+      "importance": 90,
+      "confidence": 0.95
+     },
+     {
+      "fact_type": "preference",
+      "title": "Rust",
+      "content": "Rust",
+      "evidence": "want future code examples in Rust",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "none"
+     }
+    ]
+   },
+   "expect_accepted": [
+    "Rust compiler project"
+   ]
+  },
+  {
+   "id": "unlisted_category_with_request_span_passes",
+   "description": "カテゴリの値が一覧に無い（\"religion\"）が、頼んだ一節が本人の発話に在る。その候補は機微として扱い、通る。",
+   "user_message": "私は仏教徒です。今後これを前提にして、行事の相談に乗ってください。",
+   "assistant_response": "はい。",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "仏教徒",
+      "content": "仏教徒",
+      "evidence": "私は仏教徒です",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "religion",
+      "request_evidence": "今後これを前提にして"
+     }
+    ]
+   },
+   "expect_accepted": [
+    "仏教徒"
+   ]
+  },
+  {
+   "id": "blank_category_is_treated_as_sensitive",
+   "description": "カテゴリが空文字や空白だけでも null ではないので、その候補だけを機微として扱い、頼んだ一節が無ければ落とす。",
+   "user_message": "I use Rust for my ongoing compiler project and want future code examples in Rust.",
+   "assistant_response": "Sure.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "project",
+      "title": "Rust compiler project",
+      "content": "Rust compiler project",
+      "evidence": "I use Rust for my ongoing compiler project",
+      "importance": 90,
+      "confidence": 0.95
+     },
+     {
+      "fact_type": "preference",
+      "title": "Rust",
+      "content": "Rust",
+      "evidence": "want future code examples in Rust",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": " "
+     },
+     {
+      "fact_type": "project",
+      "title": "Compiler",
+      "content": "Compiler",
+      "evidence": "ongoing compiler project",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": ""
+     }
+    ]
+   },
+   "expect_accepted": [
+    "Rust compiler project"
+   ]
+  },
+  {
+   "id": "non_string_category_invalidates_the_payload",
+   "description": "カテゴリが文字列でない（型の違反）。既存の流儀どおり応答全体を捨てる。",
+   "user_message": "I use Rust for my ongoing compiler project and want future code examples in Rust.",
+   "assistant_response": "Sure.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "project",
+      "title": "Rust compiler project",
+      "content": "Rust compiler project",
+      "evidence": "I use Rust for my ongoing compiler project",
+      "importance": 90,
+      "confidence": 0.95
+     },
+     {
+      "fact_type": "preference",
+      "title": "Rust",
+      "content": "Rust",
+      "evidence": "want future code examples in Rust",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": [
+       "health"
+      ]
+     }
+    ]
+   },
+   "expect_accepted": []
+  },
+  {
+   "id": "non_sensitive_unchanged",
+   "description": "機微でない候補（項目を持たない）は従来どおり通る。",
+   "user_message": "I use Rust for my ongoing compiler project and want future code examples in Rust.",
+   "assistant_response": "Sure.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "project",
+      "title": "Rust compiler project",
+      "content": "Rust compiler project",
+      "evidence": "I use Rust for my ongoing compiler project",
+      "importance": 90,
+      "confidence": 0.95
+     }
+    ]
+   },
+   "expect_accepted": [
+    "Rust compiler project"
+   ]
+  },
+  {
+   "id": "non_sensitive_with_null_fields",
+   "description": "機微でない候補が 2 項目を null で返しても従来どおり通る。",
+   "user_message": "私は深海魚の研究を仕事にしていて、今後も資料をまとめていきたい。",
+   "assistant_response": "いいですね。",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "深海魚の研究",
+      "content": "深海魚の研究",
+      "evidence": "深海魚の研究を仕事にしていて",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": null,
+      "request_evidence": null
+     }
+    ]
+   },
+   "expect_accepted": [
+    "深海魚の研究"
+   ]
+  },
+  {
+   "id": "household_budget_app_is_not_personal_finance",
+   "description": "家計簿アプリの開発は個人の金銭状況ではない。機微でない候補として通る。",
+   "user_message": "I'm building a household budget app and plan to keep working on it.",
+   "assistant_response": "Great.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "project",
+      "title": "Household budget app",
+      "content": "Household budget app",
+      "evidence": "I'm building a household budget app and plan to keep working on it",
+      "importance": 90,
+      "confidence": 0.95
+     }
+    ]
+   },
+   "expect_accepted": [
+    "Household budget app"
+   ]
+  },
+  {
+   "id": "mixed_sensitive_dropped_normal_kept",
+   "description": "同じ応答の中で、頼んでいない機微な候補だけが落ち、機微でない候補は残る。",
+   "user_message": "I am a data engineer and use Python daily. I have ADHD.",
+   "assistant_response": "Thanks.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "ADHD",
+      "content": "ADHD",
+      "evidence": "I have ADHD",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "health",
+      "request_evidence": null
+     },
+     {
+      "fact_type": "profile",
+      "title": "Data engineer",
+      "content": "Data engineer",
+      "evidence": "I am a data engineer and use Python daily",
+      "importance": 90,
+      "confidence": 0.95
+     }
+    ]
+   },
+   "expect_accepted": [
+    "Data engineer"
+   ]
+  },
+  {
+   "id": "sensitive_asked_but_other_rules_still_apply",
+   "description": "頼んでいても、確信度が足りなければ落ちる。ほかの基準は変わらない。",
+   "user_message": "Remember that my income might be around 6 million yen, I think.",
+   "assistant_response": "OK.",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "Income",
+      "content": "Income",
+      "evidence": "my income might be around 6 million yen",
+      "importance": 90,
+      "confidence": 0.6,
+      "sensitive_category": "detailed_finances",
+      "request_evidence": "Remember that my income"
+     }
+    ]
+   },
+   "expect_accepted": []
+  },
+  {
+   "id": "sensitive_asked_but_evidence_not_verbatim",
+   "description": "頼んでいても、evidence が発話の一節でなければ落ちる。",
+   "user_message": "性自認について、今後これを前提にして話してほしい。私はノンバイナリーです。",
+   "assistant_response": "はい。",
+   "response": {
+    "candidates": [
+     {
+      "fact_type": "profile",
+      "title": "ノンバイナリー",
+      "content": "ノンバイナリー",
+      "evidence": "ユーザーはノンバイナリーだ",
+      "importance": 90,
+      "confidence": 0.95,
+      "sensitive_category": "sexual_orientation_or_gender_identity",
+      "request_evidence": "今後これを前提にして"
+     }
+    ]
+   },
+   "expect_accepted": []
+  }
+ ]
+}

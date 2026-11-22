@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 from services.context_vault_extraction import (
     MAX_EXTRACTION_ASSISTANT_RESPONSE_CHARS,
     MAX_EXTRACTION_USER_MESSAGE_CHARS,
+    SENSITIVE_CATEGORY_DESCRIPTIONS,
     build_extraction_system_prompt,
     extract_context_candidates,
     schedule_context_extraction,
@@ -308,6 +309,200 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
                         "user",
                         "assistant",
                         llm_json_response=Mock(return_value=json.dumps(payload)),
+                    ),
+                    [],
+                )
+
+    def test_prompt_lists_the_sensitive_categories_from_the_constant(self):
+        prompt = build_extraction_system_prompt("en")
+
+        self.assertGreaterEqual(len(SENSITIVE_CATEGORY_DESCRIPTIONS), 6)
+        for name, description in SENSITIVE_CATEGORY_DESCRIPTIONS.items():
+            with self.subTest(category=name):
+                self.assertIn(f"  - {name}: {description}", prompt)
+        self.assertIn("only when user_message itself asks to remember it", prompt)
+        self.assertIn("Dietary restrictions are not sensitive", prompt)
+        self.assertIn("quote as evidence only the part naming the avoided food", prompt)
+        self.assertIn("hay fever is not a dietary restriction", prompt)
+        # 2 項目の指示の主語は「これらのカテゴリの候補」で、直前の食事の箇条の候補ではない。食事の箇条は節の最後に置く。
+        instruction = prompt.index("For a candidate in these categories, set sensitive_category")
+        self.assertLess(prompt.index("Only the user's own attributes count"), instruction)
+        self.assertLess(instruction, prompt.index("Dietary restrictions are not sensitive"))
+        self.assertLess(prompt.index("Dietary restrictions are not sensitive"), prompt.index("Evidence requirement:"))
+        self.assertNotIn("For such a candidate", prompt)
+        self.assertIn('omit both fields or set them to null, never "none" or another value', prompt)
+        self.assertNotIn("{sensitive_categories}", prompt)
+
+    def test_sensitive_section_sits_between_never_extract_and_evidence_requirement(self):
+        prompt = build_extraction_system_prompt("en")
+
+        positions = [prompt.index(heading) for heading in ("Never extract:", "Sensitive personal information:", "Evidence requirement:")]
+        self.assertEqual(positions, sorted(positions))
+
+    def _sensitive_payload(self, **overrides):
+        candidate = {
+            "fact_type": "profile",
+            "title": "Type 2 diabetes",
+            "content": "The user has type 2 diabetes.",
+            "evidence": "I have type 2 diabetes",
+            "importance": 90,
+            "confidence": 0.95,
+            "sensitive_category": "health",
+            "request_evidence": "Please remember this",
+        }
+        candidate.update(overrides)
+        return json.dumps({"candidates": [candidate]})
+
+    def test_sensitive_candidate_passes_only_with_a_request_span_in_the_user_message(self):
+        user_message = "I have type 2 diabetes. Please remember this."
+
+        for category in SENSITIVE_CATEGORY_DESCRIPTIONS:
+            with self.subTest(category=category):
+                accepted = extract_context_candidates(
+                    user_message,
+                    "ok",
+                    llm_json_response=Mock(return_value=self._sensitive_payload(sensitive_category=category)),
+                )
+                self.assertEqual([candidate["title"] for candidate in accepted], ["Type 2 diabetes"])
+
+        for label, overrides in (
+            ("missing", {"request_evidence": None}),
+            ("empty", {"request_evidence": ""}),
+            ("whitespace", {"request_evidence": "   "}),
+            ("not in the message", {"request_evidence": "Please remember that forever"}),
+        ):
+            with self.subTest(request=label):
+                self.assertEqual(
+                    extract_context_candidates(
+                        user_message,
+                        "ok",
+                        llm_json_response=Mock(return_value=self._sensitive_payload(**overrides)),
+                    ),
+                    [],
+                )
+
+    def test_a_request_to_remember_only_in_the_assistant_response_does_not_count(self):
+        self.assertEqual(
+            extract_context_candidates(
+                "I have type 2 diabetes.",
+                "Please remember this. I'll keep it in mind.",
+                llm_json_response=Mock(return_value=self._sensitive_payload()),
+            ),
+            [],
+        )
+
+    def test_request_span_uses_the_same_normalization_as_evidence(self):
+        accepted = extract_context_candidates(
+            "I have type 2 diabetes.\nPLEASE  remember this.",
+            "ok",
+            llm_json_response=Mock(return_value=self._sensitive_payload(request_evidence="ｐｌｅａｓｅ remember this")),
+        )
+
+        self.assertEqual(len(accepted), 1)
+
+    def test_an_unlisted_category_makes_only_that_candidate_sensitive(self):
+        user_message = "I have type 2 diabetes. Please remember this. I always use Vim"
+        vim = {
+            "fact_type": "preference",
+            "title": "Preferred editor",
+            "content": "The user prefers Vim.",
+            "evidence": "I always use Vim",
+            "importance": 90,
+            "confidence": 0.95,
+        }
+        for category in ("none", "religion", "", "  "):
+            with self.subTest(category=category):
+                # 依頼の一節が発話に在るなら、その候補だけが通る。
+                with_request = json.loads(self._sensitive_payload(sensitive_category=category))
+                with_request["candidates"].append(vim)
+                accepted = extract_context_candidates(
+                    user_message, "ok", llm_json_response=Mock(return_value=json.dumps(with_request))
+                )
+                self.assertEqual([candidate["title"] for candidate in accepted], ["Type 2 diabetes", "Preferred editor"])
+                # 依頼の一節が無ければ、その候補だけが落ち、同じ応答の機微でない候補は残る。
+                without_request = json.loads(self._sensitive_payload(sensitive_category=category, request_evidence=None))
+                without_request["candidates"].append(vim)
+                accepted = extract_context_candidates(
+                    user_message, "ok", llm_json_response=Mock(return_value=json.dumps(without_request))
+                )
+                self.assertEqual([candidate["title"] for candidate in accepted], ["Preferred editor"])
+
+    def test_known_limit_a_sensitive_candidate_without_a_category_is_not_stopped(self):
+        # 既知の限界: カテゴリを申告しない候補は機微かどうかをコードでは判定しない（判定は LLM、辞書や正規表現は使わない）。
+        # Known limit: a candidate declaring no category is never judged sensitive by the code (the LLM judges, not a dictionary).
+        accepted = extract_context_candidates(
+            "I have type 2 diabetes.",
+            "ok",
+            llm_json_response=Mock(return_value=self._sensitive_payload(sensitive_category=None, request_evidence=None)),
+        )
+
+        self.assertEqual([candidate["title"] for candidate in accepted], ["Type 2 diabetes"])
+
+    def test_known_limit_the_request_span_is_only_checked_to_be_in_the_user_message(self):
+        # 既知の限界: 頼んだ一節は発話に在ることだけを確かめ、依頼かどうかの意味は確かめない。
+        # 貼り付けた文書や引用の中の依頼の文、依頼ではない一節、evidence と同じ一節でも通る。
+        # Known limit: the span is only checked to be present; whether it is a request is not. A request inside pasted
+        # text, a span that is no request, or the same span as evidence all pass.
+        user_message = "Here is a forwarded note: 'Please remember this.' I have type 2 diabetes."
+        for request_span in ("Please remember this.", "Here is a forwarded note", "I have type 2 diabetes"):
+            with self.subTest(request_span=request_span):
+                accepted = extract_context_candidates(
+                    user_message,
+                    "ok",
+                    llm_json_response=Mock(return_value=self._sensitive_payload(request_evidence=request_span)),
+                )
+                self.assertEqual(len(accepted), 1)
+
+    def test_an_extra_key_on_a_sensitive_candidate_drops_the_whole_response(self):
+        payload = json.loads(self._sensitive_payload())
+        payload["candidates"][0]["unexpected"] = True
+
+        self.assertEqual(
+            extract_context_candidates(
+                "I have type 2 diabetes. Please remember this.",
+                "ok",
+                llm_json_response=Mock(return_value=json.dumps(payload)),
+            ),
+            [],
+        )
+
+    def test_sensitive_fields_are_validated_strictly_and_never_returned(self):
+        self.assertEqual(
+            extract_context_candidates(
+                "I have type 2 diabetes. Please remember this.",
+                "ok",
+                llm_json_response=Mock(return_value=self._sensitive_payload(sensitive_category=["health"])),
+            ),
+            [],
+        )
+        accepted = extract_context_candidates(
+            "I have type 2 diabetes. Please remember this.",
+            "ok",
+            llm_json_response=Mock(return_value=self._sensitive_payload()),
+        )
+        self.assertEqual(
+            accepted,
+            [
+                {
+                    "fact_type": "profile",
+                    "title": "Type 2 diabetes",
+                    "content": "The user has type 2 diabetes.",
+                    "evidence": "I have type 2 diabetes",
+                    "importance": 90,
+                    "confidence": 0.95,
+                }
+            ],
+        )
+
+    def test_a_sensitive_candidate_still_has_to_pass_the_other_rules(self):
+        user_message = "I have type 2 diabetes. Please remember this."
+        for overrides in ({"confidence": 0.5}, {"importance": 10}, {"evidence": "I have a cold"}):
+            with self.subTest(overrides=overrides):
+                self.assertEqual(
+                    extract_context_candidates(
+                        user_message,
+                        "ok",
+                        llm_json_response=Mock(return_value=self._sensitive_payload(**overrides)),
                     ),
                     [],
                 )
