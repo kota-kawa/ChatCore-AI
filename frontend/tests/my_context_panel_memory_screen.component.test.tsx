@@ -54,6 +54,20 @@ function fact(overrides: Partial<ContextFact> = {}): ContextFact {
   };
 }
 
+// 検索語を入力し、入力が止まってから取得するまでの待ちを、実時間ではなく偽のタイマーで十分に進める（取得が起きないことの確認に使う）。
+// Types a search query and advances the pause before the search fetch with fake timers rather than real time (used to confirm that no fetch happens).
+async function typeSearchAndPassDebounce(value: string) {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    fireEvent.change(screen.getByRole("searchbox", { name: "記憶を検索" }), { target: { value } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
 const page = (facts: ContextFact[], totalActive = facts.length, nextCursor: string | null = null) => ({
   facts,
   totalActive,
@@ -305,9 +319,7 @@ describe("MyContextPanel search", () => {
     expect(screen.getByRole("button", { name: "さらに読み込む" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("searchbox", { name: "記憶を検索" }), { target: { value: "東京" } });
-    // 入力が止まってから取得するので、全件を並列で流して遅いときも待てるよう長めに待つ。
-    // The fetch waits for typing to pause, so wait longer to cover a slow run of the whole suite.
-    await waitFor(() => expect(load).toHaveBeenCalledTimes(2), { timeout: 4000 });
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
 
     expect(screen.getByText("住所")).toBeInTheDocument();
     expect(screen.queryByRole("status", { name: /読み込み/ })).not.toBeInTheDocument();
@@ -316,7 +328,7 @@ describe("MyContextPanel search", () => {
     expect(screen.queryByRole("button", { name: "さらに読み込む" })).not.toBeInTheDocument();
 
     await act(async () => resolveSearch(page([fact({ id: 2, title: "東京の記憶" })])));
-    expect(await screen.findByText("東京の記憶", undefined, { timeout: 4000 })).toBeInTheDocument();
+    expect(await screen.findByText("東京の記憶")).toBeInTheDocument();
     expect(screen.queryByText("住所")).not.toBeInTheDocument();
   });
 
@@ -345,7 +357,7 @@ describe("MyContextPanel search", () => {
     expect(screen.getByRole("button", { name: "さらに読み込む" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("searchbox", { name: "記憶を検索" }), { target: { value: "東京" } });
-    await waitFor(() => expect(load).toHaveBeenCalledTimes(3), { timeout: 4000 });
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(3));
 
     expect(atSecondFetch).toEqual({ cursorButton: false, extraCard: false, firstPageCard: true });
   });
@@ -373,10 +385,7 @@ describe("MyContextPanel search", () => {
     renderPanel({ load });
     await screen.findByText("まだ記憶がありません。「記憶を追加」から保存してみましょう。");
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "記憶を検索" }), { target: { value: " ,、 " } });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 450));
-    });
+    await typeSearchAndPassDebounce(" ,、 ");
     expect(load).toHaveBeenCalledTimes(1);
     expect(screen.getByText("まだ記憶がありません。「記憶を追加」から保存してみましょう。")).toBeInTheDocument();
     expect(screen.queryByText(/に一致する記憶はありません/)).not.toBeInTheDocument();
@@ -387,11 +396,7 @@ describe("MyContextPanel search", () => {
     renderPanel({ load });
     await screen.findByText("住所");
 
-    const input = screen.getByRole("searchbox", { name: "記憶を検索" });
-    fireEvent.change(input, { target: { value: "  " } });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 450));
-    });
+    await typeSearchAndPassDebounce("  ");
     expect(load).toHaveBeenCalledTimes(1);
   });
 });
