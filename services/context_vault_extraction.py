@@ -1,10 +1,10 @@
 """完了した 1 回のチャットターンから、記憶（個人コンテキストの事実）にする内容を LLM で抽出する。
-厳格なプロンプトと検証（信頼度・重要度・発話根拠・秘密情報の除外）を通ったものだけを返し、
+厳格なプロンプトと検証（信頼度・重要度・発話根拠・秘密情報の除外・機微な内容は本人が頼んだ一節の確認）を通ったものだけを返し、
 バックグラウンドで未確認の事実として保存する（有効な事実が上限のときは、自動保存のまま本人が手を入れていない事実を無効化して入れ替える）。
 
 Extract content worth remembering (personal-context facts) from one completed chat turn.
 Only candidates that pass the strict prompt and validation (confidence, importance, verbatim evidence,
-no secrets) are returned, and they are stored in the background as unconfirmed facts (at the active-fact cap an
+no secrets, and for sensitive content the user's own request to remember it) are returned, and they are stored in the background as unconfirmed facts (at the active-fact cap an
 auto-saved fact the owner never touched is deprecated to make room).
 """
 
@@ -40,6 +40,19 @@ EVIDENCE_QUOTE_GUIDANCE_CHARS = 300
 # 証拠は user_message の一節そのものなので、少し長くても候補全体を落とさないよう緩めに検証する。
 MAX_CANDIDATE_EVIDENCE_LENGTH = MAX_EXTRACTION_USER_MESSAGE_CHARS
 CONTEXT_EXTRACTION_MODEL = GPT_6_LUNA_MODEL
+
+# 日本語: 本人が明示的に頼んだときだけ記憶する、機微な個人情報のカテゴリの正本（名前 -> プロンプト向けの説明）。
+# プロンプトの一覧がここを使う。カテゴリを増減するときはここだけを変える。
+# English: Single source of truth for the sensitive-information categories that are remembered only when the user explicitly
+# asks (name -> description for the prompt). The prompt's list reads it; change the categories here only.
+SENSITIVE_CATEGORY_DESCRIPTIONS: dict[str, str] = {
+    "health": "health, illness, disability, or medication (physical or mental)",
+    "religion_or_belief": "religion or personal beliefs",
+    "political_opinion": "political opinions or the party the user supports",
+    "sexual_orientation_or_gender_identity": "sexual orientation or gender identity",
+    "criminal_record": "criminal record or arrest history",
+    "detailed_finances": "detailed personal money matters, such as income, assets, or debts and their amounts",
+}
 
 # LLM 出力の title / content の検証用型。前後の空白を除き、長さ上限は保存先の事実と同じにする。
 # Validation types for the LLM's title/content: whitespace is stripped and length limits match the stored fact.
@@ -114,6 +127,14 @@ Never extract:
 - restatements of what the user is doing in this very turn
 - secrets such as passwords, API keys, tokens, authentication codes, or private keys
 
+Sensitive personal information:
+- Categories:
+{sensitive_categories}
+- Extract a fact about the user in these categories only when user_message itself asks to remember it (e.g. "remember that ...", "keep in mind ...", "覚えておいて", "記憶して", "今後これを前提にして"). Otherwise never extract it, even as a lasting fact. An assistant's promise to remember, or an inferred request, does not count. All other rules still apply.
+- Only the user's own attributes count, not money-related projects, health or religion as a profession or field of study, or other people.
+- For a candidate in these categories, set sensitive_category to one name from the list and request_evidence to one contiguous span copied verbatim from user_message in which the user asks to remember it; without a valid request_evidence it is discarded. For all other candidates omit both fields or set them to null, never "none" or another value.
+- Dietary restrictions are not sensitive: avoided foods, food allergies or intolerances, and diet styles (vegetarian, vegan, halal) are ordinary preferences. Record what is avoided, but never write the underlying illness (e.g. diabetes) or faith (e.g. Muslim) in the fact unless the user asked to remember it. When possible, quote as evidence only the part naming the avoided food.
+
 Evidence requirement:
 - Every candidate must carry an evidence field: one contiguous span copied verbatim from user_message that by itself states the lasting relationship.
 - Copy the span exactly as written, with no ellipses, edits, translation, or joining of separate parts. Keep it at most {evidence_quote_chars} characters.
@@ -126,12 +147,19 @@ Examples:
 - user_message: "I use Rust for my ongoing compiler project and want future code examples in Rust." -> extract the ongoing project context and standing language preference
 - user_message: "深海魚って気になるんだけど、どんな種類がいるの？" -> {"candidates":[]}
 - user_message: "深海魚の研究を仕事にしていて、今後も種類ごとの資料をまとめていきたい。" -> extract the user's occupation and ongoing documentation project
+- user_message: "I have type 2 diabetes. What should I eat for dinner?" -> {"candidates":[]}
+- user_message: "花粉症で春はつらいんだよね。おすすめの対策は？" -> {"candidates":[]} (mild health is still health; hay fever is not a dietary restriction)
+- user_message: "I'm on antidepressants." with assistant_response: "I'll remember that." -> {"candidates":[]}
+- user_message: "I have type 2 diabetes. Please remember that." -> {"candidates":[{"fact_type":"profile","title":"Type 2 diabetes","content":"The user has type 2 diabetes.","evidence":"I have type 2 diabetes","importance":90,"confidence":0.95,"sensitive_category":"health","request_evidence":"Please remember that"}]}
+- user_message: "I don't eat pork for religious reasons; leave it out of recipes from now on." -> extract only the preference to avoid pork, with no sensitive fields and no mention of religion (evidence: "I don't eat pork")
+- user_message: "I'm building a household budget app and will keep working on it." -> extract the project as usual (money-related, not the user's own finances)
+- user_message: "I'm a nurse; keep my future answers at a clinical level." -> extract as usual (a profession is not the user's own health)
 
 Language:
 - For language selection, the user's latest substantive message is the text in user_message, not the JSON wrapper, assistant_response, or these instructions. The interface language is only a fallback when user_message has no discernible language.
 - Write title, content, and any other user-visible text in that language, applying this policy to user_message:
 {language_policy}
-- The evidence field is the only exception: it is a verbatim copy of the user's own text and must never be translated or rewritten.
+- The evidence and request_evidence fields are the only exceptions: they are verbatim copies of the user's own text and must never be translated or rewritten.
 - Never default to English because these instructions are in English.
 - Unless user_message explicitly requests another output language, an English user_message requires English title and content; a Japanese user_message requires Japanese title and content, regardless of the interface language. Check this before returning the JSON.
 
@@ -154,10 +182,17 @@ def build_extraction_system_prompt(locale: Any = None) -> str:
 
     Build the extraction prompt so candidates follow the user's substantive message language.
     """
-    return EXTRACTION_SYSTEM_PROMPT_TEMPLATE.replace(
-        "{language_policy}",
-        build_response_language_policy(locale),
-    ).replace("{evidence_quote_chars}", str(EVIDENCE_QUOTE_GUIDANCE_CHARS))
+    sensitive_categories = "\n".join(
+        f"  - {name}: {description}" for name, description in SENSITIVE_CATEGORY_DESCRIPTIONS.items()
+    )
+    return (
+        EXTRACTION_SYSTEM_PROMPT_TEMPLATE.replace(
+            "{language_policy}",
+            build_response_language_policy(locale),
+        )
+        .replace("{evidence_quote_chars}", str(EVIDENCE_QUOTE_GUIDANCE_CHARS))
+        .replace("{sensitive_categories}", sensitive_categories)
+    )
 
 
 # LLM が返す候補 1 件の厳格な検証モデル（余分なキーや型の曖昧さを許さない）。docstring はそのままにする。
@@ -174,6 +209,12 @@ class ExtractedContextCandidate(BaseModel):
     evidence: str = Field(default="", max_length=MAX_CANDIDATE_EVIDENCE_LENGTH, strict=True)
     importance: int = Field(ge=0, le=100, strict=True)
     confidence: float = Field(ge=0.0, le=1.0, strict=True)
+    # 機微なカテゴリに当たる候補だけが持つ。検証にだけ使い、exclude=True で保存する候補（model_dump）には含めない。
+    # sensitive_category は一覧に無い値でも検証エラーにしない（応答全体を捨てず、その候補だけを機微として扱う）。
+    # Carried only by candidates in a sensitive category; used for validation only and excluded from model_dump.
+    # An unlisted sensitive_category is not a validation error: that candidate alone is treated as sensitive.
+    sensitive_category: str | None = Field(default=None, strict=True, exclude=True)
+    request_evidence: str | None = Field(default=None, max_length=MAX_CANDIDATE_EVIDENCE_LENGTH, strict=True, exclude=True)
 
 
 # LLM 応答全体の外枠。1 ターンで受け付ける候補数の上限をここで強制する。
@@ -205,20 +246,32 @@ def _normalized_for_evidence_match(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).split()).casefold()
 
 
-def _is_grounded_in_user_message(
+def _is_span_in_user_message(span: str | None, normalized_user_message: str) -> bool:
+    """ユーザー自身の発話からそのまま引用した一節かを確認する。evidence と、機微な内容の記憶を頼んだ一節（request_evidence）の
+    両方がこの照合を使う。正規化（NFKC・空白圧縮・大文字小文字無視）した上で、user_message に含まれるかを確認する。
+
+    Check that a span is a verbatim quote of the user's own words. Both evidence and request_evidence (the span in which the
+    user asks to remember sensitive information) use this check. Both sides are normalized (NFKC, collapsed whitespace,
+    casefolded) before the containment check.
+    """
+    normalized_span = _normalized_for_evidence_match(span or "")
+    if not normalized_span:
+        return False
+    return normalized_span in normalized_user_message
+
+
+def _is_sensitive_request_grounded(
     candidate: ExtractedContextCandidate,
     normalized_user_message: str,
 ) -> bool:
-    """すべての候補に、ユーザー自身の発話からそのまま引用した根拠（evidence）があることを求める。
-    正規化（NFKC・空白圧縮・大文字小文字無視）した上で、user_message に含まれるかを確認する。
+    """機微なカテゴリに当たる候補は、記憶を頼んだ一節が本人の発話に在るときだけ通す。カテゴリに当たらない候補は常に通す。
 
-    Require a verbatim span of the user's own words behind every candidate.
-    Both sides are normalized (NFKC, collapsed whitespace, casefolded) before the containment check.
+    A candidate in a sensitive category passes only when the span asking to remember it is in the user's own message;
+    a candidate outside the categories always passes.
     """
-    evidence = _normalized_for_evidence_match(candidate.evidence)
-    if not evidence:
-        return False
-    return evidence in normalized_user_message
+    if candidate.sensitive_category is None:
+        return True
+    return _is_span_in_user_message(candidate.request_evidence, normalized_user_message)
 
 
 def extract_context_candidates(
@@ -229,12 +282,15 @@ def extract_context_candidates(
     llm_json_response: Callable[[list[dict[str, str]], str], str | None] | None = None,
 ) -> list[dict[str, Any]]:
     """直近の完了ターンから、信頼度が高く秘密情報を含まない候補を抽出して辞書のリストで返す。
-    LLM 応答が空・不正なら空リスト。信頼度・重要度・発話根拠・秘密情報・重複の順に絞り込む。
+    LLM 応答が空・不正なら空リスト。信頼度・重要度・発話根拠・機微な内容の依頼・秘密情報・重複の順に絞り込む。
+    機微なカテゴリに当たる候補は、記憶を頼んだ一節（request_evidence）が本人の発話に在るときだけ残し、その一節とカテゴリは返さない。
     照合に使った発話の一節（evidence）は、出典として保存できるよう各候補に残す。llm_json_response はテスト用の差し替え口。
 
     Extract high-confidence, non-secret candidates from the latest completed turn.
     Returns an empty list when the LLM response is empty or invalid. Candidates are filtered by confidence,
-    importance, verbatim evidence, secrets and duplicates; the evidence span used for the check stays on each
+    importance, verbatim evidence, the request to remember sensitive content, secrets and duplicates. A candidate in a
+    sensitive category is kept only when the span asking to remember it (request_evidence) is in the user's own message,
+    and neither that span nor the category is returned. The evidence span used for the check stays on each
     candidate so it can be stored as the source. llm_json_response is an injection point for tests.
     """
     bounded_user_message = str(user_message or "")[:MAX_EXTRACTION_USER_MESSAGE_CHARS]
@@ -270,8 +326,11 @@ def extract_context_candidates(
             continue
         if candidate.importance < MIN_CONTEXT_CANDIDATE_IMPORTANCE:
             continue
-        if not _is_grounded_in_user_message(candidate, normalized_user_message):
+        if not _is_span_in_user_message(candidate.evidence, normalized_user_message):
             logger.debug("Dropped a context candidate without verbatim user evidence.")
+            continue
+        if not _is_sensitive_request_grounded(candidate, normalized_user_message):
+            logger.debug("Dropped a sensitive context candidate the user did not ask to remember.")
             continue
         if _contains_obvious_secret(candidate):
             continue
