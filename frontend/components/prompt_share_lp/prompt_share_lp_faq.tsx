@@ -1,6 +1,7 @@
 // プロンプト共有の紹介ページ（/prompt_share/lp）のよくある質問セクションと、その質問データ（日英）。データは pages/prompt_share/lp.tsx の構造化データ（FAQPage）にも使われる。
 // FAQ section of the prompt-share introduction page (/prompt_share/lp) and its Japanese / English question data. The data also feeds the FAQPage structured data in pages/prompt_share/lp.tsx.
 import { useTranslation } from "../../contexts/locale_context";
+import { LpFaqSection } from "../lp/lp_faq_section";
 
 // プロンプト共有ページのFAQ。JSON-LDと表示の両方でこのデータを使う
 // FAQ for the prompt sharing page; this data feeds both JSON-LD and the visible UI
@@ -69,29 +70,20 @@ export function PromptShareLpFaq() {
   const isEn = locale === "en";
   const items = isEn ? PROMPT_SHARE_LP_FAQ_ITEMS_EN : PROMPT_SHARE_LP_FAQ_ITEMS;
   return (
-    <section id="faq" className="lp-section lp-faq" aria-labelledby="pslp-faq-heading">
-      <div className="lp-container">
-        <p className="lp-eyebrow">{isEn ? "FREQUENTLY ASKED QUESTIONS" : "よくある質問"}</p>
-        <h2 id="pslp-faq-heading" className="lp-heading">
-          {isEn ? (
-            <>Questions people ask before posting.</>
-          ) : (
-            <>
-              投稿する前に、
-              <br className="lp-br-sp" />
-              よく聞かれること。
-            </>
-          )}
-        </h2>
-        <dl className="lp-faq__list">
-          {items.map((item) => (
-            <div key={item.question} className="lp-faq__item">
-              <dt className="lp-faq__question">{item.question}</dt>
-              <dd className="lp-faq__answer">{item.answer}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-    </section>
+    <LpFaqSection
+      headingId="pslp-faq-heading"
+      items={items}
+      heading={
+        isEn ? (
+          <>Questions people ask before posting.</>
+        ) : (
+          <>
+            投稿する前に、
+            <br className="lp-br-sp" />
+            よく聞かれること。
+          </>
+        )
+      }
+    />
   );
 }
