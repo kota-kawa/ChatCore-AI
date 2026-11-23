@@ -1,5 +1,5 @@
-/* 「新規投稿」ボタンの起動アニメーション（keyframes）と、動きを抑える設定への対応をまとめる。ボタン本体の指定は prompt_share.modals-composer.css にある。
-   Launch-animation keyframes for the "new prompt" button and their reduced-motion handling; the button rules themselves live in prompt_share.modals-composer.css. */
+/* プロンプト共有ページで、動きを減らす設定のユーザー向けに遷移とアニメーションを止める指定をまとめる。
+   Reduced-motion handling for the prompt share page: transitions, animations and hover/active transforms are stopped. */
 /*
  * グローバルなサポートAIエージェントの見た目は styles/globals.css に集約する。
  * このページ固有の body クラスは、アプリ全体で共有するエージェントにも付くため、
@@ -10,66 +10,6 @@
  * (ai-agent-* / mini-chat-*).
  */
 
-/* ボタン内アイコンの回転（行き過ぎてから戻る弾み付き）。
-   Spin of the icon inside the button, with an overshoot-and-settle bounce. */
-@keyframes newPromptIconSpin {
-  0%   { transform: rotate(0deg) scale(1); }
-  30%  { transform: rotate(200deg) scale(1.15); }
-  60%  { transform: rotate(325deg) scale(0.92); }
-  78%  { transform: rotate(372deg) scale(1.05); }
-  90%  { transform: rotate(352deg) scale(0.98); }
-  100% { transform: rotate(360deg) scale(1); }
-}
-
-/* ボタン本体の押し込みから跳ね上がる動き。
-   Press-down then pop-up motion of the button itself. */
-@keyframes newPromptButtonLaunch {
-  0% {
-    transform: scale(1);
-  }
-  24% {
-    transform: scale(0.94);
-  }
-  58% {
-    transform: scale(1.08) translateY(-2px);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-/* ボタンの外側へ広がって消える波紋。
-   Ripple that expands outward from the button and fades. */
-@keyframes newPromptButtonPulse {
-  0% {
-    opacity: 0;
-    transform: scale(0.84);
-  }
-  28% {
-    opacity: 0.52;
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.42);
-  }
-}
-
-/* ボタン上を左から右へ流れる光沢。
-   Sheen sweeping across the button from left to right. */
-@keyframes newPromptButtonSheen {
-  0% {
-    opacity: 0;
-    transform: translateX(-120%) skewX(-18deg);
-  }
-  16% {
-    opacity: 0.9;
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(120%) skewX(-18deg);
-  }
-}
-
 /* 動きを減らす設定のユーザーには、遷移とアニメーションをほぼ無効化し、ホバー・押下時の変形も止める。
    For users who prefer reduced motion, effectively disable transitions/animations and stop hover/active transforms. */
 @media (prefers-reduced-motion: reduce) {
@@ -77,13 +17,7 @@
   .prompt-share-page .prompt-card,
   .prompt-share-page .prompt-action-btn,
   .prompt-share-page .meatball-menu,
-  .prompt-share-page .prompt-actions-dropdown,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn::before,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn::after,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn.launching,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn i,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn i.rotating {
+  .prompt-share-page .prompt-actions-dropdown {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
@@ -93,9 +27,7 @@
   .prompt-share-page .prompt-action-btn:hover,
   .prompt-share-page .meatball-menu:hover,
   .prompt-share-page .prompt-action-btn:active,
-  .prompt-share-page .meatball-menu:active,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn:hover,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn:active {
+  .prompt-share-page .meatball-menu:active {
     transform: none;
     filter: none;
     box-shadow: var(--ps-fab-blue-shadow);
@@ -105,9 +37,5 @@
   .prompt-share-page .prompt-actions-dropdown,
   .prompt-share-page .prompt-actions-dropdown.is-open {
     transform: none;
-  }
-
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn i.rotating {
-    animation: none;
   }
 }

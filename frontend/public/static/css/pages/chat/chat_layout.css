@@ -717,11 +717,4 @@
     display: flex;
     align-items: center;
   }
-
-  /* スクロールトゥボトムボタン: 入力欄より上に出す */
-  :where(body.chat-page, .chat-page-shell) .scroll-to-bottom-btn {
-    bottom: calc(5.2rem + env(safe-area-inset-bottom, 0px));
-    width: 2.5rem;
-    height: 2.5rem;
-  }
 }

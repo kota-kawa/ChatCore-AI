@@ -220,8 +220,6 @@
   background: #1f2937;
 }
 
-[data-theme="dark"] .prompt-share-page .prompt-loading-message,
-
 [data-theme="dark"] .prompt-share-page .prompt-feedback,
 
 [data-theme="dark"] .prompt-share-page .prompt-cards > p {
@@ -338,16 +336,6 @@
    Dark colors for the post form fields, the load-more button and the auth button. */
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .form-label {
   color: #e5e7eb;
-}
-
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .form-control {
-  background: #1e293b;
-  border-color: #334155;
-  color: #f3f4f6;
-}
-
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .form-control:focus {
-  border-color: #3b82f6;
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-load-more {
