@@ -130,7 +130,7 @@ class EvidenceStoreTestCase(unittest.TestCase):
         )[0]
 
         partial = store.execute_get_evidence(
-            {"evidence_ids": [reference["evidence_id"], "ref_missing"]}
+            {"evidence_ids": [reference["evidence_id"], reference["evidence_id"], "ref_missing"]}
         )
         invalid = store.execute_get_evidence({"evidence_ids": []})
         not_an_array = store.execute_get_evidence({"evidence_ids": "ref_x"})
@@ -141,6 +141,8 @@ class EvidenceStoreTestCase(unittest.TestCase):
         self.assertEqual(partial["status"], "partial")
         self.assertEqual(len(partial["evidence"]), 1)
         self.assertEqual(partial["missing_ids"], ["ref_missing"])
+        partial["evidence"][0]["item"]["content"] = "changed"
+        self.assertEqual(store.get(reference["evidence_id"])["item"]["content"], "body")
         self.assertEqual(invalid["status"], "invalid_arguments")
         self.assertEqual(not_an_array["status"], "invalid_arguments")
         self.assertEqual(too_many["status"], "invalid_arguments")
