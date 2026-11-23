@@ -24,7 +24,7 @@
 ## バックエンド ↔ フロントエンドのスキーマ同期
 - API のリクエスト/レスポンスモデル（`services/request_models.py` などの Pydantic モデル）を変更したら、`frontend/` で `npm run generate:api-schemas`（内部で `python3 scripts/generate_frontend_zod_schemas.py` を実行）を走らせて Zod スキーマを再生成してください。
 - 生成物 `frontend/types/generated/api_schemas.ts` は自動生成ファイル（`AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.`）です。手で編集せず、必ず生成コマンドで更新してください。
-- モデル変更時にスキーマ再生成を忘れると、フロントとバックエンドの型がずれて実行時エラーの原因になります。PR には再生成済みの差分を含めてください。
+- 再生成を忘れるとフロントとバックエンドの型がずれて実行時エラーの原因になるため、CI（`Frontend Static Checks`）が再生成し、コミット済みの生成物と差分があれば失敗します。PR には再生成済みの差分を含めてください。
 
 ## 共通ユーティリティと実装規約
 - エラー処理: アドホックな例外ではなく `services/api_errors.py`（`ApiServiceError`、`ResourceNotFoundError`、`ForbiddenOperationError` など）を使用し、ユーザー向け文言は `services/error_messages.py` の定数へ集約してください。
