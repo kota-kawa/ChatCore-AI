@@ -294,11 +294,6 @@ export type ChatHistoryMessagePayload = {
   sibling_ids?: number[];
 };
 
-export type ChatHistoryPaginationPayload = {
-  has_more?: boolean;
-  next_before_id?: number | null;
-};
-
 export type ChatHistoryPagination = {
   hasMore: boolean;
   nextBeforeId: number | null;

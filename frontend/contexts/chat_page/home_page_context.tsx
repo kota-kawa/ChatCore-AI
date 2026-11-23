@@ -1,6 +1,7 @@
 // ホーム画面（pages/index.tsx）のコントローラー（useHomePageController）の戻り値を、用途別の Context に分けて配る。必要な値が変わった部分だけが再描画されるようにする。
 // Distributes the home page controller (useHomePageController) state through purpose-specific contexts, so only the parts whose values changed re-render.
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, type Context, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
+import { useRequiredContext } from "../../hooks/use_required_context";
 
 // SSR では useEffect、ブラウザでは useLayoutEffect を使う（SSR 時の警告を避けるため）
 // useEffect on the server and useLayoutEffect in the browser (avoids the SSR warning)
@@ -550,22 +551,16 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
   );
 }
 
-// Provider の外で使われたら、原因が分かるエラーを投げる
-// Throw a descriptive error when used outside the provider
-function useRequiredContext<T>(context: Context<T | null>, contextName: string): T {
-  const value = useContext(context);
-  if (!value) {
-    throw new Error(`${contextName} must be used within HomePageContextProvider.`);
-  }
-  return value;
-}
+// useRequiredContext のエラー文に出す、各 Context を提供する Provider の名前
+// Name of the provider that supplies these contexts, shown in the useRequiredContext error
+const HOME_PAGE_PROVIDER_NAME = "HomePageContextProvider";
 
 export function useHomePageUiContext() {
-  return useRequiredContext(HomePageUiContext, "HomePageUiContext");
+  return useRequiredContext(HomePageUiContext, "HomePageUiContext", HOME_PAGE_PROVIDER_NAME);
 }
 
 export function useHomePageChatUiContext() {
-  return useRequiredContext(HomePageChatUiContext, "HomePageChatUiContext");
+  return useRequiredContext(HomePageChatUiContext, "HomePageChatUiContext", HOME_PAGE_PROVIDER_NAME);
 }
 
 // この Context だけは null が正常値（起動中でない状態）なので、必須チェックをしない
@@ -575,17 +570,17 @@ export function useHomePageLaunchPreviewContext() {
 }
 
 export function useHomePageTaskContext() {
-  return useRequiredContext(HomePageTaskContext, "HomePageTaskContext");
+  return useRequiredContext(HomePageTaskContext, "HomePageTaskContext", HOME_PAGE_PROVIDER_NAME);
 }
 
 export function useHomePageChatContext() {
-  return useRequiredContext(HomePageChatContext, "HomePageChatContext");
+  return useRequiredContext(HomePageChatContext, "HomePageChatContext", HOME_PAGE_PROVIDER_NAME);
 }
 
 export function useHomePageSetupChatContext() {
-  return useRequiredContext(HomePageSetupChatContext, "HomePageSetupChatContext");
+  return useRequiredContext(HomePageSetupChatContext, "HomePageSetupChatContext", HOME_PAGE_PROVIDER_NAME);
 }
 
 export function useHomePageProjectContext() {
-  return useRequiredContext(HomePageProjectContext, "HomePageProjectContext");
+  return useRequiredContext(HomePageProjectContext, "HomePageProjectContext", HOME_PAGE_PROVIDER_NAME);
 }

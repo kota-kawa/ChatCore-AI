@@ -1,5 +1,8 @@
 // ランディングページのFAQセクション（JSON-LDと表示の両方でこのデータを使う）
 // FAQ section for the landing page (this data feeds both JSON-LD and the visible UI)
+import { useTranslation } from "../../contexts/locale_context";
+import { LpFaqSection } from "./lp_faq_section";
+
 export const LP_FAQ_ITEMS = [
   {
     question: "ChatCore-AIは無料で使えますか？",
@@ -37,22 +40,10 @@ export function LpFaq() {
   const { locale } = useTranslation();
   const items = locale === "en" ? LP_FAQ_ITEMS_EN : LP_FAQ_ITEMS;
   return (
-    <section id="faq" className="lp-section lp-faq" aria-labelledby="lp-faq-heading">
-      <div className="lp-container">
-        <p className="lp-eyebrow">{locale === "en" ? "FREQUENTLY ASKED QUESTIONS" : "よくある質問"}</p>
-        <h2 id="lp-faq-heading" className="lp-heading">
-          {locale === "en" ? "Questions before you get started." : "始める前に、気になること。"}
-        </h2>
-        <dl className="lp-faq__list">
-          {items.map((item) => (
-            <div key={item.question} className="lp-faq__item">
-              <dt className="lp-faq__question">{item.question}</dt>
-              <dd className="lp-faq__answer">{item.answer}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-    </section>
+    <LpFaqSection
+      headingId="lp-faq-heading"
+      items={items}
+      heading={locale === "en" ? "Questions before you get started." : "始める前に、気になること。"}
+    />
   );
 }
-import { useTranslation } from "../../contexts/locale_context";

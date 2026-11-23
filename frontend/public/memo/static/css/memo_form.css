@@ -1306,10 +1306,6 @@ html[data-cc-auth="in"] .memo-guest-intro {
   min-height: 132px;
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-control--response {
-  min-height: 200px;
-}
-
 :where(body.memo-page, .memo-page-shell) .primary-button,
 :where(body.memo-page, .memo-page-shell) .secondary-button {
   min-height: 42px;
@@ -1611,47 +1607,6 @@ html[data-cc-auth="in"] .memo-guest-intro {
   color: #5c3610;
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-response-tabs {
-  display: flex;
-  gap: 0.3rem;
-}
-
-:where(body.memo-page, .memo-page-shell) .memo-response-tab {
-  min-height: 32px;
-  border: 1px solid rgba(191, 122, 23, 0.22);
-  border-radius: 8px;
-  background: transparent;
-  color: #9a7a52;
-  padding: 0.28rem 0.65rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-:where(body.memo-page, .memo-page-shell) .memo-response-tab.is-active {
-  background: linear-gradient(135deg, var(--memo-amber) 0%, var(--memo-amber-strong) 100%);
-  color: #fffdf8;
-  border-color: transparent;
-}
-
-:where(body.memo-page, .memo-page-shell) .memo-response-tab:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-:where(body.memo-page, .memo-page-shell) .memo-preview-pane {
-  min-height: 200px;
-  border: 1px solid rgba(191, 122, 23, 0.22);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.92);
-  padding: 0.82rem 0.92rem;
-  overflow: auto;
-}
-
 /* 行間はライブエディタ（.memo-live-editor .cm-scroller）と同じ値にそろえる。プレビューと編集を
    行き来したとき、見出しの無い普通のメモで行位置が一切動かないようにするため。
    The line-height matches the live editor (.memo-live-editor .cm-scroller) so that switching
@@ -1810,14 +1765,6 @@ html[data-cc-auth="in"] .memo-guest-intro {
 :where(body.memo-page, .memo-page-shell) .memo-format-toolbar__btn:focus-visible {
   outline: 2px solid var(--modal-accent, var(--memo-amber-strong));
   outline-offset: -2px;
-}
-
-:where(body.memo-page, .memo-page-shell) .memo-preview-empty {
-  color: var(--memo-text-muted);
-  font-size: 0.88rem;
-  font-style: italic;
-  text-align: center;
-  padding: 2rem 0;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-ai-suggest-btn {
@@ -2006,17 +1953,10 @@ html[data-cc-auth="in"] .memo-guest-intro {
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-toolbar__icon-btn,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-filter-chip,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-toolbar__search-clear,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-bulk-btn,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-response-tab {
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-bulk-btn {
   background: rgba(15, 23, 42, 0.72);
   border-color: rgba(148, 163, 184, 0.24);
   color: #fbbf24;
-}
-
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-preview-pane {
-  background: rgba(15, 23, 42, 0.72);
-  border-color: rgba(148, 163, 184, 0.25);
-  color: #f8fafc;
 }
 
 /* サイドバーも本文のカードと同じダークの面にする（紺の面だと、灰色系の本文と2種類のダーク配色が隣り合う） */
@@ -2145,8 +2085,7 @@ html[data-cc-auth="in"] .memo-guest-intro {
 }
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-toolbar__icon-btn.is-active,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-filter-chip.is-active,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-response-tab.is-active {
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-filter-chip.is-active {
   background: linear-gradient(135deg, var(--memo-amber) 0%, var(--memo-amber-strong) 100%);
   color: #fffdf8;
   border-color: transparent;
@@ -2716,8 +2655,7 @@ body.memo-page {
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-filter-chip,
-:where(body.memo-page, .memo-page-shell) .memo-bulk-btn,
-:where(body.memo-page, .memo-page-shell) .memo-response-tab {
+:where(body.memo-page, .memo-page-shell) .memo-bulk-btn {
   min-height: 30px;
   border-color: #dadce0;
   background: #fff;
@@ -2729,14 +2667,12 @@ body.memo-page {
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-filter-chip:hover,
-:where(body.memo-page, .memo-page-shell) .memo-bulk-btn:hover:not(:disabled),
-:where(body.memo-page, .memo-page-shell) .memo-response-tab:hover:not(:disabled) {
+:where(body.memo-page, .memo-page-shell) .memo-bulk-btn:hover:not(:disabled) {
   background: #f8fafd;
   border-color: #bdc1c6;
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-filter-chip.is-active,
-:where(body.memo-page, .memo-page-shell) .memo-response-tab.is-active {
+:where(body.memo-page, .memo-page-shell) .memo-filter-chip.is-active {
   background: rgba(217, 119, 6, 0.1);
   color: #b45309;
   border-color: rgba(217, 119, 6, 0.34);
@@ -2952,8 +2888,7 @@ body.memo-page {
   gap: 0;
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-form--quick .memo-control,
-:where(body.memo-page, .memo-page-shell) .memo-form--quick .memo-preview-pane {
+:where(body.memo-page, .memo-page-shell) .memo-form--quick .memo-control {
   border: none;
   border-radius: 0;
   background: transparent;
@@ -2995,23 +2930,6 @@ body.memo-page {
   font-weight: 500;
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-form--quick textarea.memo-control--response {
-  min-height: 92px;
-  max-height: 520px;
-  padding: 0.55rem 1rem 0.85rem;
-  color: #202124;
-  font-size: 1rem;
-  line-height: 1.6;
-  resize: none;
-  overflow-y: auto;
-  transition: height 200ms cubic-bezier(0.2, 0, 0, 1);
-  animation: memo-quick-capture-fade-in 360ms cubic-bezier(0.2, 0, 0, 1) 60ms both;
-}
-
-:where(body.memo-page, .memo-page-shell) .memo-form--quick textarea.memo-control--response::placeholder {
-  color: #80868b;
-}
-
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture__response-header {
   padding: 0.1rem 0.6rem 0.1rem 0.85rem;
   justify-content: flex-end;
@@ -3021,12 +2939,6 @@ body.memo-page {
 @keyframes memo-quick-capture-fade-in {
   from { opacity: 0; transform: translateY(-2px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-:where(body.memo-page, .memo-page-shell) .memo-form--quick .memo-preview-pane {
-  min-height: 116px;
-  max-height: 320px;
-  padding: 0.35rem 1rem 0.85rem;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture__bottom-row {
@@ -3234,8 +3146,7 @@ body.memo-page {
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture__shortcuts i,
 :where(body.memo-page, .memo-page-shell) .primary-button,
 :where(body.memo-page, .memo-page-shell) .secondary-button,
-:where(body.memo-page, .memo-page-shell) .memo-ai-suggest-btn,
-:where(body.memo-page, .memo-page-shell) .memo-form--quick textarea.memo-control--response {
+:where(body.memo-page, .memo-page-shell) .memo-ai-suggest-btn {
     transition: none;
   }
   :where(body.memo-page, .memo-page-shell) .memo-form--quick,
@@ -3707,8 +3618,7 @@ body.memo-page {
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture__collapsed,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-card,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-form--quick .memo-control,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-form--quick .memo-preview-pane {
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-form--quick .memo-control {
   background: #202124;
 }
 
@@ -3732,8 +3642,7 @@ body.memo-page {
     0 2px 6px 2px rgba(0, 0, 0, 0.32);
 }
 
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture__title-input::placeholder,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-form--quick textarea.memo-control--response::placeholder {
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture__title-input::placeholder {
   color: #9aa0a6;
 }
 
@@ -3743,8 +3652,7 @@ body.memo-page {
 }
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-toolbar__title :is(h1, h2),
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture__title-input,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-form--quick textarea.memo-control--response {
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture__title-input {
   color: #e8eaed;
 }
 
@@ -3759,7 +3667,6 @@ body.memo-page {
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-filter-chip,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-bulk-btn,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-response-tab,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-select__trigger,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-control {
   border-color: rgba(95, 99, 104, 0.65);
@@ -3768,7 +3675,6 @@ body.memo-page {
 }
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-filter-chip.is-active,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-response-tab.is-active,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .primary-button {
   background: rgba(251, 188, 4, 0.22);
   border-color: #fbbc04;
@@ -3839,7 +3745,6 @@ body.memo-page {
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture__collapsed,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-form--quick .memo-control,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-form--quick .memo-preview-pane,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-item__dropdown,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-select__menu {
   border-color: var(--memo-border);
@@ -3872,8 +3777,7 @@ body.memo-page {
     0 14px 32px -14px rgba(0, 0, 0, 0.6);
 }
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .primary-button,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-filter-chip.is-active,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-response-tab.is-active {
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-filter-chip.is-active {
   border-color: transparent;
   background: linear-gradient(135deg, #fbbc04 0%, #f9ab00 100%);
   color: #3a2a00;
@@ -3905,7 +3809,6 @@ body.memo-page {
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-toolbar__icon-btn,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-filter-chip,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-bulk-btn,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-response-tab,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .secondary-button{
   border-color: rgba(148, 163, 184, 0.24);
   background: #232830;
@@ -3930,7 +3833,6 @@ body.memo-page {
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-toolbar__icon-btn:hover,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-filter-chip:hover,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-bulk-btn:hover:not(:disabled),
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-response-tab:hover:not(:disabled),
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .secondary-button:hover:not(:disabled) {
   border-color: rgba(251, 188, 4, 0.38);
   background: #2b323b;
@@ -3938,8 +3840,6 @@ body.memo-page {
 }
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture .memo-control,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture .memo-preview-pane,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture .memo-response-tab,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture .memo-quick-capture__bottom-row {
   border-color: transparent;
   background: transparent;
@@ -3988,21 +3888,10 @@ body.memo-page {
 }
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture .memo-control:focus,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture .memo-control:focus-visible,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture .memo-preview-pane:focus,
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture .memo-preview-pane:focus-visible {
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture .memo-control:focus-visible {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
-}
-
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture .memo-response-tab:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture .memo-response-tab.is-active {
-  background: rgba(251, 188, 4, 0.18);
-  color: var(--memo-text);
 }
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-item {
@@ -4389,7 +4278,6 @@ body.memo-page {
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-collection-item,
 :where(body.memo-page, .memo-page-shell) .memo-toolbar__icon-btn,
 :where(body.memo-page, .memo-page-shell) .memo-filter-chip,
-:where(body.memo-page, .memo-page-shell) .memo-collection-chip,
 :where(body.memo-page, .memo-page-shell) .memo-item__action,
 :where(body.memo-page, .memo-page-shell) .primary-button {
     transition-property: background, border-color, color, box-shadow;
@@ -4402,15 +4290,12 @@ body.memo-page {
 :where(body.memo-page, .memo-page-shell) .memo-toolbar__icon-btn:active,
 :where(body.memo-page, .memo-page-shell) .memo-filter-chip:hover,
 :where(body.memo-page, .memo-page-shell) .memo-filter-chip:active,
-:where(body.memo-page, .memo-page-shell) .memo-collection-chip:hover,
-:where(body.memo-page, .memo-page-shell) .memo-collection-chip:active,
 :where(body.memo-page, .memo-page-shell) .memo-item__action:active:not(:disabled),
 :where(body.memo-page, .memo-page-shell) .primary-button:hover:not(:disabled),
 :where(body.memo-page, .memo-page-shell) .primary-button:active:not(:disabled),
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-toggle:active,
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-manage-btn:active,
 :where(body.memo-page, .memo-page-shell) .memo-toolbar__search-clear:active,
-:where(body.memo-page, .memo-page-shell) .memo-toolbar__clear:active,
 :where(body.memo-page, .memo-page-shell) .memo-select__trigger:active,
 :where(body.memo-page, .memo-page-shell) .memo-item__pin:active {
     transform: none;
@@ -5158,18 +5043,6 @@ body.memo-page {
   color: var(--modal-danger);
 }
 
-.memo-modal-scope .memo-context-modal__btn--danger {
-  border-color: var(--modal-danger);
-  background: var(--modal-danger);
-  color: #ffffff;
-}
-
-.memo-modal-scope .memo-context-modal__btn--danger:hover:not(:disabled) {
-  border-color: var(--modal-danger);
-  background: var(--modal-danger);
-  filter: brightness(0.92);
-}
-
 /* 持ち運びモーダルの本文は注意帯と節を縦に積む / The portability body stacks the notice and sections */
 .memo-context-portability .cc-modal__body {
   display: flex;
@@ -5283,14 +5156,6 @@ body.memo-page {
   background: var(--memo-detail-color);
   border-color: color-mix(in srgb, var(--memo-detail-color) 70%, rgba(32, 33, 36, 0.3));
   color: var(--modal-text);
-}
-
-.memo-modal .memo-modal__title {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  min-height: 40px;
 }
 
 /* font-size を変えるときは base/form_zoom_guard.css の書き戻しも同じ値に揃えること。
@@ -5678,10 +5543,6 @@ body.memo-page {
 .memo-modal .memo-preview-content {
   max-width: 76ch;
   color: var(--modal-text);
-}
-
-.memo-modal .memo-preview-empty {
-  color: var(--modal-text-muted);
 }
 
 .memo-modal .memo-modal__state {
@@ -6763,13 +6624,6 @@ body.memo-page {
 }
 
 /* ── コレクション管理モーダル / Collection management modal ─────────── */
-.memo-collection-modal .memo-collection-create__footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-}
 
 .memo-collection-modal .memo-collection-create__color-row {
   display: flex;
@@ -7808,7 +7662,6 @@ body.memo-page {
 }
 
 .memo-modal-scope .cc-modal__close,
-:where(body.memo-page, .memo-page-shell) .memo-response-tab,
 :where(body.memo-page, .memo-page-shell) .memo-select__trigger,
 :where(body.memo-page, .memo-page-shell) .primary-button,
 :where(body.memo-page, .memo-page-shell) .secondary-button {
@@ -8327,18 +8180,6 @@ body.memo-page {
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
-  }
-
-  body.memo-page .memo-compose-sheet .memo-form--quick textarea.memo-control--response,
-  body.memo-page .memo-compose-sheet .memo-form--quick .memo-preview-pane {
-    flex: 1;
-    height: 100%;
-    min-height: 0;
-    max-height: none;
-    margin: 0;
-    overflow-y: auto;
-    animation: none;
-    transition: none;
   }
 
   body.memo-page .memo-compose-sheet .memo-format-toolbar {

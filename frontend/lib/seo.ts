@@ -123,6 +123,15 @@ export function truncateSeoText(value: string, maxLength = 140) {
 }
 
 /**
+ * 空白を畳まずに、最大文字数で切り詰めて「…」を付ける（共有ページの meta description 用）
+ * Truncate to a maximum length with "…" without collapsing whitespace (for shared-page meta descriptions)
+ */
+export function truncateMetaText(value: string, maxLength = 140) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+/**
  * JSON-LD用スクリプトのコンテンツをエスケープして生成する
  * Generate and escape script content for JSON-LD
  */

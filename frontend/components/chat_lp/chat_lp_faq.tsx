@@ -1,6 +1,7 @@
 // AIチャット紹介ページのよくある質問。日本語・英語の質問データと、それを表示するセクションを持つ。構造化データ（FAQPage）にも使われる。
 // FAQ of the AI chat landing page: Japanese and English question data plus the section that renders them; also feeds the FAQPage structured data.
 import { useTranslation } from "../../contexts/locale_context";
+import { LpFaqSection } from "../lp/lp_faq_section";
 
 // AIチャットページのFAQ。JSON-LDと表示の両方でこのデータを使う
 // FAQ for the AI chat page; this data feeds both JSON-LD and the visible UI
@@ -69,29 +70,20 @@ export function ChatLpFaq() {
   const isEn = locale === "en";
   const items = isEn ? CHAT_LP_FAQ_ITEMS_EN : CHAT_LP_FAQ_ITEMS;
   return (
-    <section id="faq" className="lp-section lp-faq" aria-labelledby="cslp-faq-heading">
-      <div className="lp-container">
-        <p className="lp-eyebrow">{isEn ? "FREQUENTLY ASKED QUESTIONS" : "よくある質問"}</p>
-        <h2 id="cslp-faq-heading" className="lp-heading">
-          {isEn ? (
-            <>Questions people ask before the first message.</>
-          ) : (
-            <>
-              最初の1通を送る前に、
-              <br className="lp-br-sp" />
-              よく聞かれること。
-            </>
-          )}
-        </h2>
-        <dl className="lp-faq__list">
-          {items.map((item) => (
-            <div key={item.question} className="lp-faq__item">
-              <dt className="lp-faq__question">{item.question}</dt>
-              <dd className="lp-faq__answer">{item.answer}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-    </section>
+    <LpFaqSection
+      headingId="cslp-faq-heading"
+      items={items}
+      heading={
+        isEn ? (
+          <>Questions people ask before the first message.</>
+        ) : (
+          <>
+            最初の1通を送る前に、
+            <br className="lp-br-sp" />
+            よく聞かれること。
+          </>
+        )
+      }
+    />
   );
 }

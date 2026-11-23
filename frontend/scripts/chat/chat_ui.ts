@@ -4,13 +4,12 @@
 import hljs from "highlight.js";
 import { Marked } from "marked";
 
-import { getSharedDomRefs } from "../core/dom";
-import { isRecord } from "../core/runtime_validation";
+import { escapeHtml } from "../core/html";
+import { isRecord } from "../../lib/utils";
 import { parseCopyBlockInfo, renderCopyBlockHtml } from "./copy_block_markdown";
 import { formatMathExpressionForDisplay, looksLikeLooseMathLine } from "./math_display";
 import { stripWebSearchArtifacts } from "./memo_text";
 import { sanitizeMessageHtml } from "./message_utils";
-import { initMessageCopyButtons } from "./message_copy_buttons";
 
 type MarkedParseOptions = {
   async?: boolean;
@@ -61,15 +60,6 @@ function readMarkedCodeToken(token: unknown) {
 
 function stripInvisibleCharacters(value: string) {
   return value.replace(/[\u200B-\u200D\u2060\uFEFF]/g, "");
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function protectSelectedReferenceMarkers(text: string) {
@@ -504,26 +494,6 @@ function ensureMarkedParser() {
   return Promise.resolve();
 }
 
-/* チャット画面を表示（セットアップ画面を隠す） */
-function showChatInterface() {
-  const { setupContainer, chatContainer } = getSharedDomRefs();
-  if (!setupContainer || !chatContainer) return;
-
-  setupContainer.setAttribute("data-visible", "false");
-  chatContainer.setAttribute("data-visible", "true");
-
-  // Markdown パーサはチャット画面表示時に遅延読み込みする
-  if (!markdownEnhancementDisabled) void ensureMarkedParser();
-}
-
-/* タイピングインジケータ */
-function showTypingIndicator() {
-  getSharedDomRefs().chatMessages?.setAttribute("aria-busy", "true");
-}
-function hideTypingIndicator() {
-  getSharedDomRefs().chatMessages?.removeAttribute("aria-busy");
-}
-
 /* LLM 出力の Markdown を HTML に変換 */
 function formatLLMOutput(text: string) {
   const normalized = normalizeLLMTextForDisplay(protectSelectedReferenceMarkers(text));
@@ -595,87 +565,4 @@ function formatUserInputForDisplay(text: string) {
   return html;
 }
 
-/*  サイドバートグル処理  */
-function isOverlaySidebarViewport() {
-  return window.matchMedia("(max-width: 960px)").matches;
-}
-
-function setSidebarOpen(isOpen: boolean) {
-  const sb = document.querySelector(".sidebar");
-  const toggleButton = document.getElementById("sidebar-toggle");
-  if (!sb) return;
-
-  const shouldOpen = isOverlaySidebarViewport() ? isOpen : false;
-  sb.classList.toggle("open", shouldOpen);
-  document.body.classList.toggle("sidebar-visible", shouldOpen);
-  toggleButton?.setAttribute("aria-expanded", String(shouldOpen));
-}
-
-function toggleSidebar() {
-  const sb = document.querySelector(".sidebar");
-  if (!sb) return;
-  setSidebarOpen(!sb.classList.contains("open"));
-}
-
-function closeSidebar() {
-  setSidebarOpen(false);
-}
-
-let sidebarToggleInitialized = false;
-let sidebarToggleAbortController: AbortController | null = null;
-
-function onSidebarToggleButtonClick(e: Event) {
-  e.stopPropagation();
-  toggleSidebar();
-}
-
-function onSidebarOutsideClick(e: Event) {
-  const target = e.target as Element | null;
-  if (
-    document.body.classList.contains("sidebar-visible") &&
-    target &&
-    !target.closest(".sidebar") &&
-    !target.closest("#sidebar-toggle")
-  ) {
-    closeSidebar();
-  }
-}
-
-const initSidebarToggle = () => {
-  if (sidebarToggleInitialized) return;
-  sidebarToggleInitialized = true;
-
-  sidebarToggleAbortController?.abort();
-  sidebarToggleAbortController = new AbortController();
-  const { signal } = sidebarToggleAbortController;
-
-  const sbBtn = document.getElementById("sidebar-toggle");
-  sbBtn?.setAttribute("aria-expanded", "false");
-
-  sbBtn?.addEventListener("click", onSidebarToggleButtonClick, { signal });
-
-  // オーバーレイ／リンクタップで閉じる
-  document.addEventListener("click", onSidebarOutsideClick, { signal });
-
-  window.addEventListener("resize", closeSidebar, { signal });
-};
-
-let chatUiInitialized = false;
-
-function initChatUi() {
-  if (chatUiInitialized) return;
-  chatUiInitialized = true;
-  initSidebarToggle();
-  initMessageCopyButtons();
-}
-
-export {
-  initChatUi,
-  showChatInterface,
-  showTypingIndicator,
-  hideTypingIndicator,
-  formatLLMOutput,
-  formatMemoOutput,
-  formatUserInputForDisplay,
-  closeSidebar
-};
+export { formatLLMOutput, formatMemoOutput, formatUserInputForDisplay };
