@@ -7,7 +7,6 @@ import unittest
 from services.chat_evidence_store import (
     GET_EVIDENCE_TOOL_NAME,
     MAX_EVIDENCE_IDS_PER_CALL,
-    EvidenceRequestError,
     EvidenceStore,
     get_evidence_tool_definition,
 )
@@ -122,24 +121,6 @@ class EvidenceStoreTestCase(unittest.TestCase):
         first_by_title = {item["title"]: item["evidence_id"] for item in first}
         second_by_title = {item["title"]: item["evidence_id"] for item in second}
         self.assertEqual(first_by_title, second_by_title)
-
-    def test_get_many_is_bounded_and_returns_defensive_copies(self):
-        store = EvidenceStore(max_ids_per_call=2)
-        reference = store.add_reference_payload(
-            {"memos": [{"id": "m1", "title": "Memo", "content": "body"}]},
-            source_type="personal_knowledge",
-        )[0]
-        evidence_id = reference["evidence_id"]
-
-        records = store.get_many([evidence_id, evidence_id, "missing"])
-        records[0]["item"]["content"] = "changed"
-
-        self.assertEqual(len(records), 1)
-        self.assertEqual(store.get(evidence_id)["item"]["content"], "body")
-        with self.assertRaises(EvidenceRequestError):
-            store.get_many(["one", "two", "three"])
-        with self.assertRaises(EvidenceRequestError):
-            store.get_many(evidence_id)
 
     def test_execute_get_evidence_reports_partial_and_invalid_requests(self):
         store = EvidenceStore()

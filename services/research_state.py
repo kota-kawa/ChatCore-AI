@@ -391,17 +391,6 @@ class TurnState:
         if isinstance(update.get("ready_to_answer"), bool):
             self.ready_to_answer = update["ready_to_answer"]
 
-    def evidence_lookup(self, evidence_id: str) -> tuple[tuple[str, str], ...]:
-        """外部から再取得するための ``(search_id, external_path)`` の組を返す。
-
-        Return ``(search_id, external_path)`` coordinates for external retrieval.
-        """
-        reference = self.evidence_refs.get(evidence_id)
-        if reference is None:
-            return ()
-        external_path = reference.external_path or reference.evidence_id
-        return tuple((search_id, external_path) for search_id in reference.search_ids)
-
     def as_dict(self) -> dict[str, Any]:
         return {
             "objective": self.objective,

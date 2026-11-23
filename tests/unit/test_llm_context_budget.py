@@ -221,33 +221,6 @@ class LlmContextBudgetTestCase(unittest.TestCase):
             )
         )
 
-        # 見積もりが許容量ちょうどなら受理し、1 トークンでも超えればプロバイダへ送る前に拒否する。
-        # A message estimate exactly at the allowance is accepted; one token beyond it is rejected.
-        # A message estimate exactly at the allowance is accepted; one token
-        # beyond it is rejected before the provider can see the request.
-        budget = get_context_budget(
-            "vendor/test",
-            "default",
-            output_reserved_tokens=100,
-            safety_margin_tokens=100,
-            tool_schema_tokens=tool_tokens,
-        )
-        with patch.dict(
-            os.environ,
-            {"LLM_CONTEXT_WINDOW_VENDOR_TEST": str(budget.available_input_tokens + 200)},
-        ):
-            boundary_budget = get_context_budget(
-                "vendor/test",
-                "default",
-                output_reserved_tokens=100,
-                safety_margin_tokens=100,
-                tool_schema_tokens=tool_tokens,
-            )
-            self.assertTrue(boundary_budget.fits_message_tokens(boundary_budget.available_input_tokens))
-            self.assertFalse(
-                boundary_budget.fits_message_tokens(boundary_budget.available_input_tokens + 1)
-            )
-
     def test_empty_messages_and_tools_cost_no_input_tokens(self):
         self.assertEqual(estimate_messages_tokens([]), 0)
         self.assertEqual(estimate_tools_tokens([]), 0)

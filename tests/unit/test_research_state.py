@@ -46,7 +46,6 @@ class TurnStateTestCase(unittest.TestCase):
         reference = state.evidence_refs["ev-1"]
         self.assertEqual(execution.evidence_ids, ("ev-1",))
         self.assertEqual(reference.search_ids, ("web-1",))
-        self.assertEqual(state.evidence_lookup("ev-1"), (("web-1", "ev-1"),))
         serialized = json.dumps(state.as_dict())
         self.assertNotIn("full raw page must stay external", serialized)
 
@@ -59,10 +58,7 @@ class TurnStateTestCase(unittest.TestCase):
             [self._web_ref("ev-1")], search_id="web-2"
         )
 
-        self.assertEqual(
-            state.evidence_lookup("ev-1"),
-            (("web-1", "ev-1"), ("web-2", "ev-1")),
-        )
+        self.assertEqual(state.evidence_refs["ev-1"].search_ids, ("web-1", "web-2"))
         self.assertEqual(state.evidence_refs["ev-1"].source_type, "web")
 
     def test_model_update_replaces_semantic_state_and_can_drop_references(self):
