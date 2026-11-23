@@ -39,9 +39,6 @@ from services.repositories.admin_repository import (
 from services.repositories.admin_repository import (
     load_dashboard_data as repository_load_dashboard_data,
 )
-from services.repositories.admin_repository import (
-    quote_identifier,
-)
 from services.security import constant_time_compare
 from services.session_middleware import rotate_session_identifier
 from services.web import (
@@ -127,12 +124,6 @@ def _verify_admin_password(password: str) -> bool:
     if not ADMIN_PASSWORD or not isinstance(password, str):
         return False
     return constant_time_compare(password, ADMIN_PASSWORD)
-
-
-# SQLAlchemyのPostgreSQL識別子quoteを使って安全なSQL識別子を構築する。
-# Construct a safely quoted SQLAlchemy PostgreSQL identifier.
-def _sql_identifier(name: str):
-    return quote_identifier(name)
 
 
 # SQLフラグメント末尾のセミコロンや前後の余白を除去する関数

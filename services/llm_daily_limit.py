@@ -8,7 +8,6 @@ Counts atomically in Redis through a Lua script, falling back to in-process memo
 
 import hashlib
 import logging
-import os
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from threading import Lock
@@ -17,6 +16,7 @@ from typing import Any
 from fastapi import Request
 
 from services.cache import get_redis_client
+from services.env_settings import env_int_in_range
 
 DEFAULT_LLM_DAILY_API_LIMIT = 300
 LLM_DAILY_API_LIMIT_ENV = "LLM_DAILY_API_LIMIT"
@@ -40,20 +40,9 @@ logger = logging.getLogger(__name__)
 # 環境変数から上限値を読み込みます。無効な値の場合はデフォルト値にフォールバックします。
 # Retrieve limit value from environment variables, falling back to default on invalid values.
 def _get_limit(env_name: str, default_limit: int) -> int:
-    # 環境変数値を整数化し、異常値はデフォルトへフォールバックします。
-    # Parse limit from env and fallback to default on invalid values.
-    raw_limit = os.environ.get(env_name, str(default_limit))
-    try:
-        limit = int(raw_limit)
-    except (TypeError, ValueError):
-        logger.warning(
-            "Invalid %s value '%s'. Falling back to %s.",
-            env_name,
-            raw_limit,
-            default_limit,
-        )
-        return default_limit
-    return max(limit, 0)
+    # 異常値はデフォルトへフォールバックし、警告ログを残します。
+    # Fall back to the default on invalid values, logging a warning.
+    return env_int_in_range(env_name, default_limit, minimum=0, warn_on_invalid=True)
 
 
 # 現在時刻から翌日の深夜0時までの残り時間を秒単位で計算します。
@@ -131,8 +120,6 @@ class LlmDailyLimitService:
     # オンメモリのカウント状態をすべてクリアします。
     # Clear all in-memory counts.
     def reset_in_memory_state(self) -> None:
-        # コンテキストマネージャを使用して、必要なリソースの確保とクリーンアップを制御します。
-        # Secure and clean up the required resource using a context manager.
         with self._in_memory_lock:
             self._in_memory_daily_counts.clear()
             self._in_memory_monthly_counts.clear()
@@ -195,8 +182,6 @@ return {1, current}
     ) -> tuple[bool, int]:
         # Redis 不可時のフォールバック。期間が変わったキーを都度掃除します。
         # Fallback path when Redis is unavailable; prune stale period keys on each call.
-        # コンテキストマネージャを使用して、必要なリソースの確保とクリーンアップを制御します。
-        # Secure and clean up the required resource using a context manager.
         with self._in_memory_lock:
             period_suffix = f":{current_period}"
             stale_keys = [
@@ -327,8 +312,6 @@ return {1, current}
         self,
         current_date: str | None = None,
     ) -> tuple[bool, int, int]:
-        # 認証メール送信用の日次上限を 1 回分消費します。
-        # Consume one unit from the daily quota for auth email sending.
         return self._consume_daily_quota(
             key_prefix=_AUTH_EMAIL_DAILY_COUNT_KEY_PREFIX,
             env_name=AUTH_EMAIL_DAILY_SEND_LIMIT_ENV,

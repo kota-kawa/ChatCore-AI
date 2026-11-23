@@ -13,6 +13,7 @@ from services.logging_config import (
     APP_LOG_HANDLER_NAME,
     CONSOLE_HANDLER_NAME,
     ERROR_LOG_HANDLER_NAME,
+    _parse_positive_int_env,
     configure_logging,
 )
 
@@ -112,6 +113,18 @@ class LoggingConfigTestCase(unittest.TestCase):
             self.assertTrue(error_log.exists())
             self.assertIn("file logging smoke test", app_log.read_text(encoding="utf-8"))
             self.assertIn("file logging smoke test", error_log.read_text(encoding="utf-8"))
+
+    def test_positive_int_env_warns_and_falls_back_on_zero_or_negative(self):
+        """0 以下の設定は既定値へ戻し、設定ミスとして警告を残す / Zero or negative values fall back with a warning."""
+        for raw in ("0", "-5"):
+            with self.subTest(raw=raw), patch.dict("os.environ", {"LOG_MAX_BYTES": raw}, clear=False):
+                with self.assertLogs("services.env_settings", level="WARNING") as captured:
+                    self.assertEqual(_parse_positive_int_env("LOG_MAX_BYTES", 10), 10)
+                self.assertIn("Invalid LOG_MAX_BYTES value", captured.output[0])
+
+    def test_positive_int_env_returns_positive_value(self):
+        with patch.dict("os.environ", {"LOG_MAX_BYTES": "1024"}, clear=False):
+            self.assertEqual(_parse_positive_int_env("LOG_MAX_BYTES", 10), 1024)
 
 
 if __name__ == "__main__":

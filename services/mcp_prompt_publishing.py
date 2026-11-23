@@ -68,7 +68,6 @@ logger = logging.getLogger(__name__)
 # ChatGPT の ``openai/fileParams`` で渡されるファイル引数（ダウンロード URL とメタデータ）。
 # File parameter passed by ChatGPT's ``openai/fileParams`` (download URL and metadata).
 class OpenAIFileInput(BaseModel):
-    # openai/fileParamsで定義されるChatGPTのファイル引数payload。
     """ChatGPT file parameter payload documented for ``openai/fileParams``."""
 
     model_config = ConfigDict(extra="forbid")

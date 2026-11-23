@@ -11,7 +11,7 @@ import time
 import uuid
 from typing import Any
 
-from services.env_settings import env_float
+from services.env_settings import env_float, env_text
 
 try:
     import redis
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # 環境変数にRedis設定（URLまたはHOST）が存在するか判定する
 # Check if Redis configuration (URL or HOST) exists in environment variables
 def is_redis_configured() -> bool:
-    return bool(os.environ.get("REDIS_URL") or os.environ.get("REDIS_HOST"))
+    return bool(env_text("REDIS_URL") or env_text("REDIS_HOST"))
 
 
 # Redis が使えないと判断したときにクライアントを捨て、クールダウン中は再接続を試みないようにする
@@ -99,7 +99,7 @@ def get_redis_client() -> Any | None:
 
     # URL 指定を最優先し、未指定時は host/port/db 設定で接続する
     # Prefer REDIS_URL, otherwise build client from host/port/db settings.
-    url = os.environ.get("REDIS_URL")
+    url = env_text("REDIS_URL")
     connect_timeout = env_float(
         "REDIS_CONNECT_TIMEOUT_SECONDS",
         DEFAULT_REDIS_CONNECT_TIMEOUT_SECONDS,

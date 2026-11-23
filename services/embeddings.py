@@ -21,6 +21,7 @@ import threading
 import time
 from typing import Any
 
+from .env_settings import env_float
 from .llm import openai_client
 from .llm_usage import record_embedding_usage
 
@@ -52,14 +53,8 @@ def get_semantic_max_distance() -> float:
 
     Return the cosine-distance ceiling for semantic search.
     """
-    raw = os.environ.get("SEMANTIC_MAX_DISTANCE")
-    if raw is None:
-        return SEMANTIC_MAX_DISTANCE
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        return SEMANTIC_MAX_DISTANCE
-    return value if 0.0 < value <= 2.0 else SEMANTIC_MAX_DISTANCE
+    value = env_float("SEMANTIC_MAX_DISTANCE", SEMANTIC_MAX_DISTANCE)
+    return value if value <= 2.0 else SEMANTIC_MAX_DISTANCE
 
 
 # 連続失敗がこの回数に達したら、クールダウンの間は呼び出し自体を止める。

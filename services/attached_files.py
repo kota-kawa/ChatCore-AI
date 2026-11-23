@@ -102,8 +102,6 @@ class PreparedAttachedFile:
 # 辞書またはオブジェクトから安全に値を取得するヘルパー関数
 # Helper function to safely retrieve a value from a dict or object
 def _get_item_value(item: Any, key: str, default: str = "") -> str:
-    # 辞書型であるかオブジェクトであるかを判定して値を取得する
-    # Determine if item is a dict or object and retrieve the value
     value = item.get(key, default) if isinstance(item, dict) else getattr(item, key, default)
 
     # 取得した値が None の場合はデフォルト値を返す

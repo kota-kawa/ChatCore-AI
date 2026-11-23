@@ -13,7 +13,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from blueprints.chat.messages import _load_task_prompt_data, _parse_task_launch_message
+from blueprints.chat.messages import _load_task_prompt_data
 from blueprints.chat.tasks import (
     _add_task_for_user,
     _delete_task_for_user,
@@ -22,7 +22,11 @@ from blueprints.chat.tasks import (
     delete_task,
 )
 from services.api_errors import ResourceNotFoundError
-from services.chat_message_normalization import find_latest_task_launch_request, mark_task_launch_input_for_llm
+from services.chat_message_normalization import (
+    find_latest_task_launch_request,
+    mark_task_launch_input_for_llm,
+    parse_task_launch_message,
+)
 from services.chat_service import add_task as add_task_service
 from services.chat_service import edit_task as edit_task_service
 from tests.helpers.request_helpers import build_request
@@ -118,7 +122,7 @@ class TaskIdentityOperationsTestCase(unittest.TestCase):
         self.assertEqual(json.loads(response.body)["code"], "task_not_found")
 
     def test_task_launch_parser_accepts_optional_positive_task_id(self):
-        parsed = _parse_task_launch_message(
+        parsed = parse_task_launch_message(
             "【タスク】同名タスク\n【タスクID】42\n【状況・作業環境】テスト"
         )
         self.assertEqual(parsed, {"task": "同名タスク", "task_id": 42, "setup_info": "テスト", "task_input": "テスト"})

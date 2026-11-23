@@ -38,7 +38,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from services import http_client
 from services.chat_prompt import insert_before_latest_user_message
-from services.env_settings import env_float, env_int_in_range
+from services.env_settings import env_float, env_int_in_range, env_text
 from services.llm import LIGHTWEIGHT_TASK_MODEL, get_llm_json_response
 from services.llm_daily_limit import (
     consume_brave_web_search_monthly_quota,
@@ -301,8 +301,6 @@ _SWEDISH_HINTS = frozenset("åäöÅÄÖ")
 # 日本語: 根拠 ID を作る。URL を正規化したうえでハッシュにするので、結果の順序やターンが変わっても同じ URL は同じ ID になる。
 # English: Build an evidence ID; the URL is normalized and hashed so the same URL keeps its ID across result order and turns.
 def build_web_search_evidence_id(url: str) -> str:
-    # URLを正規化し、検索順やターンをまたいでも変わらない根拠IDを生成する
-    # Normalize a URL and derive a stable evidence ID independent of result order/turn.
     raw_url = str(url or "").strip()
     try:
         parsed = urlsplit(raw_url)
@@ -997,7 +995,7 @@ def _set_cached_search(key: str, result: WebSearchResult) -> None:
 def _infer_search_language(query: str) -> str:
     # 検索クエリの内容から言語を判定する
     # Infer search language based on query content.
-    configured = os.environ.get("BRAVE_SEARCH_LANG", "").strip()
+    configured = (env_text("BRAVE_SEARCH_LANG") or "").strip()
     if configured:
         return _normalize_brave_search_lang(configured)
     return _detect_search_language(query)
@@ -1767,7 +1765,7 @@ def search_brave_llm_context(
 ) -> WebSearchResult:
     # Brave LLM Context APIを使用して検索を実行し、結果を加工して返す
     # Perform Brave Search and enrich results.
-    api_key = os.environ.get("BRAVE_API_KEY", "").strip()
+    api_key = (env_text("BRAVE_API_KEY") or "").strip()
     if not api_key:
         raise RuntimeError("BRAVE_API_KEY is not configured.")
 
@@ -1784,7 +1782,7 @@ def search_brave_llm_context(
 
     # 明示的な運用設定を最優先し、次にプランナーが意味判断した検索言語を使う。
     # Keep the explicit deployment override first, then honor the model's tool-call language choice.
-    configured_language = os.environ.get("BRAVE_SEARCH_LANG", "").strip()
+    configured_language = (env_text("BRAVE_SEARCH_LANG") or "").strip()
     requested_language = _normalize_requested_search_language(search_language)
     if configured_language:
         language = _normalize_brave_search_lang(configured_language)
@@ -1795,7 +1793,7 @@ def search_brave_llm_context(
         # Prefer the user's language when the model writes a query without an override.
         language_source = str(language_hint or "").strip() or normalized_query
         language = _infer_search_language(language_source)
-    country = os.environ.get("BRAVE_SEARCH_COUNTRY", "JP").strip() or "JP"
+    country = (env_text("BRAVE_SEARCH_COUNTRY") or "").strip() or "JP"
     key = _cache_key(normalized_query, freshness, language, country)
     cached = _get_cached_search(key)
     if cached is not None:
@@ -1827,7 +1825,7 @@ def search_brave_llm_context(
             minimum=1,
             maximum=100,
         ),
-        "context_threshold_mode": os.environ.get("BRAVE_SEARCH_THRESHOLD", "balanced").strip() or "balanced",
+        "context_threshold_mode": (env_text("BRAVE_SEARCH_THRESHOLD") or "").strip() or "balanced",
     }
     if freshness:
         params["freshness"] = freshness

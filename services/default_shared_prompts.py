@@ -172,8 +172,6 @@ DB_RETRY_BACKOFF_SECONDS = 0.05
 # 一時的な DB エラーのときだけ、トランザクションをやり直して再試行する
 # Retries the whole transaction only on transient DB errors
 async def ensure_default_shared_prompts() -> int:
-    # サンプル投稿者配下に標準公開プロンプトを不足分だけ投入する
-    # Seed missing public sample prompts under the sample owner account.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         try:
             async with session_scope() as session, session.begin():

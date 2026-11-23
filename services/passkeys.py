@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import secrets
 import time
 from collections.abc import Awaitable, Callable
@@ -15,6 +14,7 @@ from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import is_retryable_db_error, session_scope
+from .env_settings import env_text
 from .repositories.passkey_repository import PasskeyRepository
 from .web_constants import DEFAULT_FRONTEND_URL
 from .web_urls import frontend_base_url
@@ -28,12 +28,12 @@ DB_RETRY_BACKOFF_SECONDS = 0.05
 
 
 def get_passkey_rp_name() -> str:
-    configured_name = (os.getenv("WEBAUTHN_RP_NAME") or os.getenv("PASSKEY_RP_NAME") or "").strip()
+    configured_name = (env_text("WEBAUTHN_RP_NAME") or env_text("PASSKEY_RP_NAME") or "").strip()
     return configured_name or DEFAULT_PASSKEY_RP_NAME
 
 
 def get_passkey_rp_id(request: Request) -> str:
-    configured_rp_id = (os.getenv("WEBAUTHN_RP_ID") or os.getenv("PASSKEY_RP_ID") or "").strip()
+    configured_rp_id = (env_text("WEBAUTHN_RP_ID") or env_text("PASSKEY_RP_ID") or "").strip()
     if configured_rp_id:
         return configured_rp_id
 
@@ -46,7 +46,7 @@ def get_passkey_rp_id(request: Request) -> str:
 
 
 def get_passkey_origins(request: Request) -> list[str]:
-    configured_env = (os.getenv("PASSKEY_ORIGINS") or os.getenv("WEBAUTHN_ORIGINS") or "").strip()
+    configured_env = (env_text("PASSKEY_ORIGINS") or env_text("WEBAUTHN_ORIGINS") or "").strip()
     if configured_env:
         explicit = [origin.strip() for origin in configured_env.split(",") if origin.strip()]
         if explicit:

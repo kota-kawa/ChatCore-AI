@@ -46,7 +46,6 @@ logger = logging.getLogger(__name__)
 # 認可済み MCP クライアントへ返してよいメモのメタデータ（本文は含まない）。
 # Memo metadata that may be returned to an authorized MCP client (no body).
 class McpMemoSummary(BaseModel):
-    # 認可済みMCPクライアントへ返せる非公開メモのメタデータ。
     """Private memo metadata safe to return to an authorized MCP client."""
 
     id: int

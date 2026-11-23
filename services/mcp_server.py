@@ -105,7 +105,6 @@ MCP_IMAGE_UPLOAD_OPERATION_LIMIT_PER_HOUR = 2_000
 # 公開投稿(プロンプト/SKILL)が成功したときに返す構造化結果。
 # Structured result returned after a prompt or SKILL is published.
 class McpPublishResult(BaseModel):
-    # 公開プロンプトまたはSkill投稿後に返す構造化結果。
     """Structured result returned after a public prompt or SKILL is published."""
 
     prompt_id: int = Field(description="ID of the public post created in Chat-Core")
@@ -123,7 +122,6 @@ class McpPublishResult(BaseModel):
 # チャンクアップロードの開始時に返す、ID と次の手順の案内。
 # Upload ID and next-step guidance returned when a chunked upload starts.
 class McpImageUploadSessionResult(BaseModel):
-    # 分割画像アップロードの手順と状態。
     """Instructions and state returned for a chunked image upload."""
 
     upload_id: str = Field(description="Opaque ID for this temporary image upload")

@@ -6,6 +6,7 @@ reasoning effort and output budgets) with mocked provider clients.
 """
 
 import json
+import os
 import unittest
 from types import SimpleNamespace
 from typing import ClassVar
@@ -644,7 +645,7 @@ class LlmServiceTestCase(unittest.TestCase):
 
     def test_model_constants_ignore_model_environment_variables(self):
         with patch.dict(
-            llm.os.environ,
+            os.environ,
             {
                 "GROQ_MODEL": "env-groq-model",
                 "OPENAI_DEFAULT_MODEL": "env-openai-model",

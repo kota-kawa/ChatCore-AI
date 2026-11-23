@@ -172,8 +172,6 @@ class EphemeralChatStore:
     # メモリ内の期限切れチャットルームを走査して削除します（Redis利用時はRedis側が自動制御するため不要）。
     # Scan and remove expired rooms from memory (not needed for Redis as it manages TTL automatically).
     def cleanup(self) -> None:
-        # Redis利用時はTTL管理に任せ、メモリ利用時のみ期限切れルームを掃除する
-        # Let Redis TTL handle expiry; prune expired rooms only for in-memory mode.
         redis_client = self._get_redis()
         # Redisが設定されている場合は何もしません。
         # Do nothing if Redis is configured.
@@ -500,8 +498,6 @@ class EphemeralChatStore:
         web_search_context: list[dict] | None = None,
         attached_images: list | None = None,
     ) -> bool:
-        # 指定ルームへメッセージを追記して永続化する
-        # Append a message to the room and persist updated state.
         entry = {"role": role, "content": content}
         # メッセージパーツや添付ファイルがある場合は追加のメタデータに含めます。
         # Include additional metadata if message parts or file attachments exist.

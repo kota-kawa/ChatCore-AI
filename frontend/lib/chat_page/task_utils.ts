@@ -92,7 +92,7 @@ function normalizeStoredUserMessage(message: string): string {
 }
 
 // 「【タスク】<名前>」で始まる起動メッセージからタスク名と入力（状況・作業環境）を抽出する。
-// blueprints/chat/messages.py の _parse_task_launch_message と同じ規則に揃えている。
+// services/chat_message_normalization.py の parse_task_launch_message と同じ規則に揃えている。
 // Extract the task name and setup input from a task-launch message; mirrors the backend parser.
 // 送信直後（生の改行）でも、再読込後（<br>・HTMLエスケープ済み）でも同じ結果になるようにする。
 // Produces the same result whether the text is freshly sent (raw newlines) or reloaded

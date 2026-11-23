@@ -49,7 +49,6 @@ MAX_INTERACTIVE_BUTTON_BLOCKS_PER_MESSAGE = 3
 # 日本語: 選択ボタンの定義が契約を満たさないときの例外。
 # English: Raised when a choice-buttons payload does not satisfy the contract.
 class InteractiveButtonsValidationError(ValueError):
-    # 選択ボタンのpayloadが契約を満たさないことを通知する。
     """Raised when a choice-buttons payload does not satisfy the contract."""
 
 
