@@ -26,29 +26,18 @@ from services.web import (
     require_json_dict,
     validate_payload_model,
 )
+from services.web_session import authenticated_user_id
 
 from . import chat_bp
 
 logger = logging.getLogger(__name__)
 
 
-# セッションからログイン中のユーザー ID を整数で返す。未ログインや不正な値は None。
-# Return the signed-in user id from the session as an int; None when signed out or the value is invalid.
-def _authenticated_user_id(request: Request) -> int | None:
-    user_id = request.session.get("user_id")
-    if not user_id:
-        return None
-    try:
-        return int(user_id)
-    except (TypeError, ValueError):
-        return None
-
-
 # 自分の Skill 一覧を返す。
 # List the user's own Skills.
 @chat_bp.get("/api/skills", name="chat.list_user_skills")
 async def get_user_skills(request: Request):
-    user_id = _authenticated_user_id(request)
+    user_id = authenticated_user_id(request)
     if user_id is None:
         return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 
@@ -62,7 +51,7 @@ async def get_user_skills(request: Request):
 # Add a new Skill (name and instructions).
 @chat_bp.post("/api/skills", name="chat.create_user_skill")
 async def add_user_skill(request: Request):
-    user_id = _authenticated_user_id(request)
+    user_id = authenticated_user_id(request)
     if user_id is None:
         return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 
@@ -90,7 +79,7 @@ async def add_user_skill(request: Request):
 # Enable or disable a Skill.
 @chat_bp.patch("/api/skills/{skill_id}", name="chat.update_user_skill_state")
 async def update_user_skill_state(skill_id: int, request: Request):
-    user_id = _authenticated_user_id(request)
+    user_id = authenticated_user_id(request)
     if user_id is None:
         return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 
@@ -118,7 +107,7 @@ async def update_user_skill_state(skill_id: int, request: Request):
 # Delete a Skill.
 @chat_bp.delete("/api/skills/{skill_id}", name="chat.delete_user_skill")
 async def remove_user_skill(skill_id: int, request: Request):
-    user_id = _authenticated_user_id(request)
+    user_id = authenticated_user_id(request)
     if user_id is None:
         return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 

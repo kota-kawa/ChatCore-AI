@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.chat_service import (
@@ -31,10 +31,9 @@ from .registry import (
     Proposal,
     ReadResult,
     ToolSpec,
-    WorkspaceToolArgumentError,
     WorkspaceToolError,
     build_function_definition,
-    validation_problems,
+    validated_arguments,
 )
 
 PROFILE_TOOL_FAMILY = "profile"
@@ -87,13 +86,6 @@ class ProfileSettingsUpdateArguments(_ToolArguments):
             if not self.display_name:
                 raise ValueError("display_name must not be blank")
         return self
-
-
-def _validated(model: type[_ToolArguments], arguments: dict[str, Any]) -> Any:
-    try:
-        return model.model_validate(arguments)
-    except ValidationError as exc:
-        raise WorkspaceToolArgumentError(validation_problems(exc)) from None
 
 
 async def _profile_for_user(user_id: int) -> dict[str, Any]:
@@ -176,7 +168,7 @@ def _bounded_payload(
 
 
 async def _read_profile_settings(user_id: int, arguments: dict[str, Any], max_chars: int) -> ReadResult:
-    params = _validated(ProfileSettingsReadArguments, arguments)
+    params = validated_arguments(ProfileSettingsReadArguments, arguments)
     profile = await _profile_for_user(user_id)
     payload = _bounded_payload(
         profile,
@@ -193,7 +185,7 @@ async def _read_profile_settings(user_id: int, arguments: dict[str, Any], max_ch
 
 
 async def _propose_profile_settings_update(user_id: int, arguments: dict[str, Any]) -> Proposal:
-    params = _validated(ProfileSettingsUpdateArguments, arguments)
+    params = validated_arguments(ProfileSettingsUpdateArguments, arguments)
     current = await _profile_for_user(user_id)
     values = params.model_dump(exclude_unset=True)
     preview = {"kind": PROFILE_SETTINGS_UPDATE_TOOL_NAME, **values}
@@ -220,7 +212,7 @@ async def _execute_profile_settings_update(
     if not isinstance(expected_fingerprint, str) or not expected_fingerprint:
         raise WorkspaceToolError("target_changed")
 
-    params = _validated(ProfileSettingsUpdateArguments, arguments)
+    params = validated_arguments(ProfileSettingsUpdateArguments, arguments)
     values = params.model_dump(exclude_unset=True)
     updates: dict[str, Any] = {}
     for field_name in ("display_name", "bio", "llm_profile_context", "preferred_locale"):

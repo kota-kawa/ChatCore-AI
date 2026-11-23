@@ -18,7 +18,6 @@ import contextvars
 import hashlib
 import json
 import logging
-import os
 import re
 import threading
 import time
@@ -38,7 +37,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from services import http_client
 from services.chat_prompt import insert_before_latest_user_message
-from services.env_settings import env_float, env_int_in_range, env_text
+from services.env_settings import env_enabled_unless_false, env_float, env_int_in_range, env_text
 from services.llm import LIGHTWEIGHT_TASK_MODEL, get_llm_json_response
 from services.llm_daily_limit import (
     consume_brave_web_search_monthly_quota,
@@ -509,12 +508,7 @@ WEB_SEARCH_CACHE_MAX_ENTRIES = 128
 def _web_search_enabled() -> bool:
     # 環境変数からWeb検索が有効かどうかを取得する
     # Retrieve whether web search is enabled from the environment variable.
-    return os.environ.get("CHAT_WEB_SEARCH_ENABLED", "1").strip().lower() not in {
-        "0",
-        "false",
-        "no",
-        "off",
-    }
+    return env_enabled_unless_false("CHAT_WEB_SEARCH_ENABLED")
 
 
 def is_web_search_enabled() -> bool:
@@ -1225,23 +1219,13 @@ def _parse_brave_context_response(
 def _web_search_page_fetch_enabled() -> bool:
     # 検索結果ページの本文取得機能が有効であるか判定する
     # Check if page body fetching is enabled.
-    return os.environ.get("CHAT_WEB_SEARCH_FETCH_PAGES", "1").strip().lower() not in {
-        "0",
-        "false",
-        "no",
-        "off",
-    }
+    return env_enabled_unless_false("CHAT_WEB_SEARCH_FETCH_PAGES")
 
 
 def _web_search_link_follow_enabled() -> bool:
     # ページ本文取得は維持したまま、リンク追跡だけを個別に無効化できる。
     # Allow link following to be disabled independently from root-page fetching.
-    return os.environ.get("CHAT_WEB_SEARCH_FOLLOW_LINKS", "1").strip().lower() not in {
-        "0",
-        "false",
-        "no",
-        "off",
-    }
+    return env_enabled_unless_false("CHAT_WEB_SEARCH_FOLLOW_LINKS")
 
 
 def _select_sources_for_page_fetch(

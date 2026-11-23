@@ -12,6 +12,10 @@ logger = logging.getLogger(__name__)
 # English: Strings treated as true. Case and surrounding whitespace are ignored.
 TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 
+# 日本語: 無効化の指定として扱う文字列の集合です。大文字小文字と前後の空白は無視します。
+# English: Strings that explicitly switch a feature off. Case and surrounding whitespace are ignored.
+FALSE_VALUES = frozenset({"0", "false", "no", "off"})
+
 
 # 日本語: 環境変数を文字列として取得します。未設定と空文字はどちらも未指定として扱います。
 # English: Read an environment variable as text, treating both unset and empty as unspecified.
@@ -27,6 +31,19 @@ def env_bool(name: str, default: bool = False) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() in TRUE_VALUES
+
+
+# 日本語: 環境変数を「明示的に無効化されない限り有効」な機能フラグとして取得します。偽値集合（0・false・no・off）に
+#          一致する値だけが False で、未設定・空文字は default、それ以外の値（"maybe" など）は True になります。
+#          env_bool（真値集合に一致しない値はすべて False）とは判定の向きが逆です。
+# English: Read an environment variable as a feature flag that stays enabled unless explicitly switched off. Only a value in
+#          the false set (0, false, no, off) gives False; unset and empty give default; any other value (such as "maybe")
+#          gives True. This is the opposite direction from env_bool, where anything outside the true set is False.
+def env_enabled_unless_false(name: str, default: bool = True) -> bool:
+    raw = env_text(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in FALSE_VALUES
 
 
 # 日本語: 解析に失敗した旨を必要に応じて警告ログに出力します。

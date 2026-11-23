@@ -10,7 +10,6 @@ from fastapi import Request
 from sqlalchemy.exc import SQLAlchemyError
 
 from services.error_messages import ERROR_LOGIN_REQUIRED
-from services.repositories.memo_helpers import user_id_from_session
 from services.request_models import MemoBulkActionRequest
 from services.web import (
     jsonify,
@@ -18,6 +17,7 @@ from services.web import (
     require_json_dict,
     validate_payload_model,
 )
+from services.web_session import user_id_from_session
 
 from . import memo_bp
 from ._common import _memo_attr

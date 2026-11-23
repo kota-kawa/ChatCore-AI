@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import unicodedata
 from collections.abc import Awaitable, Callable
 from hashlib import sha256
 from typing import Any, TypeVar
@@ -25,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api_errors import ApiServiceError
 from services.context_vault_embeddings import build_context_fact_embedding_text, schedule_embedding
+from services.context_vault_extraction import normalize_for_comparison
 from services.context_vault_reconcile import (
     CONTEXT_RECONCILE_MODEL,
     RECONCILE_MAX_DISTANCE,
@@ -111,14 +111,11 @@ async def _transaction(
 # 正規化（NFKC・空白圧縮・大文字小文字無視）した種別・題名・本文のハッシュ。本人が却下した候補と同じ内容を再び保存しないために使う。
 # Hash of the normalized type/title/content (NFKC, collapsed whitespace, casefolded), used to avoid saving content the owner rejected again.
 def _fingerprint(candidate: _ExtractedCandidateInput) -> str:
-    def normalized(value: str) -> str:
-        return " ".join(unicodedata.normalize("NFKC", value).split()).casefold()
-
     canonical = json.dumps(
         {
-            "content": normalized(candidate.content),
+            "content": normalize_for_comparison(candidate.content),
             "fact_type": candidate.fact_type,
-            "title": normalized(candidate.title),
+            "title": normalize_for_comparison(candidate.title),
         },
         ensure_ascii=False,
         separators=(",", ":"),

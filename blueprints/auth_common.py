@@ -79,15 +79,6 @@ def _resolve_llm_daily_limit_service(request: Request, service: Any | None) -> A
     return dep("get_llm_daily_limit_service")(request)
 
 
-# セッションの user_id が整数のときだけ返す。それ以外は未ログイン扱いの None。
-# Return the session user_id only when it is an int; otherwise None, treated as not signed in.
-def _user_id_from_session(session: dict[str, Any]) -> int | None:
-    user_id = session.get("user_id")
-    if isinstance(user_id, int):
-        return user_id
-    return None
-
-
 # ログイン成功後に既定タスクを利用者へコピーする。失敗してもログイン自体は成功させたいので、例外はログに残すだけにする。
 # Copy the default tasks to the user after sign-in; failures are only logged so they never fail the login itself.
 async def _copy_default_tasks_after_login(user_id: int, *, context: str) -> None:

@@ -11,11 +11,11 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from services.error_messages import ERROR_LOGIN_REQUIRED
-from services.repositories.memo_helpers import user_id_from_session
 from services.web import (
     jsonify,
     log_and_internal_server_error,
 )
+from services.web_session import user_id_from_session
 
 from . import memo_bp
 from ._common import _memo_attr

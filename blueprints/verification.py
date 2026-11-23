@@ -11,7 +11,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from blueprints.auth_common import _claim_guest_prompts_after_login
-from blueprints.auth_support import await_result
 from blueprints.email_auth_support import (
     clear_legacy_email_auth_session,
     email_auth_failure_response,
@@ -19,12 +18,13 @@ from blueprints.email_auth_support import (
     load_dedicated_email_auth_transaction,
 )
 from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
-from services.async_utils import run_blocking
+from services.async_utils import maybe_await, run_blocking
 from services.auth_limits import (
     AuthLimitService,
     consume_auth_email_send_limits,
     consume_verification_attempt_limit,
     get_auth_limit_service,
+    resolve_auth_limit_service,
 )
 from services.auth_session import establish_authenticated_session
 from services.csrf import require_csrf
@@ -49,6 +49,7 @@ from services.llm_daily_limit import (
     consume_auth_email_daily_quota,
     get_llm_daily_limit_service,
     get_seconds_until_daily_reset,
+    resolve_llm_daily_limit_service,
 )
 from services.request_models import AuthCodeRequest, EmailRequest
 from services.runtime_config import is_production_env
@@ -102,7 +103,7 @@ async def _verify_dedicated_registration_code(
     Consumes the attempt rate limit before checking the code; on success it marks the user verified and signs them in.
     Whether the dedicated cookie is cleared depends on the failure kind (mismatch, exhausted, expired, missing).
     """
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    resolved_auth_limit_service = resolve_auth_limit_service(request, auth_limit_service)
     allowed, limit_error = await run_blocking(
         consume_verification_attempt_limit,
         request,
@@ -125,7 +126,7 @@ async def _verify_dedicated_registration_code(
         str(user_code or ""),
     )
     if result.status == EMAIL_AUTH_RESULT_SUCCESS:
-        user = await await_result(get_user_by_id(transaction.user_id))
+        user = await maybe_await(get_user_by_id(transaction.user_id))
         if not user:
             clear_legacy_email_auth_session(request.session)
             return email_auth_failure_response(
@@ -134,8 +135,8 @@ async def _verify_dedicated_registration_code(
                 clear_cookie=True,
             )
 
-        await await_result(set_user_verified(transaction.user_id))
-        await await_result(copy_default_tasks_for_user(transaction.user_id))
+        await maybe_await(set_user_verified(transaction.user_id))
+        await maybe_await(copy_default_tasks_for_user(transaction.user_id))
         establish_authenticated_session(request, int(transaction.user_id), user["email"])
         await _claim_guest_prompts_after_login(
             request,
@@ -196,40 +197,6 @@ def _clear_registration_verification_session(session: dict) -> None:
     session.pop("verification_locale", None)
 
 
-# 渡されたAuthLimitServiceを使用するか、リクエストから新しく解決するヘルパー関数
-# Helper function to resolve the AuthLimitService from the request if not already provided.
-def _resolve_auth_limit_service(
-    request: Request,
-    service: AuthLimitService | None,
-) -> AuthLimitService:
-    """
-    引数のサービスインスタンスが有効ならそれを返し、無効ならリクエストから解決します。
-    Return the provided AuthLimitService instance if it is valid; otherwise, resolve it from the request.
-    """
-    # サービスが渡されていればそれを返し、無ければリクエストから取得する
-    # If the service instance is provided, return it; otherwise, resolve it from the request.
-    if isinstance(service, AuthLimitService):
-        return service
-    return get_auth_limit_service(request)
-
-
-# 渡されたLlmDailyLimitServiceを使用するか、リクエストから新しく解決するヘルパー関数
-# Helper function to resolve the LlmDailyLimitService from the request if not already provided.
-def _resolve_llm_daily_limit_service(
-    request: Request,
-    service: LlmDailyLimitService | None,
-) -> LlmDailyLimitService:
-    """
-    引数のサービスインスタンスが有効ならそれを返し、無効ならリクエストから解決します。
-    Return the provided LlmDailyLimitService instance if it is valid; otherwise, resolve it from the request.
-    """
-    # サービスが渡されていればそれを返し、無ければリクエストから取得する
-    # If the service instance is provided, return it; otherwise, resolve it from the request.
-    if isinstance(service, LlmDailyLimitService):
-        return service
-    return get_llm_daily_limit_service(request)
-
-
 # ユーザー登録用の認証コードを生成し、メールで送信するエンドポイント
 # Endpoint to generate a registration verification code and send it via email.
 @verification_bp.post("/api/send_verification_email", name="verification.api_send_verification_email")
@@ -273,8 +240,8 @@ async def api_send_verification_email(
 
     # 各種制限確認サービスを解決
     # Resolve rate limit and daily quota limit services.
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
-    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
+    resolved_auth_limit_service = resolve_auth_limit_service(request, auth_limit_service)
+    resolved_llm_daily_limit_service = resolve_llm_daily_limit_service(
         request,
         llm_daily_limit_service,
     )
@@ -316,9 +283,9 @@ async def api_send_verification_email(
 
     # すでにユーザーがあれば再利用、なければ作成
     # Reuse existing user or create a new unverified user.
-    user = await await_result(get_user_by_email(email))
+    user = await maybe_await(get_user_by_email(email))
     if not user:
-        user_id = await await_result(create_user(email))
+        user_id = await maybe_await(create_user(email))
     else:
         user_id = user["id"]
 
@@ -463,7 +430,7 @@ async def api_verify_registration_code(
 
     # メールアドレス・IP単位での認証コード試行制限を適用
     # Apply verification attempt rate limits per email/IP (cross-session).
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    resolved_auth_limit_service = resolve_auth_limit_service(request, auth_limit_service)
     email_for_limit = str(session.get("temp_email") or "")
     allowed, limit_error = await run_blocking(
         consume_verification_attempt_limit,
@@ -504,7 +471,7 @@ async def api_verify_registration_code(
 
     # ここから成功処理 ----------------------------------------------------
     # Success path starts here.
-    user = await await_result(get_user_by_id(user_id))
+    user = await maybe_await(get_user_by_id(user_id))
     if not user:
         # ユーザーが見つからない場合はセッション情報の一部をクリアしてエラーを返す
         # If the user is not found, clear some session data and return an error.
@@ -518,11 +485,11 @@ async def api_verify_registration_code(
 
     # ユーザーを認証済みに更新
     # Set the user status to verified.
-    await await_result(set_user_verified(user_id))                 # ユーザーを認証済みに
+    await maybe_await(set_user_verified(user_id))                 # ユーザーを認証済みに
 
     # 共通の初期タスクを新規ユーザー用に複製
     # Copy shared default tasks to this newly verified user.
-    await await_result(copy_default_tasks_for_user(user_id))       # ★ 共通タスクを複製 ★
+    await maybe_await(copy_default_tasks_for_user(user_id))       # ★ 共通タスクを複製 ★
 
     # 認証済みセッションの確立（ログイン状態に移行）
     # Establish an authenticated session (transitioning to logged-in state).

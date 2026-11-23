@@ -76,10 +76,6 @@ async def _in_transaction(
         return await operation(owned_session)
 
 
-def _is_unique_violation(exc: BaseException) -> bool:
-    return is_unique_violation(exc)
-
-
 # 共有トークンを1回だけ作成(または既存を再利用)し、状態の辞書で返す。
 # Create (or reuse) a share token exactly once and return the state dict.
 async def _create_once(
@@ -142,7 +138,7 @@ async def create_or_get_shared_memo_token(
                     force_refresh=force_refresh,
                 )
         except IntegrityError as exc:
-            if not _is_unique_violation(exc) or attempt + 1 >= SHARED_TOKEN_MAX_COLLISION_RETRIES:
+            if not is_unique_violation(exc) or attempt + 1 >= SHARED_TOKEN_MAX_COLLISION_RETRIES:
                 raise
             await asyncio.sleep(SHARED_TOKEN_RETRY_BACKOFF_SECONDS * (attempt + 1))
     raise RuntimeError("Failed to create shared memo token after collision retries.")

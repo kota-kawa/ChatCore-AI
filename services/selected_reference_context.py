@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
-import inspect
 import json
 import logging
 import re
@@ -23,7 +22,7 @@ from dataclasses import dataclass
 from threading import Lock
 from typing import Any, cast
 
-from services.async_utils import run_blocking
+from services.async_utils import maybe_await, run_blocking
 from services.chat_prompt import insert_before_latest_user_message
 from services.reference_query_rewrite import rewrite_reference_query
 
@@ -319,14 +318,6 @@ def _run_lookups(
         return [future.result() for future in futures]
 
 
-async def _maybe_await(value: Any) -> Any:
-    """非同期のリポジトリ検索なら await し、同期の値ならそのまま返す。文脈だけを見るテストを軽く保つため。
-
-    Await an async repository lookup while keeping pure context tests lightweight.
-    """
-    return await value if inspect.isawaitable(value) else value
-
-
 async def _run_lookup_once_async(
     search: Callable[[str], Any],
     query: str,
@@ -338,7 +329,7 @@ async def _run_lookup_once_async(
     Run one selected-reference lookup without moving database work to a worker thread.
     """
     try:
-        payload = await _maybe_await(search(query))
+        payload = await maybe_await(search(query))
     except Exception:
         logger.warning("Selected %s lookup failed.", source_label, exc_info=True)
         return {
@@ -440,7 +431,7 @@ async def _load_overview_async(
     if personal_overview is None:
         return None
     try:
-        overview = await _maybe_await(personal_overview())
+        overview = await maybe_await(personal_overview())
     except Exception:
         logger.warning(
             "Failed to load the personal overview after a no-match lookup.",

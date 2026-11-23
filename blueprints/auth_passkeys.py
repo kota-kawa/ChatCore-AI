@@ -21,16 +21,16 @@ from blueprints.auth_common import (
     _copy_default_tasks_after_login,
     _passkey_unavailable_response,
     _resolve_auth_limit_service,
-    _user_id_from_session,
 )
 from blueprints.auth_support import call_dependency, dep, get_auth_limit_service_dependency
 from services.error_messages import ERROR_PASSKEY_USAGE_UPDATE_FAILED
+from services.web_session import user_id_from_session
 
 
 # ログイン中ユーザーが登録した Passkey の一覧を返す。
 # List the passkeys registered by the signed-in user.
 async def api_list_passkeys(request: Request):
-    user_id = _user_id_from_session(request.session)
+    user_id = user_id_from_session(request.session)
     if user_id is None:
         return dep("jsonify")({"status": "fail", "error": "ログインが必要です"}, status_code=401)
 
@@ -41,7 +41,7 @@ async def api_list_passkeys(request: Request):
 # 指定した Passkey を、ログイン中ユーザー自身のものに限って削除する。
 # Delete the given passkey, only if it belongs to the signed-in user.
 async def api_delete_passkey(request: Request):
-    user_id = _user_id_from_session(request.session)
+    user_id = user_id_from_session(request.session)
     if user_id is None:
         return dep("jsonify")({"status": "fail", "error": "ログインが必要です"}, status_code=401)
 
@@ -81,7 +81,7 @@ async def api_passkey_register_options(request: Request):
     ):
         return _passkey_unavailable_response()
 
-    user_id = _user_id_from_session(request.session)
+    user_id = user_id_from_session(request.session)
     if user_id is None:
         return dep("jsonify")({"status": "fail", "error": "ログインが必要です"}, status_code=401)
 
@@ -132,7 +132,7 @@ async def api_passkey_register_verify(request: Request):
     ):
         return _passkey_unavailable_response()
 
-    user_id = _user_id_from_session(request.session)
+    user_id = user_id_from_session(request.session)
     if user_id is None:
         return dep("jsonify")({"status": "fail", "error": "ログインが必要です"}, status_code=401)
 
