@@ -141,8 +141,8 @@ jobs:
           set -euo pipefail
           python -m ruff check app.py blueprints services scripts tests --select E9,F63,F7,F82
 
-  # Ruff の全ルールに加え、マイグレーションの安全性・環境変数ドキュメント・文書内パスの整合を検証する。
-  # Full Ruff run plus migration safety, environment-variable documentation and doc path checks.
+  # Ruff の全ルールに加え、マイグレーションの安全性・環境変数ドキュメント・文書内パスの整合と、技術的負債が基準値より増えていないことを検証する。
+  # Full Ruff run plus migration safety, environment-variable documentation, doc path checks and the debt ratchet.
   lint_full:
     name: Ruff Lint (Full)
     runs-on: ubuntu-latest
@@ -184,6 +184,11 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/check_doc_paths.py
+
+      - name: Verify technical debt does not grow past the baseline
+        run: |
+          set -euo pipefail
+          python scripts/check_debt_ratchet.py
 
   # 型チェックを強制する対象範囲に対して mypy を実行する。
   # Runs mypy on the enforced typing surface.
