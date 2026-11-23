@@ -118,7 +118,7 @@ class LoggingConfigTestCase(unittest.TestCase):
         """0 以下の設定は既定値へ戻し、設定ミスとして警告を残す / Zero or negative values fall back with a warning."""
         for raw in ("0", "-5"):
             with self.subTest(raw=raw), patch.dict("os.environ", {"LOG_MAX_BYTES": raw}, clear=False):
-                with self.assertLogs("services.logging_config", level="WARNING") as captured:
+                with self.assertLogs("services.env_settings", level="WARNING") as captured:
                     self.assertEqual(_parse_positive_int_env("LOG_MAX_BYTES", 10), 10)
                 self.assertIn("Invalid LOG_MAX_BYTES value", captured.output[0])
 
