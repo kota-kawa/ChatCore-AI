@@ -2,8 +2,8 @@
 // Tailwind configuration; maps utility colors, font sizes, spacing, radii and shadows to the CSS variables (design tokens) defined in globals.css.
 import type { Config } from "tailwindcss";
 
-// 解析対象のファイル。ここに含まれないディレクトリのクラス名はビルドで生成されない
-// Files scanned for class names; classes used outside these directories are not generated at build time
+// 追加で解析するファイル。Tailwind v4 は .gitignore 対象外のファイルを自動検出でも走査するため、ここに無いディレクトリ（lib/ など）のクラス名も生成される
+// Extra files scanned for class names; Tailwind v4 also auto-detects every file not ignored by .gitignore, so classes in unlisted directories such as lib/ are generated too
 const config: Config = {
   content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./scripts/**/*.{ts,tsx}"],
   theme: {
