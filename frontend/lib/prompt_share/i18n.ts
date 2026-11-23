@@ -1,9 +1,9 @@
 // 公開投稿画面で使う言語別表示を提供する。
 // Provides localized presentation for public post views.
 
-import { enMessages } from "../../lib/i18n/catalogs/en";
-import { jaMessages, type MessageKey } from "../../lib/i18n/catalogs/ja";
-import { normalizeLocale, type Locale } from "../../lib/i18n/config";
+import { enMessages } from "../i18n/catalogs/en";
+import { jaMessages, type MessageKey } from "../i18n/catalogs/ja";
+import { normalizeLocale, type Locale } from "../i18n/config";
 
 export type PromptShareMessageKey = Extract<MessageKey, `promptShare.${string}`>;
 type Values = Record<string, string | number>;

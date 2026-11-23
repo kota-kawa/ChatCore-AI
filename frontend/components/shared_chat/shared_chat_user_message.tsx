@@ -2,8 +2,8 @@
 // Renders the body of a user message in a shared chat. Used by shared_chat_message_list.tsx.
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
-import { formatUserInputForDisplay } from "../../scripts/chat/chat_ui";
-import { renderSanitizedHTML } from "../../scripts/chat/message_utils";
+import { formatUserInputForDisplay } from "../../lib/chat_page/message_format/chat_ui";
+import { renderSanitizedHTML } from "../../lib/chat_page/message_format/message_utils";
 
 // SSR環境ではuseEffect、クライアント環境ではuseLayoutEffectを使用する（ハイドレーション互換）
 // Use useEffect on SSR and useLayoutEffect on client for hydration compatibility

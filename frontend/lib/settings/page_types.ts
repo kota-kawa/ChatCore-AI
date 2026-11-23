@@ -1,9 +1,9 @@
 // 利用者設定画面のセクション・フォームと選択肢の型を定義する。
 // Defines settings section, form and option types.
 
-import type { ThemePreference } from "../../core/theme";
-import type { MessageKey } from "../../../lib/i18n/catalogs/ja";
-import type { Locale } from "../../../lib/i18n/config";
+import type { ThemePreference } from "../../scripts/core/theme";
+import type { MessageKey } from "../i18n/catalogs/ja";
+import type { Locale } from "../i18n/config";
 
 // 設定画面のどのセクションを表示するかを識別するユニオン型
 // Union type identifying which section of the settings page is currently visible

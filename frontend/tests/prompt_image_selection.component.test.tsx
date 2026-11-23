@@ -6,7 +6,7 @@ import type { ChangeEvent } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { usePromptImageSelection } from "../components/prompt_share/use_prompt_image_selection";
-import type { MediaType } from "../scripts/prompt_share/types";
+import type { MediaType } from "../lib/prompt_share/types";
 
 describe("画像生成プロンプトの作例画像", () => {
   afterEach(() => {

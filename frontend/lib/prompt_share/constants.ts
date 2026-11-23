@@ -1,7 +1,7 @@
 // 公開投稿画面のキャッシュキー・表示上限・代替画像を定義する。
 // Defines cache keys, display limits and fallback images for public posts.
 
-import { STORAGE_KEYS } from "../core/constants";
+import { STORAGE_KEYS } from "../../scripts/core/constants";
 
 export const AUTH_STATE_CACHE_KEY = STORAGE_KEYS.authStateCache;
 export const CONTENT_CHAR_LIMIT = 160;

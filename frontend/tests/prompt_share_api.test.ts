@@ -11,7 +11,7 @@ import {
   fetchPromptList,
   recordPromptView,
   savePromptAsMemo
-} from "../scripts/prompt_share/api";
+} from "../lib/prompt_share/api";
 
 const originalFetch = globalThis.fetch;
 

@@ -2,9 +2,9 @@
 // Prepares the memo's source text before it is shown in the preview or rich editor, and returns where each resulting character came from in the source.
 // Used by lib/memo/markdown_source_positions.ts.
 
-import { replaceDisplayText, type DisplaySourceSpan } from "../../scripts/chat/display_source_positions";
-import { formatMathExpressionForDisplay, looksLikeLooseMathLine } from "../../scripts/chat/math_display";
-import { maskWebSearchArtifacts } from "../../scripts/chat/memo_text";
+import { replaceDisplayText, type DisplaySourceSpan } from "../chat_page/message_format/display_source_positions";
+import { formatMathExpressionForDisplay, looksLikeLooseMathLine } from "../chat_page/message_format/math_display";
+import { maskWebSearchArtifacts } from "../chat_page/message_format/memo_text";
 
 // Markdown の記号（\ ` * _ [ ] < >）の前にバックスラッシュを足し、数式が Markdown として解釈されないようにする。足した分の位置も元の文字と同じにそろえる。
 // Prefixes Markdown special characters (\ ` * _ [ ] < >) with a backslash so math is not read as Markdown, keeping the added characters mapped to the same source position.

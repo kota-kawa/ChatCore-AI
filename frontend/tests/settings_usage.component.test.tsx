@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { UsageSettingsSection } from "../components/settings/usage_settings_section";
 import { LocaleProvider } from "../contexts/locale_context";
-import { loadUsageLimits } from "../scripts/user/settings/api";
+import { loadUsageLimits } from "../lib/settings/api";
 
-vi.mock("../scripts/user/settings/api", () => ({ loadUsageLimits: vi.fn() }));
+vi.mock("../lib/settings/api", () => ({ loadUsageLimits: vi.fn() }));
 
 const mockedLoad = vi.mocked(loadUsageLimits);
 

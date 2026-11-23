@@ -3,7 +3,7 @@
 
 import type { ContentFormat, MediaType, PromptData, PromptType } from "./types";
 import { CONTENT_CHAR_LIMIT } from "./constants";
-import { formatDate } from "../../lib/datetime";
+import { formatDate } from "../datetime";
 import {
   getContentFormat,
   getMediaType,
@@ -11,7 +11,7 @@ import {
   normalizeMediaType
 } from "./prompt_type_registry";
 import { normalizeSkillResources } from "./skill_resources";
-import type { Locale } from "../../lib/i18n/config";
+import type { Locale } from "../i18n/config";
 import { promptShareText } from "./i18n";
 
 export function truncateText(text: string, limit: number) {

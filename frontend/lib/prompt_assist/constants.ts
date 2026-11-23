@@ -1,7 +1,7 @@
 // プロンプト作成補助の対象種別ごとの設定を定義する。
 // Defines per-target configuration for prompt assistance.
 
-import { localized } from "../../../lib/i18n/config";
+import { localized } from "../i18n/config";
 import type { PromptAssistTarget } from "./types";
 
 // 主フィールド（本文）はプレビューで先頭に表示する

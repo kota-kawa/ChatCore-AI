@@ -2,7 +2,7 @@
 // Builds markup for the prompt assistance panel.
 
 import { getPromptAssistTargetMeta } from "./constants";
-import { localized } from "../../../lib/i18n/config";
+import { localized } from "../i18n/config";
 import type { PromptAssistTarget } from "./types";
 
 export function createPromptAssistMarkup(target: PromptAssistTarget) {

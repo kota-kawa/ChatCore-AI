@@ -12,7 +12,7 @@ import {
 } from "../components/prompt_share/prompt_category_seo";
 import {
   PROMPT_CATEGORY_KEYS
-} from "../scripts/prompt_share/prompt_category_registry";
+} from "../lib/prompt_share/prompt_category_registry";
 import {
   fetchInitialPromptData,
   getPromptCategoryServerSideProps,

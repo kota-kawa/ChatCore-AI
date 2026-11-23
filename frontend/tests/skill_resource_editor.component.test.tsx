@@ -6,7 +6,7 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { SkillResourceEditor } from "../components/prompt_share/skill_resource_editor";
-import type { PromptResource } from "../scripts/prompt_share/types";
+import type { PromptResource } from "../lib/prompt_share/types";
 
 function SkillResourceEditorHarness() {
   const [resources, setResources] = useState<PromptResource[]>([]);

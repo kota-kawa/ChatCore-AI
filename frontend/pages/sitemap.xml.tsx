@@ -5,7 +5,7 @@ import { buildPromptPath } from "../lib/promptSlug";
 import { localizePublicPath } from "../lib/seo";
 import { getRequestOrigin } from "../lib/server/request_origin";
 import { resilientFetch } from "../scripts/core/resilient_fetch";
-import { PROMPT_CATEGORY_KEYS } from "../scripts/prompt_share/prompt_category_registry";
+import { PROMPT_CATEGORY_KEYS } from "../lib/prompt_share/prompt_category_registry";
 
 // XML属性・コンテンツをエスケープしてXXE/XMLインジェクションを防ぐ
 // Escape XML attributes and content to prevent XXE/XML injection

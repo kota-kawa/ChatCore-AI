@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatLLMOutput, formatMemoOutput } from "../scripts/chat/chat_ui";
+import { formatLLMOutput, formatMemoOutput } from "../lib/chat_page/message_format/chat_ui";
 
 // 回答直後（=セッション内で最初の formatLLMOutput 呼び出し）でも、Web 検索の
 // 「回答までのステップ」ブロックがエスケープされず HTML として描画されること。

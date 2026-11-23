@@ -7,7 +7,7 @@
 import defaultTasks from "../../data/default_tasks.json";
 import englishDefaultTasks from "../../data/default_tasks.en.json";
 import type { Locale } from "../i18n/config";
-import type { TaskItem } from "../../scripts/setup/setup_types";
+import type { TaskItem } from "./setup/setup_types";
 import type { NormalizedTask } from "./types";
 
 // API やキャッシュから来たタスクを型と値を確かめながら NormalizedTask に変換する。壊れた項目は空値や既定値で補う。

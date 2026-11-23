@@ -36,7 +36,7 @@ vi.mock("../hooks/chat_page/use_home_page_generation_actions", async (importOrig
   };
 });
 vi.mock("../scripts/core/toast", () => ({ showToast: vi.fn() }));
-vi.mock("../scripts/components/prompt_assist", () => ({ initPromptAssist: vi.fn(() => ({ destroy: vi.fn() })) }));
+vi.mock("../lib/prompt_assist", () => ({ initPromptAssist: vi.fn(() => ({ destroy: vi.fn() })) }));
 vi.mock("../scripts/core/resilient_fetch", () => ({ resilientFetch: vi.fn() }));
 
 const fetchMock = vi.mocked(resilientFetch);

@@ -2,7 +2,7 @@
 // Handles Skill resource normalization, language inference and legacy compatibility.
 
 import type { PromptResource, PromptResourceRole } from "./types";
-import type { Locale } from "../../lib/i18n/config";
+import type { Locale } from "../i18n/config";
 import { promptShareText } from "./i18n";
 
 export const SKILL_RESOURCE_ROLES: ReadonlyArray<{

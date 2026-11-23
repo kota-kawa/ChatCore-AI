@@ -13,6 +13,7 @@ const requireFromRoot = createRequire(path.join(projectRoot, "package.json"));
 const scanDirs = [
   "pages",
   "scripts",
+  "lib",
   "components"
 ];
 

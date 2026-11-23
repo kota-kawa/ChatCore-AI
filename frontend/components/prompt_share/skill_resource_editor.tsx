@@ -1,14 +1,14 @@
 // Skillに同梱する名前付きテキストリソースの追加・編集・削除を提供する。
 // Edits, adds and removes named text resources bundled with a Skill.
 
-import type { PromptResource, PromptResourceRole } from "../../scripts/prompt_share/types";
+import type { PromptResource, PromptResourceRole } from "../../lib/prompt_share/types";
 import {
   inferSkillResourceLanguage,
   getSkillResourceRoleLabel,
   MAX_SKILL_RESOURCE_CONTENT_LENGTH,
   MAX_SKILL_RESOURCES,
   SKILL_RESOURCE_ROLES
-} from "../../scripts/prompt_share/skill_resources";
+} from "../../lib/prompt_share/skill_resources";
 import { useTranslation } from "../../contexts/locale_context";
 
 type SkillResourceEditorProps = {

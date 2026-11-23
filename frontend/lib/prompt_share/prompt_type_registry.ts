@@ -1,4 +1,4 @@
-// frontend/scripts/prompt_share/prompt_type_registry.ts
+// frontend/lib/prompt_share/prompt_type_registry.ts
 // 共有プロンプトの「2軸」モデルのフロント側レジストリ (services/prompt_types.py のミラー)。
 // Frontend registry for the prompt "two-axis" model. Mirror of services/prompt_types.py.
 //
@@ -9,7 +9,7 @@
 // Adding a new format or media type should only require one entry here.
 
 import type { ContentFormat, MediaType, PromptType } from "./types";
-import type { Locale } from "../../lib/i18n/config";
+import type { Locale } from "../i18n/config";
 import { promptShareText } from "./i18n";
 
 // 型固有テキスト属性の最大文字数 (バックエンドの MAX_PROMPT_ATTRIBUTE_TEXT_LENGTH と一致)。

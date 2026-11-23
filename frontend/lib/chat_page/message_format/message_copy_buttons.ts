@@ -13,8 +13,8 @@ import {
   COPY_FEEDBACK_RESET_MS,
   COPY_IDLE_ICON,
   COPY_SUCCESS_ICON,
-} from "../../lib/copy_feedback";
-import { copyTextToClipboard } from "../core/clipboard";
+} from "../../copy_feedback";
+import { copyTextToClipboard } from "../../../scripts/core/clipboard";
 
 type CopyButtonSource = {
   // クリック対象のボタン / The clickable button

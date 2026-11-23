@@ -2,8 +2,8 @@
 // Provides shared chat message helpers.
 // --------------------------------------------------
 import DOMPurify from "dompurify";
-import { escapeHtml, sanitizeClassAttributeValue } from "../core/html";
-import { patchElementChildren } from "../../lib/chat_page/streaming_dom_patch";
+import { escapeHtml, sanitizeClassAttributeValue } from "../../../scripts/core/html";
+import { patchElementChildren } from "../streaming_dom_patch";
 
 // 回答 HTML の余分な空行・空段落・連続した <br> を詰める。
 function compactBotMessageHtml(html: string) {

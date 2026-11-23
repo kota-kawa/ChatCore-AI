@@ -9,7 +9,7 @@ import {
   buildSettingsSectionQuery,
   parseSettingsSection,
   shouldSyncSettingsSectionUrl
-} from "../scripts/user/settings/section_url";
+} from "../lib/settings/section_url";
 
 test("parses only sections that exist in the settings sidebar", () => {
   assert.equal(parseSettingsSection("security"), "security");

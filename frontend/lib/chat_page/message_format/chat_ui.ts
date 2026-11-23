@@ -4,8 +4,8 @@
 import hljs from "highlight.js";
 import { Marked } from "marked";
 
-import { escapeHtml } from "../core/html";
-import { isRecord } from "../../lib/utils";
+import { escapeHtml } from "../../../scripts/core/html";
+import { isRecord } from "../../utils";
 import { parseCopyBlockInfo, renderCopyBlockHtml } from "./copy_block_markdown";
 import { formatMathExpressionForDisplay, looksLikeLooseMathLine } from "./math_display";
 import { stripWebSearchArtifacts } from "./memo_text";

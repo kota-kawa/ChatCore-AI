@@ -3,7 +3,7 @@
 import { memo, useMemo } from "react";
 
 import type { ChatAttachedImage } from "../../lib/chat_page/types";
-import { formatUserInputForDisplay } from "../../scripts/chat/chat_ui";
+import { formatUserInputForDisplay } from "../../lib/chat_page/message_format/chat_ui";
 
 // ユーザーメッセージHTML表示のprops型定義
 // Props type definition for the user message HTML display

@@ -15,18 +15,18 @@ import {
   MCP_OAUTH_SCOPE_DEFINITIONS,
   MCP_OAUTH_SCOPE_DEFINITIONS_EN,
   THEME_OPTIONS
-} from "../../scripts/user/settings/constants";
+} from "../../lib/settings/constants";
 import type {
   EmailChangeStage,
   PasskeyRecord,
   ProfileFormState,
   ProfileSaveStatus
-} from "../../scripts/user/settings/page_types";
+} from "../../lib/settings/page_types";
 import type {
   McpOAuthClient,
   McpOAuthClientCredentials,
   McpOAuthConnection
-} from "../../scripts/user/settings/types";
+} from "../../lib/settings/types";
 import type { ThemePreference } from "../../scripts/core/theme";
 import { SettingsProfileSkeleton, SettingsPromptCardSkeletonGrid } from "./settings_skeletons";
 import { CopyButton } from "../ui/copy_button";

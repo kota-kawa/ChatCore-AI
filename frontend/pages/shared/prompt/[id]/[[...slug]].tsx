@@ -22,14 +22,14 @@ import {
   getPromptMediaLabel,
   normalizePromptContentFormat,
   normalizePromptMediaType
-} from "../../../../scripts/prompt_share/formatters";
-import { getCategoryLabelOrFallback } from "../../../../scripts/prompt_share/prompt_category_registry";
-import { recordPromptView } from "../../../../scripts/prompt_share/api";
+} from "../../../../lib/prompt_share/formatters";
+import { getCategoryLabelOrFallback } from "../../../../lib/prompt_share/prompt_category_registry";
+import { recordPromptView } from "../../../../lib/prompt_share/api";
 import {
   getSkillResourceRoleLabel,
   normalizeSkillResources
-} from "../../../../scripts/prompt_share/skill_resources";
-import type { PromptResource } from "../../../../scripts/prompt_share/types";
+} from "../../../../lib/prompt_share/skill_resources";
+import type { PromptResource } from "../../../../lib/prompt_share/types";
 import { useTranslation } from "../../../../contexts/locale_context";
 
 // 共有プロンプトのデータ型（スキルプロンプトのフィールドも含む）
