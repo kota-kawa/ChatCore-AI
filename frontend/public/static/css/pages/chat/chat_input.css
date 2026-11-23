@@ -932,16 +932,6 @@
   }
 }
 
-@keyframes constellationStageDrift {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) rotate(-0.55deg) scale(1);
-  }
-  50% {
-    transform: translate3d(0, -0.06rem, 0) rotate(0.7deg) scale(1.015);
-  }
-}
-
 @keyframes constellationNebulaDrift {
   0%,
   100% {
