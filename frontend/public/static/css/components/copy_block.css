@@ -79,7 +79,7 @@
 }
 
 .copy-block-copy-btn .bi-x-lg {
-  color: #dc2626;
+  color: var(--danger-color);
 }
 
 /* chat_messages.css の `.bot-message pre`（等幅・padding・横スクロール）を上書きするため、

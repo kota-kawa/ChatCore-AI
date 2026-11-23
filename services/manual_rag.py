@@ -39,9 +39,6 @@ EMBEDDING_BATCH_SIZE = 100
 # Empirically determined: good queries score 5-9x, weak queries score 1-3x.
 BM25_MIN_DISCRIMINATION_RATIO = 4.0
 
-_CACHE_FILE = MANUAL_DIR / ".embeddings.npz"
-_CACHE_HASH_FILE = MANUAL_DIR / ".embeddings_hash.txt"
-
 
 def normalize_manual_locale(locale: str | None) -> str:
     # "ja_JP" や "en-US" のような値を言語部分だけにし、マニュアルが無い言語は ja にする。
