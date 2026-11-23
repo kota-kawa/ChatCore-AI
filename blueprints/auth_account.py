@@ -14,6 +14,7 @@ from blueprints.auth_common import (
     _clear_google_oauth_session,
 )
 from blueprints.auth_support import call_dependency, dep
+from services.error_messages import ERROR_LOGIN_REQUIRED_PERIOD
 from services.i18n import (
     PREFERRED_LOCALE_LOADED_SESSION_KEY,
     PREFERRED_LOCALE_SESSION_KEY,
@@ -45,7 +46,7 @@ async def _sign_out_current_account(request: Request) -> bool:
 async def api_list_accounts(request: Request):
     current_user_id = user_id_from_session(request.session)
     if current_user_id is None:
-        return dep("jsonify")({"error": "ログインが必要です。"}, status_code=401)
+        return dep("jsonify")({"error": ERROR_LOGIN_REQUIRED_PERIOD}, status_code=401)
 
     parked_sessions = await dep("run_blocking")(dep("load_parked_sessions"), request) or []
     accounts = []
@@ -69,7 +70,7 @@ async def api_list_accounts(request: Request):
 # Make the parked account with the given user_id the active one, parking the current session (keep_current=True).
 async def api_switch_account(request: Request):
     if user_id_from_session(request.session) is None:
-        return dep("jsonify")({"error": "ログインが必要です。"}, status_code=401)
+        return dep("jsonify")({"error": ERROR_LOGIN_REQUIRED_PERIOD}, status_code=401)
 
     data, error_response = await dep("require_json_dict")(request)
     if error_response is not None:
@@ -149,7 +150,7 @@ async def api_current_user(request: Request):
 async def api_delete_user_account(request: Request):
     user_id = user_id_from_session(request.session)
     if user_id is None:
-        return dep("jsonify")({"error": "ログインが必要です。"}, status_code=401)
+        return dep("jsonify")({"error": ERROR_LOGIN_REQUIRED_PERIOD}, status_code=401)
 
     data, error_response = await dep("require_json_dict")(request)
     if error_response is not None:

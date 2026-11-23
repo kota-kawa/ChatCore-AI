@@ -22,6 +22,7 @@ from services.api_errors import ApiServiceError
 from services.context_vault_embeddings import schedule_embedding
 from services.db import in_transaction_with_retry
 from services.embeddings import embeddings_available, generate_embedding
+from services.error_messages import ERROR_PAGING_CURSOR_INVALID, ERROR_SEARCH_QUERY_REQUIRED
 from services.memory_search_ranking import MEMORY_SEARCH_RESULT_LIMIT, rank_memory_facts
 from services.repositories.context_fact_curation_repository import ContextFactCurationRepository
 from services.repositories.context_fact_provenance_repository import ContextFactProvenanceRepository, FactProvenance
@@ -121,11 +122,11 @@ def _decode_cursor(cursor: str | None) -> tuple[datetime, int] | None:
         return None
     raw, separator, id_part = cursor.rpartition(_CURSOR_SEPARATOR)
     if not separator or not raw or not id_part:
-        raise ApiServiceError("ページングカーソルが不正です。", 400, status="fail")
+        raise ApiServiceError(ERROR_PAGING_CURSOR_INVALID, 400, status="fail")
     try:
         return datetime.fromisoformat(raw), int(id_part)
     except (TypeError, ValueError) as exc:
-        raise ApiServiceError("ページングカーソルが不正です。", 400, status="fail") from exc
+        raise ApiServiceError(ERROR_PAGING_CURSOR_INVALID, 400, status="fail") from exc
 
 
 def _safe_list_limit(limit: int) -> int:
@@ -437,7 +438,7 @@ async def search_facts(
     # English: In semantic mode, fall back to keyword search when embeddings are unavailable, fail or return no rows.
     normalized_query = query.strip()
     if not normalized_query:
-        raise ApiServiceError("検索語を指定してください。", 400, status="fail")
+        raise ApiServiceError(ERROR_SEARCH_QUERY_REQUIRED, 400, status="fail")
 
     async def operation(db: AsyncSession) -> ContextSearchResult:
         repo = _repository(db)

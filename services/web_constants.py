@@ -1,6 +1,6 @@
-"""フロントエンドの URL、プロジェクトのベースディレクトリ、内部エラーの既定メッセージなど、Web 層の共通定数。
+"""フロントエンドの URL、プロジェクトのベースディレクトリなど、Web 層の共通定数。
 
-Shared web-layer constants such as the frontend URL, the project base directory and the default internal-error message.
+Shared web-layer constants such as the frontend URL and the project base directory.
 """
 
 from __future__ import annotations
@@ -18,7 +18,3 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", DEFAULT_FRONTEND_URL)
 # プロジェクトのベースディレクトリへの絶対パス
 # The absolute path to the project's base directory.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# サーバー内部エラー発生時にユーザーへ提示するデフォルトのメッセージ
-# The default message shown to the user when an internal server error occurs.
-DEFAULT_INTERNAL_ERROR_MESSAGE = "内部エラーが発生しました。"

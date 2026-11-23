@@ -72,6 +72,7 @@ from services.error_messages import (
     ERROR_CHAT_GENERATION_ID_REUSED,
     ERROR_CHAT_GENERATION_STATE_UNAVAILABLE,
     ERROR_IMAGE_INPUT_MODEL_UNSUPPORTED,
+    ERROR_LLM_DAILY_LIMIT_TEMPLATE,
 )
 from services.generative_ui import (
     GenerativeUiMode,
@@ -912,10 +913,7 @@ class ChatPostUseCase:
         # そのため通常ルーム/一時ルームの差を吸収して、assistant 応答なしの投稿を掃除する。
         await self._discard_unanswered_user_message(turn)
         return deps.web.jsonify_rate_limited(
-            (
-                f"本日のLLM API利用上限（1ユーザーあたり {daily_limit} 回）に達しました。"
-                "日付が変わってから再度お試しください。"
-            ),
+            ERROR_LLM_DAILY_LIMIT_TEMPLATE.format(daily_limit=daily_limit),
             retry_after=deps.limits.get_seconds_until_daily_reset(),
         )
 

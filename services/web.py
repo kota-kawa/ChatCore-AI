@@ -17,12 +17,9 @@ from pydantic import BaseModel
 from starlette.responses import JSONResponse, RedirectResponse
 
 from .api_errors import ApiServiceError
-from .error_messages import ERROR_INVALID_JSON
+from .error_messages import ERROR_INTERNAL, ERROR_INVALID_JSON
 from .web_constants import (
     BASE_DIR as _BASE_DIR,
-)
-from .web_constants import (
-    DEFAULT_INTERNAL_ERROR_MESSAGE,
 )
 from .web_json import (
     get_json as _get_json,
@@ -124,7 +121,7 @@ def log_and_internal_server_error(
     context: str,
     *,
     status: str | None = None,
-    message: str = DEFAULT_INTERNAL_ERROR_MESSAGE,
+    message: str = ERROR_INTERNAL,
     error_key: str = "error",
     log_exception_text: bool = True,
 ) -> JSONResponse:

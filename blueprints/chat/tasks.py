@@ -48,6 +48,7 @@ from services.chat_service import (
 )
 from services.code_search import search_codebase
 from services.default_tasks import default_task_payloads
+from services.error_messages import ERROR_LLM_DAILY_LIMIT_TEMPLATE, ERROR_LOGIN_REQUIRED, ERROR_MEMO_NOT_FOUND
 from services.i18n import build_response_language_policy, get_request_locale, translate
 from services.intent_classifier import classify_intent
 from services.llm import (
@@ -338,7 +339,7 @@ async def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> Mem
     the truncation flag are returned as well, because edit plans are matched against the full stored body.
     """
     if not user_id:
-        raise ResourceNotFoundError("メモが見つかりません。")
+        raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND)
 
     # DBからメモ詳細を取得
     # Fetch memo from database
@@ -528,7 +529,7 @@ async def update_tasks_order(request: Request):
     # Validate user authentication
     user_id = request.session.get("user_id")
     if not user_id:
-        return jsonify({"error": "ログインが必要です"}, status_code=403)
+        return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 
     # スキーマバリデーション
     # Validate order parameters
@@ -573,7 +574,7 @@ async def delete_task(request: Request):
     # Validate user authentication
     user_id = request.session.get("user_id")
     if not user_id:
-        return jsonify({"error": "ログインが必要です"}, status_code=403)
+        return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 
     # スキーマバリデーション
     # Validate delete parameter payload
@@ -617,7 +618,7 @@ async def edit_task(request: Request):
     # Validate user authentication
     user_id = request.session.get("user_id")
     if not user_id:
-        return jsonify({"error": "ログインが必要です"}, status_code=403)
+        return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 
     # スキーマバリデーション
     # Validate edit parameter payload
@@ -671,7 +672,7 @@ async def add_task(request: Request):
     # Validate user authentication
     user_id = request.session.get("user_id")
     if not user_id:
-        return jsonify({"error": "ログインが必要です"}, status_code=403)
+        return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 
     # スキーマバリデーション
     # Validate add parameter payload
@@ -735,7 +736,7 @@ async def prompt_assist(
     # Validate user authentication
     user_id = request.session.get("user_id")
     if not user_id:
-        return jsonify({"error": "ログインが必要です"}, status_code=403)
+        return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 
     # スキーマバリデーション
     # Validate prompt-assist payload keys
@@ -782,10 +783,7 @@ async def prompt_assist(
     )
     if not can_access_llm:
         return jsonify_rate_limited(
-            (
-                f"本日のLLM API利用上限（1ユーザーあたり {daily_limit} 回）に達しました。"
-                "日付が変わってから再度お試しください。"
-            ),
+            ERROR_LLM_DAILY_LIMIT_TEMPLATE.format(daily_limit=daily_limit),
             retry_after=get_seconds_until_daily_reset(),
         )
 
