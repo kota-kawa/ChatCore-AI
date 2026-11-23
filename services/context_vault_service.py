@@ -11,18 +11,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Awaitable, Callable
 from datetime import datetime
 from hashlib import sha256
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api_errors import ApiServiceError
 from services.context_vault_embeddings import schedule_embedding
-from services.db import is_retryable_db_error, session_scope
+from services.db import in_transaction_with_retry
 from services.embeddings import embeddings_available, generate_embedding
 from services.memory_search_ranking import MEMORY_SEARCH_RESULT_LIMIT, rank_memory_facts
 from services.repositories.context_fact_curation_repository import ContextFactCurationRepository
@@ -57,12 +55,9 @@ MAX_DIGEST_MAX_CHARS = 20_000
 DEFAULT_DIGEST_MAX_CHARS = 12_000
 MAX_CONTEXT_SEARCH_LIMIT = 50
 DEFAULT_CONTEXT_SEARCH_LIMIT = 20
-MAX_DB_WRITE_ATTEMPTS = 3
-DB_RETRY_BACKOFF_SECONDS = 0.05
 ContextSearchMode = Literal["keyword", "semantic"]
 _DIGEST_TYPE_ORDER = ("profile", "preference", "project", "decision", "reference")
 _CURSOR_SEPARATOR = "~"
-T = TypeVar("T")
 
 
 # search_facts が返す検索結果（件数と事実の一覧）。
@@ -74,29 +69,6 @@ class ContextSearchResult(BaseModel):
 
 def _repository(session: AsyncSession) -> ContextFactRepository:
     return ContextFactRepository(session)
-
-
-# 日本語: session があればそのまま使い、なければ新規トランザクションで実行する。
-# 一時的な DB エラーのときだけバックオフ付きで再試行する。
-# English: Use the given session as is, otherwise run in a new transaction,
-# retrying with backoff only on retryable DB errors.
-async def _transaction(
-    session: AsyncSession | None,
-    operation: Callable[[AsyncSession], Awaitable[T]],
-) -> T:
-    if session is not None:
-        return await operation(session)
-    for attempt in range(MAX_DB_WRITE_ATTEMPTS):
-        try:
-            async with session_scope() as db, db.begin():
-                return await operation(db)
-        except ApiServiceError:
-            raise
-        except SQLAlchemyError as exc:
-            if attempt + 1 >= MAX_DB_WRITE_ATTEMPTS or not is_retryable_db_error(exc):
-                raise
-            await asyncio.sleep(DB_RETRY_BACKOFF_SECONDS * (attempt + 1))
-    raise RuntimeError("Context transaction retry loop exhausted.")
 
 
 # 日本語: DB の行を API 応答に詰め替える。欠けた値は既定値で補い、重要度は 0〜100 に収める。
@@ -200,7 +172,7 @@ async def list_facts(
             next_cursor=next_cursor,
         )
 
-    return await _transaction(session, operation)
+    return await in_transaction_with_retry(session, operation)
 
 
 async def get_fact(
@@ -209,7 +181,7 @@ async def get_fact(
     *,
     session: AsyncSession | None = None,
 ) -> ContextFactResponse:
-    return _to_response(await _transaction(session, lambda db: _repository(db).get_fact(user_id, fact_id)))
+    return _to_response(await in_transaction_with_retry(session, lambda db: _repository(db).get_fact(user_id, fact_id)))
 
 
 async def create_fact(
@@ -254,7 +226,7 @@ async def create_fact(
         )
         payload_hash = sha256(canonical.encode("utf-8")).hexdigest()
 
-    fact = await _transaction(
+    fact = await in_transaction_with_retry(
         session,
         lambda db: _repository(db).create_fact(
             user_id,
@@ -297,7 +269,7 @@ async def update_fact(
 ) -> ContextFactResponse:
     # confirmed_by_owner は Web UI（本人）の編集だけが True にする。既定 False は MCP などの外部書き込み。
     # Only the owner's web UI edits pass True; the False default is for external writers such as MCP.
-    fact = await _transaction(
+    fact = await in_transaction_with_retry(
         session,
         lambda db: _repository(db).update_fact(
             user_id,
@@ -352,7 +324,7 @@ async def revert_replacement(
     expected_revision: int,
     session: AsyncSession | None = None,
 ) -> ContextFactRevertReplacementResponse:
-    deprecated, restored = await _transaction(
+    deprecated, restored = await in_transaction_with_retry(
         session,
         lambda db: ContextFactCurationRepository(db).revert_replacement(user_id, fact_id, expected_revision),
     )
@@ -376,13 +348,13 @@ async def delete_fact(
     expected_revision: int,
     session: AsyncSession | None = None,
 ) -> None:
-    await _transaction(session, lambda db: ContextFactCurationRepository(db).delete_fact(user_id, fact_id, expected_revision))
+    await in_transaction_with_retry(session, lambda db: ContextFactCurationRepository(db).delete_fact(user_id, fact_id, expected_revision))
 
 
 # 日本語: 利用者の記憶・出典・候補をすべて削除し、消した記憶の件数を返す。
 # English: Delete all of the user's memories, sources and candidates, and return how many memories were deleted.
 async def delete_all_facts(user_id: int, *, session: AsyncSession | None = None) -> int:
-    return await _transaction(session, lambda db: ContextFactCurationRepository(db).delete_all_facts(user_id))
+    return await in_transaction_with_retry(session, lambda db: ContextFactCurationRepository(db).delete_all_facts(user_id))
 
 
 async def build_digest(
@@ -450,7 +422,7 @@ async def build_digest(
             counts_by_type[fact_type] = counts_by_type.get(fact_type, 0) + 1
         return response_for(selected)
 
-    return await _transaction(session, operation)
+    return await in_transaction_with_retry(session, operation)
 
 
 async def search_facts(
@@ -489,7 +461,7 @@ async def search_facts(
             )
         return ContextSearchResult(total=len(rows), facts=[_to_response(row) for row in rows])
 
-    return await _transaction(session, operation)
+    return await in_transaction_with_retry(session, operation)
 
 
 # 日本語: チャットの記憶の検索用に、その利用者の有効な記憶すべてを語の一致と意味の近さで順位づけして上位を返す(ADR 0025)。
@@ -514,7 +486,7 @@ async def search_facts_ranked(
             embedding = await asyncio.to_thread(generate_embedding, normalized_query)
         except Exception as exc:
             logger.warning("Failed to generate a memory search embedding; ranking by word match only (%s).", type(exc).__name__)
-    rows = await _transaction(session, lambda db: _repository(db).list_active_for_memory_search(user_id, embedding))
+    rows = await in_transaction_with_retry(session, lambda db: _repository(db).list_active_for_memory_search(user_id, embedding))
     return [dict(row) for row in rank_memory_facts(rows, normalized_query, limit=limit)]
 
 
@@ -525,7 +497,7 @@ async def get_memory_use_settings(
     *,
     session: AsyncSession | None = None,
 ) -> ContextMemoryUseSettingsResponse:
-    enabled = await _transaction(session, lambda db: _repository(db).get_memory_use_enabled(user_id))
+    enabled = await in_transaction_with_retry(session, lambda db: _repository(db).get_memory_use_enabled(user_id))
     return ContextMemoryUseSettingsResponse(enabled=enabled)
 
 
@@ -535,5 +507,5 @@ async def update_memory_use_settings(
     *,
     session: AsyncSession | None = None,
 ) -> ContextMemoryUseSettingsResponse:
-    updated = await _transaction(session, lambda db: _repository(db).update_memory_use_enabled(user_id, enabled))
+    updated = await in_transaction_with_retry(session, lambda db: _repository(db).update_memory_use_enabled(user_id, enabled))
     return ContextMemoryUseSettingsResponse(enabled=updated)

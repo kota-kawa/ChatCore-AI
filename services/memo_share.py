@@ -10,15 +10,14 @@ from __future__ import annotations
 
 import asyncio
 import secrets
-from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
-from typing import Any, TypeVar
+from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .datetime_serialization import serialize_datetime_iso
-from .db import session_scope
+from .db import in_transaction, session_scope
 from .repositories.memo_share_repository import MemoShareRepository
 from .share_common import (
     SHARED_TOKEN_MAX_COLLISION_RETRIES,
@@ -30,7 +29,6 @@ from .share_common import (
 )
 
 DEFAULT_SHARE_EXPIRES_DAYS = 30
-T = TypeVar("T")
 
 
 def _is_expired(expires_at: Any) -> bool:
@@ -62,18 +60,6 @@ def _resolve_expires_at(expires_in_days: int | None) -> datetime | None:
     if expires_in_days is None:
         return None
     return datetime.utcnow() + timedelta(days=max(int(expires_in_days), 1))
-
-
-# 呼び出し側のセッションがあればその中で、無ければ自前のトランザクションを開いて処理を実行する。
-# Run the operation inside the caller's session when given, otherwise inside a transaction opened here.
-async def _in_transaction(
-    session: AsyncSession | None,
-    operation: Callable[[AsyncSession], Awaitable[T]],
-) -> T:
-    if session is not None:
-        return await operation(session)
-    async with session_scope() as owned_session, owned_session.begin():
-        return await operation(owned_session)
 
 
 # 共有トークンを1回だけ作成(または既存を再利用)し、状態の辞書で返す。
@@ -158,7 +144,7 @@ async def get_memo_share_state(
             return _serialize_share_state(None, None, None)
         return _serialize_share_state(row["share_token"], row["expires_at"], row["revoked_at"])
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 # メモの共有トークンを取り消し、取り消し後の状態を返す。
@@ -175,7 +161,7 @@ async def revoke_shared_memo_token(
             return _serialize_share_state(None, None, None)
         return _serialize_share_state(row["share_token"], row["expires_at"], row["revoked_at"])
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 # 共有トークンから、公開ページに表示するメモの内容（タイトル、作成日時、本文、背景色）を組み立てる。
@@ -197,4 +183,4 @@ async def get_shared_memo_payload(
             }
         }
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)

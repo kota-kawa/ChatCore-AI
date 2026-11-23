@@ -8,23 +8,20 @@ Import is two-step (preview, then confirm): confirmation requires the signed pre
 
 from __future__ import annotations
 
-import asyncio
 import html
 import json
 import re
-from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from pydantic import ValidationError
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api_errors import ApiServiceError
 from services.context_vault_embeddings import schedule_embedding
-from services.db import is_retryable_db_error, session_scope
+from services.db import in_transaction_with_retry
 from services.error_messages import (
     ERROR_CONTEXT_VAULT_EXPORT_FORMAT_INVALID,
     ERROR_CONTEXT_VAULT_EXPORT_TOO_LARGE,
@@ -81,36 +78,10 @@ _MARKDOWN_BLOCK_OPEN_RE = re.compile(r"^```context-fact[ \t]*\r?$", re.MULTILINE
 _TOKEN_SALT = "chat-core.context-vault-import-preview.v1"
 
 ImportFormat = Literal["json", "markdown"]
-MAX_DB_WRITE_ATTEMPTS = 3
-DB_RETRY_BACKOFF_SECONDS = 0.05
-T = TypeVar("T")
 
 
 def _repository(session: AsyncSession) -> ContextFactRepository:
     return ContextFactRepository(session)
-
-
-# 日本語: session があればそのまま使い、なければ新規トランザクションで実行する。
-# 一時的な DB エラーのときだけバックオフ付きで再試行する。
-# English: Use the given session as is, otherwise run in a new transaction,
-# retrying with backoff only on retryable DB errors.
-async def _transaction(
-    session: AsyncSession | None,
-    operation: Callable[[AsyncSession], Awaitable[T]],
-) -> T:
-    if session is not None:
-        return await operation(session)
-    for attempt in range(MAX_DB_WRITE_ATTEMPTS):
-        try:
-            async with session_scope() as db, db.begin():
-                return await operation(db)
-        except ApiServiceError:
-            raise
-        except SQLAlchemyError as exc:
-            if attempt + 1 >= MAX_DB_WRITE_ATTEMPTS or not is_retryable_db_error(exc):
-                raise
-            await asyncio.sleep(DB_RETRY_BACKOFF_SECONDS * (attempt + 1))
-    raise RuntimeError("Context portability transaction retry loop exhausted.")
 
 
 def _portable_fact(row: dict[str, Any]) -> ContextVaultPortableFact:
@@ -348,7 +319,7 @@ async def build_export(
     Returns (content, content type, filename); fails with 409 if count or size exceeds the limits,
     rather than handing out incomplete data.
     """
-    rows = await _transaction(
+    rows = await in_transaction_with_retry(
         session,
         lambda db: _repository(db).list_all_facts(
             user_id,
@@ -439,7 +410,7 @@ async def preview_import(
     """
     facts = parse_import_document(import_format, content)
     fact_payloads = [fact.model_dump(mode="python") for fact in facts]
-    existing, current_active = await _transaction(
+    existing, current_active = await in_transaction_with_retry(
         session,
         lambda db: _preview_database_state(db, user_id, fact_payloads),
     )
@@ -497,7 +468,7 @@ async def confirm_import(
     """
     facts = parse_import_document(import_format, content)
     _verify_preview_token(preview_token, user_id, import_format, facts)
-    result = await _transaction(
+    result = await in_transaction_with_retry(
         session,
         lambda db: _repository(db).bulk_import_facts(
             user_id,
