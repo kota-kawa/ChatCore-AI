@@ -122,7 +122,7 @@ class EvidenceStoreTestCase(unittest.TestCase):
         second_by_title = {item["title"]: item["evidence_id"] for item in second}
         self.assertEqual(first_by_title, second_by_title)
 
-    def test_execute_get_evidence_reports_partial_and_invalid_requests(self):
+    def test_execute_get_evidence_merges_duplicates_and_reports_partial_and_invalid_requests(self):
         store = EvidenceStore()
         reference = store.add_reference_payload(
             {"prompts": [{"prompt_id": "p1", "title": "Prompt", "content": "body"}]},
