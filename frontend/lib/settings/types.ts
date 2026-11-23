@@ -13,7 +13,7 @@ import {
   type LikedPromptApi,
   type UsageLimitsResponse,
   type PromptRecordApi
-} from "../../../types/generated/api_schemas";
+} from "../../types/generated/api_schemas";
 
 function parseWithSchema<TSchema extends z.ZodTypeAny>(
   schema: TSchema,

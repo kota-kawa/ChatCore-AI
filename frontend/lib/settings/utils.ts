@@ -1,11 +1,11 @@
 // 設定APIの応答を日付表示やフォーム状態へ変換する。
 // Adapts settings API responses into date displays and form state.
 
-import { formatDateTime } from "../../../lib/datetime";
-import { asRecord } from "../../../lib/utils";
+import { formatDateTime } from "../datetime";
+import { asRecord } from "../utils";
 
 import type { PasskeyRecord, ProfileFormState } from "./page_types";
-import type { Locale } from "../../../lib/i18n/config";
+import type { Locale } from "../i18n/config";
 
 // 生の日付文字列を人間が読みやすい形式に変換する — 空値は空文字を返す
 // Converts a raw date string to a human-readable format; returns empty string for falsy input

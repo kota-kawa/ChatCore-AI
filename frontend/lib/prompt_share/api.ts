@@ -13,8 +13,8 @@ import type {
   PromptViewResponse,
   PromptType
 } from "./types";
-import { fetchJsonOrThrow } from "../core/runtime_validation";
-import { resilientFetch } from "../core/resilient_fetch";
+import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { promptShareText } from "./i18n";
 
 type ApiResponse = {

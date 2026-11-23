@@ -14,12 +14,12 @@ import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { showToast } from "../../scripts/core/toast";
 import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
-import type { TaskItem } from "../../scripts/setup/setup_types";
+import type { TaskItem } from "../../lib/chat_page/setup/setup_types";
 import {
   invalidateTasksCache,
   readCachedTasks,
   writeCachedTasks,
-} from "../../scripts/setup/setup_tasks_cache";
+} from "../../lib/chat_page/setup/setup_tasks_cache";
 
 type UseHomePageTaskActionsParams = {
   loggedIn: boolean;

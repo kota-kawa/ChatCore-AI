@@ -19,15 +19,15 @@ import {
   getAttributeFields,
   getContentFormat,
   getMediaType
-} from "../../scripts/prompt_share/prompt_type_registry";
-import type { ContentFormat, MediaType, PromptResource } from "../../scripts/prompt_share/types";
+} from "../../lib/prompt_share/prompt_type_registry";
+import type { ContentFormat, MediaType, PromptResource } from "../../lib/prompt_share/types";
 import type { PromptCategoryOption, PromptPostStatus } from "./prompt_share_page_types";
 import { SkillResourceEditor } from "./skill_resource_editor";
 import { useTranslation } from "../../contexts/locale_context";
 import { useDismissOnOutsidePress } from "../../hooks/use_dismiss_on_outside_press";
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";
-import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
+import { getCategoryLabelOrFallback } from "../../lib/prompt_share/prompt_category_registry";
 
 // レジストリ駆動で描画する属性フィールドの、親が用意する状態バインディング。
 // State binding (provided by the parent) for a registry-driven attribute field.

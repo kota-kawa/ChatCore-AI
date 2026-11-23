@@ -24,17 +24,17 @@ vi.mock("../components/prompt_share/use_prompt_share_page_setup", () => ({
   usePromptSharePageSetup: () => false
 }));
 
-vi.mock("../scripts/components/prompt_assist", () => ({
+vi.mock("../lib/prompt_assist", () => ({
   initPromptAssist: () => null
 }));
 
-vi.mock("../scripts/prompt_share/api", () => ({
+vi.mock("../lib/prompt_share/api", () => ({
   createPrompt: vi.fn(),
   fetchPromptList: mocks.fetchPromptList,
   fetchPromptSearchResults: vi.fn()
 }));
 
-vi.mock("../scripts/user/settings/api", () => ({
+vi.mock("../lib/settings/api", () => ({
   settingsFetchJsonOrThrow: mocks.settingsFetchJsonOrThrow
 }));
 

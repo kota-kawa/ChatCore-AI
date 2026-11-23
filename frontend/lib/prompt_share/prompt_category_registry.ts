@@ -1,4 +1,4 @@
-// frontend/scripts/prompt_share/prompt_category_registry.ts
+// frontend/lib/prompt_share/prompt_category_registry.ts
 // 共有プロンプトのカテゴリ軸のフロント側レジストリ (services/prompt_categories.py のミラー)。
 // Frontend registry for the prompt category axis. Mirror of services/prompt_categories.py.
 //
@@ -15,7 +15,7 @@ export const CATEGORY_UNSET = "";
 // その他カテゴリのキー。
 // Key for the catch-all category.
 export const CATEGORY_OTHER = "other";
-import type { Locale } from "../../lib/i18n/config";
+import type { Locale } from "../i18n/config";
 import { promptShareText, type PromptShareMessageKey } from "./i18n";
 
 // カテゴリ軸の1エントリ。

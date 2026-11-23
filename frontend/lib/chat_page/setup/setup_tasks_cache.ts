@@ -2,8 +2,8 @@
 // Scopes initial task-list caches by authentication state and locale.
 
 import type { TaskItem } from "./setup_types";
-import { CACHE_TTL_MS, STORAGE_KEYS } from "../core/constants";
-import type { Locale } from "../../lib/i18n/config";
+import { CACHE_TTL_MS, STORAGE_KEYS } from "../../../scripts/core/constants";
+import type { Locale } from "../../i18n/config";
 
 const TASKS_CACHE_KEY_PREFIX = STORAGE_KEYS.tasksCachePrefix;
 

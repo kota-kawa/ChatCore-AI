@@ -3,19 +3,19 @@
 import type { GetServerSideProps } from "next";
 
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
-import { normalizePromptData } from "../../scripts/prompt_share/formatters";
+import { normalizePromptData } from "../../lib/prompt_share/formatters";
 import type {
   PromptData,
   PromptFeedResponse,
   PromptPagination
-} from "../../scripts/prompt_share/types";
+} from "../../lib/prompt_share/types";
 import { localizedAbsoluteUrl } from "../../lib/seo";
 import { resolvePageLocale, type Locale } from "../../lib/i18n/config";
-import { promptShareText } from "../../scripts/prompt_share/i18n";
+import { promptShareText } from "../../lib/prompt_share/i18n";
 import {
   normalizeCategory,
   PROMPT_CATEGORY_KEYS
-} from "../../scripts/prompt_share/prompt_category_registry";
+} from "../../lib/prompt_share/prompt_category_registry";
 
 // 共有トップページが SSR で受け取る props。
 // Props the prompt sharing main page receives from SSR.

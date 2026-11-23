@@ -4,10 +4,10 @@
 import { animateAppliedField } from "./animation";
 import { createSuggestionRow } from "./cards";
 import { PROMPT_ASSIST_PRIMARY_FIELDS, getPromptAssistImageMeta, getPromptAssistSkillMeta, getPromptAssistTargetMeta } from "./constants";
-import { localized } from "../../../lib/i18n/config";
+import { localized } from "../i18n/config";
 import { createPromptAssistMarkup } from "./markup";
-import { fetchJsonOrThrow } from "../../core/runtime_validation";
-import { resilientFetch } from "../../core/resilient_fetch";
+import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import type {
   PromptAssistConfig,
   PromptAssistFieldName,

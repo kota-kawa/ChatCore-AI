@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { PromptShareLpScope } from "../components/prompt_share_lp/prompt_share_lp_scope";
 import { PromptShareLpValue } from "../components/prompt_share_lp/prompt_share_lp_value";
 import { LocaleProvider } from "../contexts/locale_context";
-import { PROMPT_CATEGORY_KEYS } from "../scripts/prompt_share/prompt_category_registry";
+import { PROMPT_CATEGORY_KEYS } from "../lib/prompt_share/prompt_category_registry";
 import { buildPromptShareLpStructuredData } from "../pages/prompt_share/lp";
 import type { Locale } from "../lib/i18n/config";
 

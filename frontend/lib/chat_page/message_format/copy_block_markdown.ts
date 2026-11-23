@@ -7,7 +7,7 @@
 // reply — so it is deliberately not a code block: no monospace, no highlighting.
 // The body stays plain text, which keeps what is shown identical to what is copied.
 
-import { escapeHtml } from "../core/html";
+import { escapeHtml } from "../../../scripts/core/html";
 
 // フェンス名。表記ゆれ（chatcore copy / chatcore_copy）もモデル出力ではよく起きるため、
 // 判定側だけ緩めに受ける。生成する HTML は常に同じ。

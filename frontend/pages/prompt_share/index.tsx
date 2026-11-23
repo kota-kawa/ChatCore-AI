@@ -13,22 +13,22 @@ import {
 
 import { SeoHead } from "../../components/SeoHead";
 import "../../scripts/core/csrf";
-import { initPromptAssist } from "../../scripts/components/prompt_assist";
+import { initPromptAssist } from "../../lib/prompt_assist";
 import {
   createPrompt,
   fetchPromptList,
   fetchPromptSearchResults
-} from "../../scripts/prompt_share/api";
-import { normalizePromptData } from "../../scripts/prompt_share/formatters";
+} from "../../lib/prompt_share/api";
+import { normalizePromptData } from "../../lib/prompt_share/formatters";
 import {
   buildPromptCreateFormData,
   containsGuestPostUrl
-} from "../../scripts/prompt_share/guest_post";
+} from "../../lib/prompt_share/guest_post";
 import {
   buildAttributes,
   deriveLegacyPromptType,
   mediaAllowsAttachment
-} from "../../scripts/prompt_share/prompt_type_registry";
+} from "../../lib/prompt_share/prompt_type_registry";
 import type {
   ContentFormat,
   MediaType,
@@ -36,7 +36,7 @@ import type {
   PromptPagination,
   PromptResource,
   PromptType
-} from "../../scripts/prompt_share/types";
+} from "../../lib/prompt_share/types";
 import { PromptShareAuthorProfileModal } from "../../components/prompt_share/prompt_share_author_profile_modal";
 import { EditPromptModal } from "../../components/settings/edit_prompt_modal";
 import { PromptShareComposerModal } from "../../components/prompt_share/prompt_share_composer_modal";
@@ -61,7 +61,7 @@ import {
   getCategoryLabel,
   normalizeCategory,
   PROMPT_CATEGORY_KEYS
-} from "../../scripts/prompt_share/prompt_category_registry";
+} from "../../lib/prompt_share/prompt_category_registry";
 import { PromptSharePageLayout } from "../../components/prompt_share/prompt_share_page_layout";
 import type {
   ContentFormatFilter,

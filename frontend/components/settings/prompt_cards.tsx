@@ -11,14 +11,14 @@ import {
   getPromptPreviewSource,
   getPromptReferenceImageUrl,
   normalizePromptContentFormat
-} from "../../scripts/prompt_share/formatters";
+} from "../../lib/prompt_share/formatters";
 import {
   getCategoryLabel,
   getCategoryLabelOrFallback
-} from "../../scripts/prompt_share/prompt_category_registry";
-import { DEFAULT_CONTENT_FORMAT } from "../../scripts/prompt_share/prompt_type_registry";
-import type { LikedPrompt, PromptRecord } from "../../scripts/user/settings/types";
-import { normalizePreviewText, toDisplayDate } from "../../scripts/user/settings/utils";
+} from "../../lib/prompt_share/prompt_category_registry";
+import { DEFAULT_CONTENT_FORMAT } from "../../lib/prompt_share/prompt_type_registry";
+import type { LikedPrompt, PromptRecord } from "../../lib/settings/types";
+import { normalizePreviewText, toDisplayDate } from "../../lib/settings/utils";
 import type { PromptPreview } from "./prompt_preview_modal";
 import { useTranslation } from "../../contexts/locale_context";
 

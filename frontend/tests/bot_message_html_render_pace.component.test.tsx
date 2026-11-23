@@ -8,8 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // The clock and the cost of the Markdown conversion are replaced so a render's duration can be chosen.
 const clock = vi.hoisted(() => ({ now: 1000, renderCostMs: 0 }));
 
-vi.mock("../scripts/chat/chat_ui", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../scripts/chat/chat_ui")>();
+vi.mock("../lib/chat_page/message_format/chat_ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/chat_page/message_format/chat_ui")>();
   return {
     ...actual,
     formatLLMOutput: vi.fn((text: string) => {
@@ -21,7 +21,7 @@ vi.mock("../scripts/chat/chat_ui", async (importOriginal) => {
 
 import { BotMessageHtml } from "../components/chat_page/bot_message_html";
 import { MAX_STREAM_RENDER_GAP_MS } from "../lib/chat_page/streaming_render_pace";
-import { formatLLMOutput } from "../scripts/chat/chat_ui";
+import { formatLLMOutput } from "../lib/chat_page/message_format/chat_ui";
 
 const HEAVY_RENDER_COST_MS = 40;
 

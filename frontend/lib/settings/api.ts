@@ -1,8 +1,8 @@
 // 利用者設定のAPI要求と応答処理を共通化する。
 // Shares API requests and response handling for user settings.
 
-import { resilientFetch } from "../../core/resilient_fetch";
-import { extractApiErrorMessage, fetchJsonOrThrow } from "../../core/runtime_validation";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
+import { extractApiErrorMessage, fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
 import {
   parseMcpOAuthClientCredentials,
   parseMcpOAuthClientList,
@@ -16,12 +16,12 @@ import {
   type McpOAuthConsent,
   type UsageLimits
 } from "./types";
-import { normalizeLocale, type Locale } from "../../../lib/i18n/config";
+import { normalizeLocale, type Locale } from "../i18n/config";
 import {
   ToolAutoApprovalRevokeResponseSchema,
   ToolAutoApprovalsResponseSchema,
   type ToolAutoApprovalApi,
-} from "../../../types/generated/api_schemas";
+} from "../../types/generated/api_schemas";
 
 export function settingsFetchJsonOrThrow<TPayload>(
   input: RequestInfo | URL,

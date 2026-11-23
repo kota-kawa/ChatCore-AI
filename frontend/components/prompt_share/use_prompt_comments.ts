@@ -9,8 +9,8 @@ import {
   deletePromptComment,
   fetchPromptComments,
   reportPromptComment
-} from "../../scripts/prompt_share/api";
-import type { PromptCommentData } from "../../scripts/prompt_share/types";
+} from "../../lib/prompt_share/api";
+import type { PromptCommentData } from "../../lib/prompt_share/types";
 import type { PromptRecord } from "./prompt_card";
 import { getPromptId } from "./prompt_share_page_utils";
 import { useTranslation } from "../../contexts/locale_context";

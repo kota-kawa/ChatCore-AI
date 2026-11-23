@@ -12,7 +12,7 @@ import {
   getCategoryLabel,
   getCategoryLabelOrFallback,
   normalizeCategory
-} from "../scripts/prompt_share/prompt_category_registry";
+} from "../lib/prompt_share/prompt_category_registry";
 
 test("canonical keys normalize to themselves and resolve to a label", () => {
   for (const category of PROMPT_CATEGORY_REGISTRY) {
