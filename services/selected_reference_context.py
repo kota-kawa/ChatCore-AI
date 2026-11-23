@@ -1,23 +1,19 @@
 """利用者がチャットで選んだ参照元（メモ、公開プロンプト）を、生成の前に検索して文脈へ差し込む。
 
-検索語の候補作成、参照元ごとの検索と再試行、結果の system メッセージ化を担当する。同期版は純粋なプロンプト組み立てのテスト用、
-リクエスト処理は非同期版を使う。
+検索語の候補作成、参照元ごとの検索と再試行、結果の system メッセージ化を担当する。
 
 Context loading for user-selected chat reference sources.
 
 Plans query candidates, searches each source with retries, and injects the results as a system message before generation.
-The synchronous variant serves pure prompt-composition tests; request handlers use the async one.
 """
 
 from __future__ import annotations
 
 import asyncio
-import contextvars
 import json
 import logging
 import re
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from threading import Lock
 from typing import Any, cast
@@ -211,113 +207,6 @@ def safe_json(payload: dict[str, Any]) -> str:
     )
 
 
-# 日本語: 検索を 1 回実行する。例外や辞書以外の戻り値は、例外を伝えずに status=failed の結果へ変える。
-# English: Run one search; an exception or a non-dict return becomes a status=failed result instead of propagating.
-def _run_lookup_once(
-    search: Callable[[str], dict[str, Any]],
-    query: str,
-    *,
-    source_label: str,
-) -> dict[str, Any]:
-    try:
-        payload = search(query)
-    except Exception:
-        logger.warning("Selected %s lookup failed.", source_label, exc_info=True)
-        return {
-            "status": "failed",
-            "query": query,
-            "message": f"The selected {source_label} lookup failed.",
-        }
-    if isinstance(payload, dict):
-        return payload
-    logger.warning("Selected %s lookup returned a non-object payload.", source_label)
-    return {
-        "status": "failed",
-        "query": query,
-        "message": f"The selected {source_label} lookup returned an invalid result.",
-    }
-
-
-# 日本語: 1 つの参照元について、候補の検索語を順に試す。失敗は同じ検索語で一度だけ引き直し、0 件なら次の候補へ進む。
-# English: Try the candidate queries for one source in order: a failure is retried once with the same query,
-# and a zero-hit result moves on to the next candidate.
-def _run_lookup(
-    search: Callable[[str], dict[str, Any]],
-    candidates: CandidateQueryPlan,
-    *,
-    query: str,
-    source_label: str,
-) -> dict[str, Any]:
-    attempted_queries: list[str] = []
-    payload: dict[str, Any] = {}
-    for candidate in candidates:
-        attempted_queries.append(candidate)
-        previous = payload
-        payload = _run_lookup_once(search, candidate, source_label=source_label)
-        for _ in range(MAX_SELECTED_REFERENCE_FAILURE_RETRIES):
-            if payload.get("status") != "failed":
-                break
-            logger.info("Retrying the selected %s lookup once after a failure.", source_label)
-            payload = _run_lookup_once(search, candidate, source_label=source_label)
-        status = payload.get("status")
-        if status == "already_searched":
-            # 試し済みの語だった。結果は無いので、直前の有意な結果（0 件など）を保って次の候補へ進む。
-            # The query was already tried. It carries no result, so keep the previous meaningful result (such as zero hits)
-            # and move on to the next candidate.
-            payload = previous or payload
-            continue
-        if status == "failed":
-            # 参照元自体が落ちている状態は言い換えでは直らないため、残りの試行は使わない。
-            # Rephrasing cannot fix a source that is down, so do not spend the remaining attempts.
-            break
-        if status != "no_results":
-            break
-
-    return {
-        **payload,
-        "requested_query": query,
-        "attempted_queries": attempted_queries,
-    }
-
-
-def _run_lookups(
-    lookups: Sequence[tuple[str, Callable[[str], dict[str, Any]]]],
-    candidates: CandidateQueryPlan,
-    *,
-    query: str,
-) -> list[dict[str, Any]]:
-    """選ばれた参照元をすべて並行して検索する。どちらも I/O で待ち、互いの結果を必要としない。
-
-    Run every selected source concurrently; both block on I/O and neither needs the other.
-    """
-    if len(lookups) == 1:
-        source, search = lookups[0]
-        return [
-            _run_lookup(search, candidates, query=query, source_label=_SOURCE_LABELS[source])
-        ]
-
-    with ThreadPoolExecutor(
-        max_workers=len(lookups), thread_name_prefix="selected-reference"
-    ) as executor:
-        # 使用量の計上先を引き継ぐ。同じ Context は同時に入れないため投入ごとに複製する。
-        # Carry the usage billing subject; a Context cannot be entered concurrently, so each
-        # submission gets its own copy.
-        futures = [
-            executor.submit(
-                contextvars.copy_context().run,
-                _run_lookup,
-                search,
-                candidates,
-                query=query,
-                source_label=_SOURCE_LABELS[source],
-            )
-            for source, search in lookups
-        ]
-        # 提出順に受け取るので、参照元のブロック順は並列実行しても安定する。
-        # Results are collected in submission order, so block order stays deterministic.
-        return [future.result() for future in futures]
-
-
 async def _run_lookup_once_async(
     search: Callable[[str], Any],
     query: str,
@@ -356,7 +245,12 @@ async def _run_lookup_async(
 ) -> dict[str, Any]:
     """1 つの参照元の再試行計画を、可能ならネイティブの非同期検索で実行する。
 
+    候補の検索語を順に試す。失敗は同じ検索語で一度だけ引き直し、0 件なら次の候補へ進む。
+
     Run one source's retry plan using its native async lookup when available.
+
+    The candidate queries are tried in order: a failure is retried once with the same query,
+    and a zero-hit result moves on to the next candidate.
     """
     attempted_queries: list[str] = []
     payload: dict[str, Any] = {}
@@ -385,6 +279,8 @@ async def _run_lookup_async(
             payload = previous or payload
             continue
         if status == "failed":
+            # 参照元自体が落ちている状態は言い換えでは直らないため、残りの試行は使わない。
+            # Rephrasing cannot fix a source that is down, so do not spend the remaining attempts.
             break
         if status != "no_results":
             break
@@ -424,9 +320,16 @@ async def _run_lookups_async(
 async def _load_overview_async(
     personal_overview: Callable[[], Any] | None,
 ) -> dict[str, Any] | None:
-    """呼び出し側の非同期セッションの境界を通して、個人の保存内容の一覧を読み込む。
+    """メモ検索が 0 件だったときに、呼び出し側の非同期セッションの境界を通して、個人の保存内容の一覧を読み込む。
 
-    Load the personal inventory through the caller's async session boundary.
+    ヒットしなかったことは、何も保存していないこととは違う。これが無いと、モデルは「検索で見つからなかった」と伝えられて
+    会話だけで答えてしまい、利用者が自分のメモを答えに反映させたくてその参照元を有効にした意図が活きない。
+
+    Load the personal inventory through the caller's async session boundary after a memo lookup matched nothing.
+
+    A miss is not the same as having nothing saved. Without this the model is told the
+    search found nothing and answers from the conversation alone, even though the user
+    turned the source on precisely so their own notes would inform the answer.
     """
     if personal_overview is None:
         return None
@@ -437,44 +340,6 @@ async def _load_overview_async(
             "Failed to load the personal overview after a no-match lookup.",
             exc_info=True,
         )
-        return None
-    if not isinstance(overview, dict):
-        return None
-    if not overview.get("recent_memos"):
-        return None
-    return overview
-
-
-def _load_overview_if_unmatched(
-    lookups: Sequence[tuple[str, Callable[[str], dict[str, Any]]]],
-    payloads: Sequence[dict[str, Any]],
-    personal_overview: Callable[[], dict[str, Any]] | None,
-) -> dict[str, Any] | None:
-    """メモ検索が実行されて 0 件だったときだけ、保存内容の一覧を読み込む。
-
-    ヒットしなかったことは、何も保存していないこととは違う。これが無いと、モデルは「検索で見つからなかった」と伝えられて
-    会話だけで答えてしまい、利用者が自分のメモを答えに反映させたくてその参照元を有効にした意図が活きない。
-
-    Load the inventory only when the memo lookup ran and matched nothing.
-
-    A miss is not the same as having nothing saved. Without this the model is told the
-    search found nothing and answers from the conversation alone, even though the user
-    turned the source on precisely so their own notes would inform the answer.
-    """
-    if personal_overview is None:
-        return None
-    statuses = [
-        payload.get("status")
-        for (source, _), payload in zip(lookups, payloads, strict=True)
-        if source == PERSONAL_KNOWLEDGE_SOURCE
-    ]
-    if statuses != ["no_results"]:
-        return None
-
-    try:
-        overview = personal_overview()
-    except Exception:
-        logger.warning("Failed to load the personal overview after a no-match lookup.", exc_info=True)
         return None
     if not isinstance(overview, dict):
         return None
@@ -561,85 +426,6 @@ def _build_context(
     return "\n".join(lines)
 
 
-def augment_messages_with_selected_references(
-    messages: list[dict[str, Any]],
-    *,
-    query: str,
-    personal_knowledge_search: Callable[[str], dict[str, Any]] | None = None,
-    shared_prompt_search: Callable[[str], dict[str, Any]] | None = None,
-    personal_overview: Callable[[], dict[str, Any]] | None = None,
-    unavailable_sources: Sequence[str] = (),
-    trace_results: list[SelectedReferenceLookupTrace] | None = None,
-) -> list[dict[str, Any]]:
-    """有効なすべての参照元を生成の前に検索し、必ず参照すべき根拠として差し込む。
-
-    Load every enabled source before generation and inject it as required evidence.
-    """
-    lookups: list[tuple[str, Callable[[str], dict[str, Any]]]] = []
-    if personal_knowledge_search is not None:
-        lookups.append((PERSONAL_KNOWLEDGE_SOURCE, personal_knowledge_search))
-    if shared_prompt_search is not None:
-        lookups.append((SHARED_PROMPT_SOURCE, shared_prompt_search))
-    if not lookups and not unavailable_sources:
-        return messages
-
-    normalized_query = _normalize_query(query)
-    if not normalized_query:
-        return messages
-
-    candidates = CandidateQueryPlan(normalized_query, previous_user_message(messages))
-    payloads = _run_lookups(lookups, candidates, query=normalized_query) if lookups else []
-
-    if trace_results is not None:
-        trace_results.extend(
-            SelectedReferenceLookupTrace(
-                source=source,
-                query=normalized_query,
-                payload=dict(payload),
-            )
-            for (source, _), payload in zip(lookups, payloads, strict=True)
-        )
-        trace_results.extend(
-            SelectedReferenceLookupTrace(
-                source=source,
-                query=normalized_query,
-                payload={"status": "unavailable"},
-            )
-            for source in unavailable_sources
-        )
-
-    result_blocks = [
-        f'<{_SOURCE_RESULT_TAGS[source]} encoding="json">'
-        f"{safe_json(payload)}"
-        f"</{_SOURCE_RESULT_TAGS[source]}>"
-        for (source, _), payload in zip(lookups, payloads, strict=True)
-    ]
-
-    overview_payload = _load_overview_if_unmatched(lookups, payloads, personal_overview)
-    if overview_payload is not None:
-        overview_block, overview_json = _build_overview_block(overview_payload)
-        result_blocks.append(overview_block)
-        if trace_results is not None:
-            trace_results.append(
-                SelectedReferenceLookupTrace(
-                    source=PERSONAL_KNOWLEDGE_SOURCE,
-                    query=normalized_query,
-                    payload=overview_json,
-                )
-            )
-
-    context = _build_context(
-        result_blocks,
-        [source for source, _ in lookups],
-        unavailable_sources,
-        has_overview=overview_payload is not None,
-    )
-    return insert_before_latest_user_message(
-        messages,
-        {"role": "system", "content": context},
-    )
-
-
 async def augment_messages_with_selected_references_async(
     messages: list[dict[str, Any]],
     *,
@@ -652,14 +438,12 @@ async def augment_messages_with_selected_references_async(
 ) -> list[dict[str, Any]]:
     """選ばれた参照元を、ネイティブの非同期 DB コールバックで先読みする。
 
-    上の同期関数は、プロンプト組み立てだけを調べるテストや DB を使わない呼び出し元のために残している。リクエストハンドラは
-    こちらを使うこと。参照元の検索は自前の AsyncSession を作るので、run_blocking の中に隠してはならない。
+    参照元の検索は自前の AsyncSession を作るので、run_blocking の中に隠してはならない。コールバックは同期関数でも受け付ける。
 
     Prefetch selected references through native async database callbacks.
 
-    The synchronous function above remains useful for pure prompt-composition tests and
-    non-database callers. Request handlers must use this variant: selected reference
-    lookups create their own AsyncSession and must never be hidden inside run_blocking.
+    Selected reference lookups create their own AsyncSession and must never be hidden inside
+    run_blocking. Plain synchronous callbacks are accepted as well.
     """
     lookups: list[tuple[str, Callable[[str], Any]]] = []
     if personal_knowledge_search is not None:
