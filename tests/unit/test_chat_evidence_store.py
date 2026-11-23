@@ -7,7 +7,6 @@ import unittest
 from services.chat_evidence_store import (
     GET_EVIDENCE_TOOL_NAME,
     MAX_EVIDENCE_IDS_PER_CALL,
-    EvidenceRequestError,
     EvidenceStore,
     get_evidence_tool_definition,
 )
@@ -123,25 +122,7 @@ class EvidenceStoreTestCase(unittest.TestCase):
         second_by_title = {item["title"]: item["evidence_id"] for item in second}
         self.assertEqual(first_by_title, second_by_title)
 
-    def test_get_many_is_bounded_and_returns_defensive_copies(self):
-        store = EvidenceStore(max_ids_per_call=2)
-        reference = store.add_reference_payload(
-            {"memos": [{"id": "m1", "title": "Memo", "content": "body"}]},
-            source_type="personal_knowledge",
-        )[0]
-        evidence_id = reference["evidence_id"]
-
-        records = store.get_many([evidence_id, evidence_id, "missing"])
-        records[0]["item"]["content"] = "changed"
-
-        self.assertEqual(len(records), 1)
-        self.assertEqual(store.get(evidence_id)["item"]["content"], "body")
-        with self.assertRaises(EvidenceRequestError):
-            store.get_many(["one", "two", "three"])
-        with self.assertRaises(EvidenceRequestError):
-            store.get_many(evidence_id)
-
-    def test_execute_get_evidence_reports_partial_and_invalid_requests(self):
+    def test_execute_get_evidence_merges_duplicates_and_reports_partial_and_invalid_requests(self):
         store = EvidenceStore()
         reference = store.add_reference_payload(
             {"prompts": [{"prompt_id": "p1", "title": "Prompt", "content": "body"}]},
@@ -149,9 +130,10 @@ class EvidenceStoreTestCase(unittest.TestCase):
         )[0]
 
         partial = store.execute_get_evidence(
-            {"evidence_ids": [reference["evidence_id"], "ref_missing"]}
+            {"evidence_ids": [reference["evidence_id"], reference["evidence_id"], "ref_missing"]}
         )
         invalid = store.execute_get_evidence({"evidence_ids": []})
+        not_an_array = store.execute_get_evidence({"evidence_ids": "ref_x"})
         too_many = store.execute_get_evidence(
             {"evidence_ids": [f"ref_{index}" for index in range(MAX_EVIDENCE_IDS_PER_CALL + 1)]}
         )
@@ -159,7 +141,10 @@ class EvidenceStoreTestCase(unittest.TestCase):
         self.assertEqual(partial["status"], "partial")
         self.assertEqual(len(partial["evidence"]), 1)
         self.assertEqual(partial["missing_ids"], ["ref_missing"])
+        partial["evidence"][0]["item"]["content"] = "changed"
+        self.assertEqual(store.get(reference["evidence_id"])["item"]["content"], "body")
         self.assertEqual(invalid["status"], "invalid_arguments")
+        self.assertEqual(not_an_array["status"], "invalid_arguments")
         self.assertEqual(too_many["status"], "invalid_arguments")
 
     # 日本語: 再取得した根拠が予算を超える場合、IDを残したまま本文から落とし、最後は

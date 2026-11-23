@@ -152,11 +152,7 @@ def _reference_url(item: Mapping[str, Any]) -> str:
 
 # モデルが渡した evidence_ids を検証する。文字列の配列であること・空でないこと・長さと件数の上限を確かめ、重複を除く
 # Validate the evidence_ids the model passed: a non-empty array of strings within length and count limits, with duplicates removed
-def _validate_evidence_ids(
-    evidence_ids: Any,
-    *,
-    max_ids: int,
-) -> tuple[str, ...]:
+def _validate_evidence_ids(evidence_ids: Any) -> tuple[str, ...]:
     if isinstance(evidence_ids, (str, bytes)) or not isinstance(evidence_ids, Sequence):
         raise EvidenceRequestError("evidence_ids must be an array of strings.")
     if not evidence_ids:
@@ -177,8 +173,8 @@ def _validate_evidence_ids(
         if evidence_id not in seen:
             normalized.append(evidence_id)
             seen.add(evidence_id)
-    if len(normalized) > max_ids:
-        raise EvidenceRequestError(f"At most {max_ids} evidence IDs may be requested at once.")
+    if len(normalized) > MAX_EVIDENCE_IDS_PER_CALL:
+        raise EvidenceRequestError(f"At most {MAX_EVIDENCE_IDS_PER_CALL} evidence IDs may be requested at once.")
     return tuple(normalized)
 
 
@@ -239,11 +235,7 @@ class EvidenceStore:
     In-memory raw evidence store scoped to a single normal-chat turn.
     """
 
-    def __init__(self, *, max_ids_per_call: int = MAX_EVIDENCE_IDS_PER_CALL) -> None:
-        normalized_limit = int(max_ids_per_call)
-        if normalized_limit < 1:
-            raise ValueError("max_ids_per_call must be at least 1.")
-        self.max_ids_per_call = normalized_limit
+    def __init__(self) -> None:
         self._records: dict[str, dict[str, Any]] = {}
         # 検索の元の値は完全な形でプロンプトの外に保持する。下の個別レコードは選択的に
         # 取り出すための索引であり、元データの代わりではない。
@@ -484,21 +476,6 @@ class EvidenceStore:
         record = self._records.get(evidence_id.strip())
         return deepcopy(record) if record is not None else None
 
-    def get_many(self, evidence_ids: Any) -> tuple[dict[str, Any], ...]:
-        """件数を制限した ID 一覧を検証し、存在するレコードを要求順に返す。
-
-        Validate a bounded ID list and return known records in requested order.
-        """
-        normalized_ids = _validate_evidence_ids(
-            evidence_ids,
-            max_ids=self.max_ids_per_call,
-        )
-        return tuple(
-            deepcopy(self._records[evidence_id])
-            for evidence_id in normalized_ids
-            if evidence_id in self._records
-        )
-
     def execute_get_evidence(
         self,
         arguments: Any,
@@ -524,10 +501,7 @@ class EvidenceStore:
 
         requested = arguments.get("evidence_ids")
         try:
-            normalized_ids = _validate_evidence_ids(
-                requested,
-                max_ids=self.max_ids_per_call,
-            )
+            normalized_ids = _validate_evidence_ids(requested)
         except EvidenceRequestError as exc:
             return self._invalid_request(str(exc))
 

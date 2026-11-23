@@ -327,14 +327,6 @@ class LlmContextBudget:
 
         return max(self.context_window_tokens - self.reserved_tokens, 0)
 
-    def fits_message_tokens(self, message_tokens: int) -> bool:
-        """メッセージだけの見積もりがこの予算に収まるかを返す。
-
-        Return whether a message-only estimate fits this budget.
-        """
-
-        return _non_negative_int(message_tokens, 0) <= self.available_input_tokens
-
 
 def get_context_budget(
     model_name: str,

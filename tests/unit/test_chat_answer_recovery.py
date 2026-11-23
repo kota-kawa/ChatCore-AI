@@ -1,9 +1,8 @@
 # 長いステップのターンで最終回答が「途中で切れる」「本文が二重化する」「無音になる」
-# のを防ぐ回復経路と、その入力・ステップ予算を検証する。
+# のを防ぐ回復経路と、そのステップ予算を検証する。
 # Covers the recovery path that keeps a long, many-step turn from truncating, duplicating, or
-# going silent, together with the input and step budgets that bound it.
+# going silent, together with the step budgets that bound it.
 
-import json
 import unittest
 from unittest.mock import patch
 
@@ -16,10 +15,6 @@ from services.chat_answer_continuation import (
     splice_restarted_answer,
     stream_final_answer_with_recovery,
     strip_continuation_overlap,
-)
-from services.chat_input_budget import (
-    compact_tool_messages,
-    estimate_messages_tokens,
 )
 from services.llm import (
     LlmInputLimitError,
@@ -275,101 +270,6 @@ class FinalAnswerRecoveryTestCase(unittest.TestCase):
 
             os.environ.pop("LLM_FINAL_ANSWER_MAX_CONTINUATIONS", None)
             self.assertEqual(get_final_answer_max_continuations(), 3)
-
-
-# 日本語: 入力トークンの予算超過時にツール結果を古い順に圧縮し、証拠 ID だけは残すことを確かめる。
-# English: Checks that tool results are compacted oldest-first when the input token budget is exceeded, keeping the evidence IDs.
-class InputBudgetTestCase(unittest.TestCase):
-    def _tool_message(self, index):
-        return {
-            "role": "tool",
-            "tool_call_id": f"call-{index}",
-            "name": "web_search",
-            "content": json.dumps(
-                {
-                    "status": "completed",
-                    "source_count": 2,
-                    "sources": [
-                        {
-                            "evidence_id": f"src_{index}{position}",
-                            "url": "https://example.com",
-                            "title": "title",
-                            "snippets": ["snippet " * 50],
-                            "page_text": "page " * 500,
-                        }
-                        for position in range(2)
-                    ],
-                },
-                ensure_ascii=False,
-            ),
-        }
-
-    def test_messages_within_budget_are_returned_untouched(self):
-        messages = [{"role": "user", "content": "short"}]
-
-        compacted, count = compact_tool_messages(messages, max_tokens=10_000)
-
-        self.assertIs(compacted, messages)
-        self.assertEqual(count, 0)
-
-    # 日本語: 予算超過時は古い根拠から本文→スニペットの順に削り、証拠IDは必ず残します。
-    # 証拠IDが消えると引用マーカーの解決が壊れ、出典チップが出せなくなります。
-    # English: Over budget, the oldest evidence loses page text then snippets, but the evidence
-    # IDs always survive: losing them would break citation resolution and the source chips.
-    def test_oldest_evidence_is_compacted_first_and_ids_survive(self):
-        messages = [
-            {"role": "user", "content": "question"},
-            *(self._tool_message(index) for index in range(4)),
-        ]
-        original_tokens = estimate_messages_tokens(messages)
-
-        compacted, count = compact_tool_messages(
-            messages,
-            max_tokens=original_tokens // 3,
-        )
-
-        self.assertGreater(count, 0)
-        self.assertLess(estimate_messages_tokens(compacted), original_tokens)
-        for message in compacted:
-            if message.get("role") != "tool":
-                continue
-            payload = json.loads(message["content"])
-            self.assertTrue(
-                all(source.get("evidence_id") for source in payload["sources"])
-            )
-        # 直近の根拠ほど回答に効くので、先に削られるのは古い方であること。
-        # Later evidence matters more to the answer, so the oldest is compacted first.
-        first_payload = json.loads(compacted[1]["content"])
-        last_payload = json.loads(compacted[-1]["content"])
-        self.assertLessEqual(
-            len(json.dumps(first_payload, ensure_ascii=False)),
-            len(json.dumps(last_payload, ensure_ascii=False)),
-        )
-
-    def test_minimum_budget_reduces_every_tool_result_to_its_evidence_ids(self):
-        messages = [
-            {"role": "user", "content": "question"},
-            *(self._tool_message(index) for index in range(3)),
-        ]
-
-        compacted, count = compact_tool_messages(messages, max_tokens=1)
-
-        self.assertEqual(count, 3)
-        for message in compacted[1:]:
-            payload = json.loads(message["content"])
-            for source in payload["sources"]:
-                self.assertEqual(list(source), ["evidence_id"])
-
-    def test_non_json_tool_content_is_left_alone(self):
-        messages = [
-            {"role": "user", "content": "x" * 40_000},
-            {"role": "tool", "tool_call_id": "call-1", "content": "plain text"},
-        ]
-
-        compacted, count = compact_tool_messages(messages, max_tokens=1)
-
-        self.assertEqual(count, 0)
-        self.assertEqual(compacted[1]["content"], "plain text")
 
 
 # 日本語: 推論ターン数とツール呼び出し数を別々の予算として数える AgentStepBudget を確かめる。
