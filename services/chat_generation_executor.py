@@ -136,28 +136,10 @@ class _GenerationExecutor:
 _generation_executor = _GenerationExecutor()
 
 
-# 生成ジョブ専用のエグゼキュータを取得する（スレッドセーフな遅延初期化）
-# Get the generation-only executor (thread-safe lazy initialization).
-def get_generation_executor() -> ThreadPoolExecutor:
-    return _generation_executor.get()
-
-
 # 生成ジョブを専用プールへ投入する。空き枠が無ければ ChatGenerationCapacityError を送出する。
 # Submit a generation job to the dedicated pool, raising ChatGenerationCapacityError when full.
 def submit_generation_task(func: Any, *args: Any, **kwargs: Any) -> Future[T]:
     return _generation_executor.submit(func, *args, **kwargs)
-
-
-# 同時に実行できる生成ジョブ数を返す
-# Return how many generation jobs may run at once.
-def generation_capacity() -> int:
-    return _generation_executor.capacity()
-
-
-# 現在スロットを占有している生成ジョブ数を返す
-# Return how many generation jobs currently hold a slot.
-def generation_in_flight() -> int:
-    return _generation_executor.in_flight()
 
 
 # 生成ジョブ専用のエグゼキュータをシャットダウンする

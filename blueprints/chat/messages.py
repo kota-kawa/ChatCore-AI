@@ -49,7 +49,6 @@ from services.chat_images import decode_chat_images_from_storage, encode_chat_im
 from services.chat_message_normalization import (
     find_latest_task_launch_request,
     normalize_messages_for_llm,
-    parse_task_launch_message,
 )
 from services.chat_post_dependencies import (
     ChatPostBackgroundDependencies,
@@ -161,13 +160,6 @@ from . import (
 )
 
 logger = logging.getLogger(__name__)
-
-# 日本語: タスク起動メッセージのパーサはロジックを services へ移したが、
-#         ブループリント経由で参照している既存の呼び出し元のために別名を残す。
-# English: The task-launch parser moved to services; this alias keeps the existing
-#          blueprint-level reference working for callers that import it from here.
-_parse_task_launch_message = parse_task_launch_message
-
 
 # リクエストから認証制限サービスを解決するヘルパー関数
 # Helper function to resolve the AuthLimitService instance from the request.

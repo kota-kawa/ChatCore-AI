@@ -14,7 +14,6 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -205,17 +204,6 @@ async def dispose_engine() -> None:
     _session_factory = None
     if engine is not None:
         await engine.dispose()
-
-
-async def check_database() -> bool:
-    """SQLAlchemy の非同期経路で SELECT 1 を実行し、DB に接続できるか確認する（レディネス用）。
-
-    Run the readiness probe through SQLAlchemy's async path.
-    """
-
-    async with session_scope() as session:
-        await session.scalar(text("SELECT 1"))
-    return True
 
 
 def is_retryable_db_error(exc: BaseException) -> bool:
