@@ -111,10 +111,15 @@ from services.chat_use_case import ChatPostUseCase
 from services.context_vault_candidate_service import is_context_extraction_enabled
 from services.context_vault_extraction import schedule_context_extraction
 from services.error_messages import (
+    ERROR_CHAT_EDIT_TARGET_NOT_FOUND,
     ERROR_CHAT_GENERATION_ID_INVALID,
     ERROR_CHAT_GENERATION_ID_REUSED,
     ERROR_CHAT_GENERATION_STATE_UNAVAILABLE,
+    ERROR_CHAT_ROOM_FORBIDDEN,
+    ERROR_CHAT_ROOM_ID_FIELD_REQUIRED,
+    ERROR_CHAT_ROOM_ID_REQUIRED,
     ERROR_CHAT_ROOM_NOT_FOUND,
+    ERROR_GENERATION_JOB_NOT_FOUND,
 )
 from services.i18n import get_request_locale
 from services.llm import (
@@ -852,7 +857,7 @@ async def chat_regenerate(
         theme_preference = None
 
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
-        return jsonify({"error": "chat_room_id is required"}, status_code=400)
+        return jsonify({"error": ERROR_CHAT_ROOM_ID_FIELD_REQUIRED}, status_code=400)
     chat_room_id = chat_room_id_raw.strip()
 
     try:
@@ -1011,7 +1016,7 @@ async def chat_edit_and_regenerate(
         theme_preference = None
 
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
-        return jsonify({"error": "chat_room_id is required"}, status_code=400)
+        return jsonify({"error": ERROR_CHAT_ROOM_ID_FIELD_REQUIRED}, status_code=400)
     chat_room_id = chat_room_id_raw.strip()
 
     if not isinstance(new_message_raw, str) or not new_message_raw.strip():
@@ -1073,7 +1078,7 @@ async def chat_edit_and_regenerate(
                 if message.get("role") == "user"
             ]
             if len(user_positions) <= trailing_user_count:
-                return jsonify({"error": "編集対象のメッセージが見つかりません"}, status_code=404)
+                return jsonify({"error": ERROR_CHAT_EDIT_TARGET_NOT_FOUND}, status_code=404)
             target_pos = user_positions[len(user_positions) - 1 - trailing_user_count]
             attachment_content_kwargs = _carried_attachment_kwargs(existing_messages[target_pos])
             await run_blocking(
@@ -1098,7 +1103,7 @@ async def chat_edit_and_regenerate(
             )
             user_positions = [i for i, node in enumerate(path) if node["sender"] == "user"]
             if len(user_positions) <= trailing_user_count:
-                return jsonify({"error": "編集対象のメッセージが見つかりません"}, status_code=404)
+                return jsonify({"error": ERROR_CHAT_EDIT_TARGET_NOT_FOUND}, status_code=404)
             target_pos = user_positions[len(user_positions) - 1 - trailing_user_count]
             edit_parent_id = path[target_pos - 1]["id"] if target_pos > 0 else None
             target_attached_file_names = path[target_pos].get("attached_file_names")
@@ -1164,7 +1169,7 @@ async def chat_edit_and_regenerate(
             if message.get("role") == "user"
         ]
         if len(user_positions) <= trailing_user_count:
-            return jsonify({"error": "編集対象のメッセージが見つかりません"}, status_code=404)
+            return jsonify({"error": ERROR_CHAT_EDIT_TARGET_NOT_FOUND}, status_code=404)
         target_pos = user_positions[len(user_positions) - 1 - trailing_user_count]
         attachment_content_kwargs = _carried_attachment_kwargs(existing_messages[target_pos])
         await run_blocking(
@@ -1237,7 +1242,7 @@ async def chat_switch_branch(request: Request):
     message_id_raw = data.get("message_id")
 
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
-        return jsonify({"error": "chat_room_id is required"}, status_code=400)
+        return jsonify({"error": ERROR_CHAT_ROOM_ID_FIELD_REQUIRED}, status_code=400)
     chat_room_id = chat_room_id_raw.strip()
 
     if not isinstance(message_id_raw, int) or message_id_raw < 1:
@@ -1254,7 +1259,7 @@ async def chat_switch_branch(request: Request):
         room_mode, _sid, legacy_response = await _resolve_authenticated_room_target(
             chat_room_id,
             user_id,
-            "他ユーザーのチャットルームは操作できません",
+            ERROR_CHAT_ROOM_FORBIDDEN,
         )
         if legacy_response is not None:
             return legacy_response
@@ -1308,7 +1313,7 @@ async def chat_stop(
 
     chat_room_id = data.get("chat_room_id")
     if not chat_room_id:
-        return jsonify({"error": "chat_room_id is required"}, status_code=400)
+        return jsonify({"error": ERROR_CHAT_ROOM_ID_FIELD_REQUIRED}, status_code=400)
 
     session = request.session
     resolved_chat_generation_service = _resolve_chat_generation_service(
@@ -1323,7 +1328,7 @@ async def chat_stop(
             _room_mode, sid, legacy_response = await _resolve_authenticated_room_target(
                 chat_room_id,
                 user_id,
-                "他ユーザーのチャットルームは操作できません",
+                ERROR_CHAT_ROOM_FORBIDDEN,
             )
             if legacy_response is not None:
                 return legacy_response
@@ -1361,7 +1366,7 @@ async def get_chat_history(request: Request):
     await run_blocking(cleanup_ephemeral_chats)
     chat_room_id = request.query_params.get("room_id")
     if not chat_room_id:
-        return jsonify({"error": "room_id is required"}, status_code=400)
+        return jsonify({"error": ERROR_CHAT_ROOM_ID_REQUIRED}, status_code=400)
     limit = _parse_page_size(request.query_params.get("limit"))
     before_message_id = _parse_before_message_id(request.query_params.get("before_id"))
 
@@ -1431,7 +1436,7 @@ async def chat_generation_stream(
     await run_blocking(cleanup_ephemeral_chats)
     chat_room_id = request.query_params.get("room_id")
     if not chat_room_id:
-        return jsonify({"error": "room_id is required"}, status_code=400)
+        return jsonify({"error": ERROR_CHAT_ROOM_ID_REQUIRED}, status_code=400)
     generation_id, generation_id_error = _parse_requested_generation_id(
         {"generation_id": request.query_params.get("generation_id")}
     )
@@ -1485,7 +1490,7 @@ async def chat_generation_stream(
             status_code=503,
         )
     if selected_generation_id is None:
-        return jsonify({"error": "生成ジョブが見つかりません"}, status_code=404)
+        return jsonify({"error": ERROR_GENERATION_JOB_NOT_FOUND}, status_code=404)
 
     job = get_generation_job(
         generation_key,
@@ -1520,7 +1525,7 @@ async def chat_generation_stream(
             status_code=503,
         )
     if not replayable and not active:
-        return jsonify({"error": "生成ジョブが見つかりません"}, status_code=404)
+        return jsonify({"error": ERROR_GENERATION_JOB_NOT_FOUND}, status_code=404)
 
     if not resolved_chat_generation_service.supports_distributed_streaming():
         if active:
@@ -1528,7 +1533,7 @@ async def chat_generation_stream(
                 {"error": "生成ジョブは進行中ですが、このインスタンスでは再接続できません。"},
                 status_code=409,
             )
-        return jsonify({"error": "生成ジョブが見つかりません"}, status_code=404)
+        return jsonify({"error": ERROR_GENERATION_JOB_NOT_FOUND}, status_code=404)
 
     distributed_events = iter_generation_events(
         generation_key,
@@ -1556,7 +1561,7 @@ async def chat_generation_status(
     await run_blocking(cleanup_ephemeral_chats)
     chat_room_id = request.query_params.get("room_id")
     if not chat_room_id:
-        return jsonify({"error": "room_id is required"}, status_code=400)
+        return jsonify({"error": ERROR_CHAT_ROOM_ID_REQUIRED}, status_code=400)
 
     session = request.session
     resolved_chat_generation_service = _resolve_chat_generation_service(

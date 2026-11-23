@@ -11,7 +11,31 @@ from __future__ import annotations
 # 認証関連のエラーメッセージ定義です。
 # Error message definitions related to authentication.
 ERROR_LOGIN_REQUIRED = "ログインが必要です"
+# 日本語: ERROR_LOGIN_REQUIRED と句点の有無だけが異なる既存の応答文言。応答を変えないよう別の定数のまま保つ。
+# English: Differs from ERROR_LOGIN_REQUIRED only by the trailing period; kept separate so responses stay unchanged.
+ERROR_LOGIN_REQUIRED_PERIOD = "ログインが必要です。"
+ERROR_NOT_LOGGED_IN = "ログインしていません"
+ERROR_SESSION_INFO_MISSING = "セッション情報がありません。最初からやり直してください"
+ERROR_VERIFICATION_CODE_MISMATCH = "認証コードが一致しません。"
+ERROR_VERIFICATION_CODE_ATTEMPTS_EXHAUSTED = "認証コードの試行回数が上限に達しました。"
+ERROR_VERIFICATION_CODE_EXPIRED = "認証コードの有効期限が切れています。"
+ERROR_VERIFICATION_CODE_ATTEMPTS_RATE_LIMITED = "認証コードの試行回数が多すぎます。時間をおいて再試行してください。"
+ERROR_AUTH_EMAIL_DAILY_LIMIT_TEMPLATE = (
+    "本日の認証メール送信上限（全ユーザー合計 {daily_limit} 件）に達しました。"
+    "日付が変わってから再度お試しください。"
+)
+ERROR_LLM_DAILY_LIMIT_TEMPLATE = (
+    "本日のLLM API利用上限（1ユーザーあたり {daily_limit} 回）に達しました。"
+    "日付が変わってから再度お試しください。"
+)
+# 日本語: 例外ハンドラや生成ジョブの失敗で、原因を伏せて利用者へ返す既定の文言。
+# English: The default message returned to users, hiding the cause, from exception handlers and failed generation jobs.
+ERROR_INTERNAL = "内部エラーが発生しました。"
 ERROR_INVALID_JSON = "JSON形式が不正です。"
+ERROR_REQUIRED_FIELDS_MISSING = "必要なフィールドが不足しています"
+# 日本語: ERROR_REQUIRED_FIELDS_MISSING と句点の有無だけが異なる既存の応答文言。応答を変えないよう別の定数のまま保つ。
+# English: Differs from ERROR_REQUIRED_FIELDS_MISSING only by the trailing period; kept separate so responses stay unchanged.
+ERROR_REQUIRED_FIELDS_MISSING_PERIOD = "必要なフィールドが不足しています。"
 ERROR_TOKEN_REQUIRED = "token is required"
 ERROR_PASSKEY_USAGE_UPDATE_FAILED = (
     "Passkeyの利用状況を保存できなかったため、ログインを中止しました。しばらくしてからもう一度お試しください。"
@@ -33,6 +57,10 @@ ERROR_IMAGE_INPUT_MODEL_UNSUPPORTED = "画像を読み込めるのは GPT-6 Luna
 ERROR_CHAT_IMAGE_NOT_FOUND = "画像が見つかりません。"
 ERROR_SHARED_LINK_NOT_FOUND = "共有リンクが見つかりません"
 ERROR_CHAT_ROOM_ID_REQUIRED = "room_id is required"
+ERROR_CHAT_ROOM_ID_FIELD_REQUIRED = "chat_room_id is required"
+ERROR_CHAT_ROOM_CURSOR_INVALID = "invalid cursor"
+ERROR_GENERATION_JOB_NOT_FOUND = "生成ジョブが見つかりません"
+ERROR_CHAT_EDIT_TARGET_NOT_FOUND = "編集対象のメッセージが見つかりません"
 ERROR_CHAT_ROOM_TEMPORARY_NOT_SHAREABLE = "temporary chat は共有できません"
 ERROR_CHAT_ROOM_TEMPORARY_NOT_PINNABLE = "未保存のチャットはピン留めできません"
 MESSAGE_CHAT_SHARE_REVOKED = "共有リンクを無効にしました"
@@ -68,7 +96,7 @@ ERROR_AVATAR_FILENAME_INVALID = "画像ファイル名が不正です。"
 ERROR_AVATAR_EXTENSION_UNSUPPORTED = "画像は JPG / PNG / GIF / WebP のいずれかを指定してください。"
 ERROR_AVATAR_MIME_UNSUPPORTED = "画像ファイルのみアップロードできます。"
 ERROR_AVATAR_FORMAT_UNDETECTED = "画像形式を判別できませんでした。"
-ERROR_AVATAR_FORMAT_MISMATCH = "ファイル拡張子と画像形式が一致しません。"
+ERROR_IMAGE_FORMAT_MISMATCH = "ファイル拡張子と画像形式が一致しません。"
 ERROR_AVATAR_CONTENT_TYPE_MISMATCH = "Content-Typeと画像形式が一致しません。"
 ERROR_AVATAR_TOO_LARGE = "画像サイズは5MB以下にしてください。"
 ERROR_AVATAR_NOT_FOUND = "アバター画像が見つかりません。"
@@ -92,9 +120,9 @@ ERROR_INVALID_PROMPT_FEED_FILTER = "プロンプト一覧の絞り込み条件�
 # English: Messages for shared prompts (feed, posting and attachments).
 ERROR_PROMPT_NOT_FOUND = "プロンプトが見つかりません"
 ERROR_PROMPT_ATTACHMENT_EMPTY = "空の添付ファイルはアップロードできません。"
-ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH = "ファイル拡張子と画像形式が一致しません。"
 ERROR_PROMPT_ATTACHMENT_MEDIA_UNSUPPORTED = "このメディアタイプはファイル添付に対応していません。"
 ERROR_PROMPT_ATTACHMENT_FILENAME_INVALID = "添付ファイル名が不正です。"
+ERROR_PROMPT_ATTACHMENT_TOO_LARGE_TEMPLATE = "添付ファイルのサイズは{max_mb}MB以下にしてください。"
 ERROR_PROMPT_ATTACHMENT_MIME_UNSUPPORTED = "許可されていない形式の添付ファイルです。"
 ERROR_PROMPT_ATTACHMENT_NOT_FOUND = "添付画像が見つかりません。"
 ERROR_PROMPT_FORM_UNPARSABLE = (
@@ -175,6 +203,8 @@ ERROR_CONTEXT_FACT_REPLACEMENT_NOT_REVERTIBLE = (
 )
 ERROR_CONTEXT_FACT_REVISION_REQUIRED = "revisionを1以上の整数で指定してください。"
 ERROR_CONTEXT_FACT_DELETE_ALL_CONFIRMATION_REQUIRED = "すべての記憶を削除するには、確認の値を指定してください。"
+ERROR_SEARCH_QUERY_REQUIRED = "検索語を指定してください。"
+ERROR_PAGING_CURSOR_INVALID = "ページングカーソルが不正です。"
 ERROR_CONTEXT_FACT_SEARCH_QUERY_TOO_LONG = "検索語が長すぎます。"
 ERROR_CONTEXT_FACT_SEARCH_QUERY_INVALID = "検索語に使用できない文字が含まれています。"
 ERROR_CONTEXT_VAULT_IMPORT_TOO_LARGE = "インポートファイルは10MiB以下にしてください。"
@@ -223,12 +253,20 @@ WARNING_CONTEXT_VAULT_IMPORT_ACTIVE_LIMIT = (
     "有効なコンテキストが200件を超えるため、この内容はインポートできません。"
 )
 ERROR_CONTEXT_EXTRACTION_SETTINGS_NOT_FOUND = "抽出設定の対象ユーザーが見つかりません。"
-ERROR_CONTEXT_EXTRACTION_SETTINGS_PAYLOAD_INVALID = (
-    "enabledにはtrueまたはfalseを指定してください。"
-)
+ERROR_CONTEXT_SETTINGS_ENABLED_INVALID = "enabledにはtrueまたはfalseを指定してください。"
 ERROR_CONTEXT_MEMORY_USE_SETTINGS_NOT_FOUND = "記憶の利用設定の対象ユーザーが見つかりません。"
-ERROR_CONTEXT_MEMORY_USE_SETTINGS_PAYLOAD_INVALID = (
-    "enabledにはtrueまたはfalseを指定してください。"
-)
 
 ERROR_STRUCTURED_UI_UNAVAILABLE = "このUIは表示できません。"
+
+# 日本語: メモ・コレクションの取得、更新、並べ替えでユーザーに提示する文言です。
+# English: User-facing messages for reading, updating and reordering memos and collections.
+ERROR_MEMO_NOT_FOUND = "メモが見つかりません。"
+ERROR_COLLECTION_NOT_FOUND = "コレクションが見つかりません。"
+ERROR_MEMO_CREATE_FAILED = "メモを作成できませんでした。"
+ERROR_MEMO_AI_RESPONSE_REQUIRED = "AIの回答を入力してください。"
+ERROR_MEMO_UPDATED_ELSEWHERE = "メモが別の操作で更新されています。再読み込みしてからやり直してください。"
+ERROR_MEMO_SHARED_CHANGE_NOT_ALLOWED = "共有中のメモを更新するには、公開内容の変更を明示的に許可してください。"
+ERROR_MEMO_APPEND_TOO_LONG_TEMPLATE = "追記後のメモ本文は{max_length}文字以内にしてください。"
+ERROR_MEMO_REORDER_POSITION_INVALID = "並べ替え位置が不正です。"
+ERROR_MEMO_REORDER_TARGET_NOT_FOUND = "並べ替え先のメモが見つかりません。"
+ERROR_MEMO_REORDER_STATE_MISMATCH = "ピン留めまたはアーカイブ状態が異なるメモの間には移動できません。"

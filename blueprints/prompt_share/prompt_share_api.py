@@ -35,11 +35,15 @@ from services.error_messages import (
     ERROR_GUEST_PROMPT_URL_FORBIDDEN,
     ERROR_INVALID_PROMPT_FEED_CURSOR,
     ERROR_INVALID_PROMPT_FEED_FILTER,
+    ERROR_NOT_LOGGED_IN,
     ERROR_PROMPT_ATTACHMENT_EMPTY,
     ERROR_PROMPT_ATTACHMENT_NOT_FOUND,
+    ERROR_PROMPT_ATTACHMENT_TOO_LARGE_TEMPLATE,
     ERROR_PROMPT_CREATE_RATE_LIMITED,
     ERROR_PROMPT_FORM_UNPARSABLE,
     ERROR_PROMPT_NOT_FOUND,
+    ERROR_REQUIRED_FIELDS_MISSING,
+    ERROR_REQUIRED_FIELDS_MISSING_PERIOD,
     MESSAGE_SHARED_SKILL_ADDED,
 )
 from services.guest_prompt_service import (
@@ -390,7 +394,7 @@ def _save_prompt_attachment(upload_file: Any, user_id: int, media_type: str) -> 
                 break
             total_size += len(chunk)
             if total_size > PROMPT_ATTACHMENT_MAX_BYTES:
-                raise ValueError(f"添付ファイルのサイズは{PROMPT_ATTACHMENT_MAX_BYTES // (1024 * 1024)}MB以下にしてください。")
+                raise ValueError(ERROR_PROMPT_ATTACHMENT_TOO_LARGE_TEMPLATE.format(max_mb=PROMPT_ATTACHMENT_MAX_BYTES // (1024 * 1024)))
             chunks.append(chunk)
         if total_size == 0:
             raise ValueError(ERROR_PROMPT_ATTACHMENT_EMPTY)
@@ -671,7 +675,7 @@ async def create_prompt_comment(prompt_id: int, request: Request):
     #
     # Post a comment. Requires login; checks the rate limits and URL cap, while duplicate detection is done in the service layer.
     if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     user_id = int(request.session["user_id"])
     actor_is_admin = bool(request.session.get("is_admin"))
     allowed, limit_message, retry_after = await run_blocking(
@@ -726,7 +730,7 @@ async def delete_prompt_comment(comment_id: int, request: Request):
     #
     # Delete a comment. Whether the actor may do so (admin, author or prompt owner) is decided in the service layer.
     if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     try:
         payload, status_code = await _service().delete_comment(
             actor_user_id=int(request.session["user_id"]),
@@ -746,7 +750,7 @@ async def report_prompt_comment(comment_id: int, request: Request):
     #
     # Report a comment. Once reports reach a threshold, the comment is hidden automatically.
     if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
@@ -842,7 +846,7 @@ async def create_prompt(request: Request):
     payload, validation_error = validate_payload_model(
         data,
         SharedPromptCreateRequest,
-        error_message="必要なフィールドが不足しています。",
+        error_message=ERROR_REQUIRED_FIELDS_MISSING_PERIOD,
     )
     if validation_error is not None:
         return validation_error
@@ -911,14 +915,14 @@ async def add_prompt_as_task(request: Request):
     #
     # Import a public prompt as a task the user can use in their own chat.
     if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
     payload, validation_error = validate_payload_model(
         data,
         PromptTaskCreateRequest,
-        error_message="必要なフィールドが不足しています",
+        error_message=ERROR_REQUIRED_FIELDS_MISSING,
     )
     if validation_error is not None:
         return validation_error
@@ -944,14 +948,14 @@ async def add_prompt_as_skill(request: Request):
     #
     # Import a public prompt as one of the user's Skills.
     if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
     payload, validation_error = validate_payload_model(
         data,
         PromptTaskCreateRequest,
-        error_message="必要なフィールドが不足しています",
+        error_message=ERROR_REQUIRED_FIELDS_MISSING,
     )
     if validation_error is not None:
         return validation_error
@@ -977,14 +981,14 @@ async def remove_prompt_as_task(request: Request):
     #
     # Remove a public prompt from the tasks the user uses in chat.
     if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
     payload, validation_error = validate_payload_model(
         data,
         PromptTaskCreateRequest,
-        error_message="必要なフィールドが不足しています",
+        error_message=ERROR_REQUIRED_FIELDS_MISSING,
     )
     if validation_error is not None:
         return validation_error
@@ -1010,14 +1014,14 @@ async def add_like(request: Request):
     #
     # Like a public prompt.
     if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
     payload, validation_error = validate_payload_model(
         data,
         PromptLikeRequest,
-        error_message="必要なフィールドが不足しています",
+        error_message=ERROR_REQUIRED_FIELDS_MISSING,
     )
     if validation_error is not None:
         return validation_error
@@ -1037,14 +1041,14 @@ async def remove_like(request: Request):
     #
     # Remove the user's like from a public prompt.
     if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
     payload, validation_error = validate_payload_model(
         data,
         PromptLikeRequest,
-        error_message="必要なフィールドが不足しています",
+        error_message=ERROR_REQUIRED_FIELDS_MISSING,
     )
     if validation_error is not None:
         return validation_error

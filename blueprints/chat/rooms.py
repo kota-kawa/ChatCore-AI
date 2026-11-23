@@ -40,6 +40,8 @@ from services.chat_service import (
     validate_room_owner,
 )
 from services.error_messages import (
+    ERROR_CHAT_ROOM_CURSOR_INVALID,
+    ERROR_CHAT_ROOM_DELETE_FORBIDDEN,
     ERROR_CHAT_ROOM_ID_REQUIRED,
     ERROR_CHAT_ROOM_NOT_FOUND,
     ERROR_CHAT_ROOM_SHARE_FORBIDDEN,
@@ -203,7 +205,7 @@ def _decode_room_list_cursor(value: str | None) -> tuple[datetime, str] | None:
     except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError, binascii.Error) as exc:
         # 不正なカーソルの場合はエラーをスロー
         # Raise ApiServiceError on malformed cursor strings
-        raise ApiServiceError("invalid cursor", 400) from exc
+        raise ApiServiceError(ERROR_CHAT_ROOM_CURSOR_INVALID, 400) from exc
 
 
 # ルームデータからページネーションカーソル用のBase64 URL Safe文字列を作成する関数
@@ -498,7 +500,7 @@ async def delete_chat_room(request: Request):
     payload, validation_error = validate_payload_model(
         data,
         ChatRoomIdRequest,
-        error_message="room_id is required",
+        error_message=ERROR_CHAT_ROOM_ID_REQUIRED,
     )
     if validation_error is not None:
         return validation_error
@@ -514,7 +516,7 @@ async def delete_chat_room(request: Request):
             room_mode, legacy_response = await _resolve_authenticated_room_mode(
                 session["user_id"],
                 room_id,
-                "他ユーザーのチャットルームは削除できません",
+                ERROR_CHAT_ROOM_DELETE_FORBIDDEN,
             )
             if legacy_response is not None:
                 return legacy_response

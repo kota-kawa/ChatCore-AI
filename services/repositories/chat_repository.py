@@ -453,7 +453,7 @@ class ChatRepository:
         if len(found) != len(unique_room_ids):
             raise ResourceNotFoundError(ERROR_CHAT_ROOM_NOT_FOUND)
         if any(owner_id != user_id for owner_id in found.values()):
-            raise ForbiddenOperationError("他ユーザーのチャットルームは削除できません")
+            raise ForbiddenOperationError(ERROR_CHAT_ROOM_DELETE_FORBIDDEN)
         await self.session.execute(delete(ChatRoom).where(ChatRoom.id.in_(unique_room_ids)))
         return {"message": "削除しました", "deleted_count": len(unique_room_ids), "deleted_room_ids": unique_room_ids}
 

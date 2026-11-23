@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import Request
 
-from services.error_messages import ERROR_CHAT_GENERATION_ID_INVALID
+from services.error_messages import ERROR_CHAT_GENERATION_ID_INVALID, ERROR_INTERNAL
 from services.generative_ui import GenerativeUiMode
 
 from .chat_generation_agent_loop import ChatGenerationAgentLoopMixin
@@ -171,7 +171,7 @@ class ChatGenerationJob(
             "Chat generation ended without a terminal event; closing it as an error.",
             extra=self._telemetry.as_log_extra(),
         )
-        error_message = "内部エラーが発生しました。"
+        error_message = ERROR_INTERNAL
         self._handle_error(
             error_message,
             {"message": error_message, "retryable": True},

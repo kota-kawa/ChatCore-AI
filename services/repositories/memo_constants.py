@@ -1,20 +1,12 @@
-"""メモ機能で共有する定数(エラーメッセージ、一覧の件数、ゴミ箱の保持日数など)。
+"""メモ機能で共有する定数(一覧の件数、ゴミ箱の保持日数など)。
 
 memo_repository / memo_serializers とメモ関連の Service・ブループリントから参照される。
 
-Constants shared by the memo feature (error messages, list sizes, trash retention, etc.).
+Constants shared by the memo feature (list sizes, trash retention, etc.).
 Referenced by memo_repository, memo_serializers and the memo services and blueprints.
 """
 
 from __future__ import annotations
-
-# メモが存在しない際のエラーメッセージ
-# Error message when a memo is not found.
-MEMO_NOT_FOUND_ERROR = "メモが見つかりません。"
-
-# コレクションが存在しない際のエラーメッセージ
-# Error message when a collection is not found.
-COLLECTION_NOT_FOUND_ERROR = "コレクションが見つかりません。"
 
 # メモ一覧取得時のデフォルト取得件数
 # Default limit/count for fetching memo lists.

@@ -37,6 +37,7 @@ from services.db import dispose_engine  # noqa: E402
 from services.default_shared_prompts import ensure_default_shared_prompts  # noqa: E402
 from services.default_tasks import ensure_default_tasks_seeded  # noqa: E402
 from services.demo_access import purge_expired_demo_accounts  # noqa: E402
+from services.error_messages import ERROR_INTERNAL  # noqa: E402
 from services.health import get_liveness_status, get_readiness_status  # noqa: E402
 from services.llm_daily_limit import LlmDailyLimitService  # noqa: E402
 from services.locale_middleware import LocaleMiddleware  # noqa: E402
@@ -56,7 +57,7 @@ from services.security_headers import SecurityHeadersMiddleware  # noqa: E402
 from services.session_middleware import PermanentSessionMiddleware  # noqa: E402
 from services.structured_ui_delivery import StructuredUiDeliveryMiddleware  # noqa: E402
 from services.usage_subject import UsageSubjectMiddleware  # noqa: E402
-from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, jsonify  # noqa: E402
+from services.web import jsonify  # noqa: E402
 
 # ルートロガーにコンソール+ローテーションファイル出力を設定する
 # Configure console + rotating file logging on the root logger.
@@ -432,7 +433,7 @@ async def db_pool_timeout_handler(request: Request, exc: SQLAlchemyTimeoutError)
     )
     retry_after = os.getenv("DB_POOL_TIMEOUT_RETRY_AFTER_SECONDS", "3")
     return jsonify(
-        {"error": DEFAULT_INTERNAL_ERROR_MESSAGE},
+        {"error": ERROR_INTERNAL},
         status_code=503,
         headers={"Retry-After": retry_after},
     )
@@ -450,7 +451,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         request.url.path,
         exc_info=exc,
     )
-    return jsonify({"error": DEFAULT_INTERNAL_ERROR_MESSAGE}, status_code=500)
+    return jsonify({"error": ERROR_INTERNAL}, status_code=500)
 
 
 # アプリケーションを直接実行する場合のエントリーポイント

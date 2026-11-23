@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import Request
 
 from services.api_errors import ApiServiceError
-from services.error_messages import ERROR_LOGIN_REQUIRED
+from services.error_messages import ERROR_CHAT_ROOM_ID_REQUIRED, ERROR_LOGIN_REQUIRED
 from services.project_service import (
     assign_room_to_project,
     create_project,
@@ -181,7 +181,7 @@ async def assign_room_project_endpoint(request: Request):
     if error is not None:
         return error
 
-    payload, error_response = await _read_payload(request, AssignRoomProjectRequest, "room_id is required")
+    payload, error_response = await _read_payload(request, AssignRoomProjectRequest, ERROR_CHAT_ROOM_ID_REQUIRED)
     if error_response is not None:
         return error_response
 

@@ -44,6 +44,15 @@ from services.email_auth_transaction import (
     verify_email_auth_transaction,
 )
 from services.email_service import resolve_request_email_locale, send_email
+from services.error_messages import (
+    ERROR_AUTH_EMAIL_DAILY_LIMIT_TEMPLATE,
+    ERROR_SESSION_INFO_MISSING,
+    ERROR_USER_NOT_FOUND,
+    ERROR_VERIFICATION_CODE_ATTEMPTS_EXHAUSTED,
+    ERROR_VERIFICATION_CODE_ATTEMPTS_RATE_LIMITED,
+    ERROR_VERIFICATION_CODE_EXPIRED,
+    ERROR_VERIFICATION_CODE_MISMATCH,
+)
 from services.llm_daily_limit import (
     LlmDailyLimitService,
     consume_auth_email_daily_quota,
@@ -112,7 +121,7 @@ async def _verify_dedicated_registration_code(
     )
     if not allowed:
         return jsonify_rate_limited(
-            limit_error or "認証コードの試行回数が多すぎます。時間をおいて再試行してください。",
+            limit_error or ERROR_VERIFICATION_CODE_ATTEMPTS_RATE_LIMITED,
             retry_after=parse_retry_after_seconds(
                 limit_error,
                 default=DEFAULT_RETRY_AFTER_SECONDS,
@@ -130,7 +139,7 @@ async def _verify_dedicated_registration_code(
         if not user:
             clear_legacy_email_auth_session(request.session)
             return email_auth_failure_response(
-                "ユーザーが存在しません",
+                ERROR_USER_NOT_FOUND,
                 status_code=AUTH_FAILURE_STATUS_CODE,
                 clear_cookie=True,
             )
@@ -155,25 +164,25 @@ async def _verify_dedicated_registration_code(
 
     if result.status == EMAIL_AUTH_RESULT_INVALID:
         return email_auth_failure_response(
-            "認証コードが一致しません。",
+            ERROR_VERIFICATION_CODE_MISMATCH,
             status_code=AUTH_FAILURE_STATUS_CODE,
             clear_cookie=False,
         )
     if result.status == EMAIL_AUTH_RESULT_EXHAUSTED:
         return email_auth_failure_response(
-            "認証コードの試行回数が上限に達しました。",
+            ERROR_VERIFICATION_CODE_ATTEMPTS_EXHAUSTED,
             status_code=AUTH_FAILURE_STATUS_CODE,
             clear_cookie=True,
         )
     if result.status == EMAIL_AUTH_RESULT_EXPIRED:
         return email_auth_failure_response(
-            "認証コードの有効期限が切れています。",
+            ERROR_VERIFICATION_CODE_EXPIRED,
             status_code=AUTH_FAILURE_STATUS_CODE,
             clear_cookie=True,
         )
     if result.status == EMAIL_AUTH_RESULT_MISSING:
         return email_auth_failure_response(
-            "セッション情報がありません。最初からやり直してください",
+            ERROR_SESSION_INFO_MISSING,
             status_code=AUTH_FAILURE_STATUS_CODE,
             clear_cookie=True,
         )
@@ -273,10 +282,7 @@ async def api_send_verification_email(
     )
     if not can_send_email:
         return jsonify_rate_limited(
-            (
-                f"本日の認証メール送信上限（全ユーザー合計 {daily_limit} 件）に達しました。"
-                "日付が変わってから再度お試しください。"
-            ),
+            ERROR_AUTH_EMAIL_DAILY_LIMIT_TEMPLATE.format(daily_limit=daily_limit),
             retry_after=get_seconds_until_daily_reset(),
             status="fail",
         )
@@ -382,7 +388,7 @@ async def api_verify_registration_code(
     if dedicated_requested:
         if dedicated_transaction is None:
             return email_auth_failure_response(
-                "セッション情報がありません。最初からやり直してください",
+                ERROR_SESSION_INFO_MISSING,
                 status_code=AUTH_FAILURE_STATUS_CODE,
                 clear_cookie=True,
             )
@@ -401,7 +407,7 @@ async def api_verify_registration_code(
     # Verify that session verification information exists.
     if not session_code or not user_id:
         return jsonify(
-            {"status": "fail", "error": "セッション情報がありません。最初からやり直してください"},
+            {"status": "fail", "error": ERROR_SESSION_INFO_MISSING},
             status_code=AUTH_FAILURE_STATUS_CODE,
         )
 
@@ -415,7 +421,7 @@ async def api_verify_registration_code(
     if issued_at <= 0 or int(time.time()) - issued_at > VERIFICATION_CODE_TTL_SECONDS:
         _clear_registration_verification_session(session)
         return jsonify(
-            {"status": "fail", "error": "認証コードの有効期限が切れています。"},
+            {"status": "fail", "error": ERROR_VERIFICATION_CODE_EXPIRED},
             status_code=AUTH_FAILURE_STATUS_CODE,
         )
 
@@ -424,7 +430,7 @@ async def api_verify_registration_code(
     if attempts >= VERIFICATION_CODE_MAX_ATTEMPTS:
         _clear_registration_verification_session(session)
         return jsonify(
-            {"status": "fail", "error": "認証コードの試行回数が上限に達しました。"},
+            {"status": "fail", "error": ERROR_VERIFICATION_CODE_ATTEMPTS_EXHAUSTED},
             status_code=AUTH_FAILURE_STATUS_CODE,
         )
 
@@ -440,7 +446,7 @@ async def api_verify_registration_code(
     )
     if not allowed:
         return jsonify_rate_limited(
-            limit_error or "認証コードの試行回数が多すぎます。時間をおいて再試行してください。",
+            limit_error or ERROR_VERIFICATION_CODE_ATTEMPTS_RATE_LIMITED,
             retry_after=parse_retry_after_seconds(
                 limit_error,
                 default=DEFAULT_RETRY_AFTER_SECONDS,
@@ -461,11 +467,11 @@ async def api_verify_registration_code(
         if attempts >= VERIFICATION_CODE_MAX_ATTEMPTS:
             _clear_registration_verification_session(session)
             return jsonify(
-                {"status": "fail", "error": "認証コードの試行回数が上限に達しました。"},
+                {"status": "fail", "error": ERROR_VERIFICATION_CODE_ATTEMPTS_EXHAUSTED},
                 status_code=AUTH_FAILURE_STATUS_CODE,
             )
         return jsonify(
-            {"status": "fail", "error": "認証コードが一致しません。"},
+            {"status": "fail", "error": ERROR_VERIFICATION_CODE_MISMATCH},
             status_code=AUTH_FAILURE_STATUS_CODE,
         )
 
@@ -479,7 +485,7 @@ async def api_verify_registration_code(
         session.pop("user_id", None)
         session.pop("user_email", None)
         return jsonify(
-            {"status": "fail", "error": "ユーザーが存在しません"},
+            {"status": "fail", "error": ERROR_USER_NOT_FOUND},
             status_code=AUTH_FAILURE_STATUS_CODE,
         )
 

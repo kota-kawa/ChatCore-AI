@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 
 from services.csrf import require_csrf
+from services.error_messages import ERROR_NOT_LOGGED_IN
 from services.mcp_config import is_mcp_enabled
 from services.mcp_oauth import (
     MCP_ALLOWED_SCOPES,
@@ -51,7 +52,7 @@ async def get_consent_details(request: Request):
     if not is_mcp_enabled():
         return _disabled_response()
     if _current_verified_user_id(request) is None:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     token = request.query_params.get("request", "")
     details = consent_details(token)
     if not details:
@@ -68,7 +69,7 @@ async def post_consent(request: Request):
         return _disabled_response()
     user_id = _current_verified_user_id(request)
     if user_id is None:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     body, error = await require_json_dict(request)
     if error is not None:
         return error
@@ -91,7 +92,7 @@ async def get_connections(request: Request):
         return _disabled_response()
     user_id = _current_verified_user_id(request)
     if user_id is None:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     connections = await list_connections(user_id)
     return jsonify({"connections": connections})
 
@@ -105,7 +106,7 @@ async def get_clients(request: Request):
         return _disabled_response()
     user_id = _current_verified_user_id(request)
     if user_id is None:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     return jsonify(await list_user_clients(user_id))
 
 
@@ -118,7 +119,7 @@ async def post_client(request: Request):
         return _disabled_response()
     user_id = _current_verified_user_id(request)
     if user_id is None:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     body, error = await require_json_dict(request)
     if error is not None:
         return error
@@ -164,7 +165,7 @@ async def delete_client(client_id: str, request: Request):
         return _disabled_response()
     user_id = _current_verified_user_id(request)
     if user_id is None:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     revoked = await revoke_user_client(user_id, client_id)
     if not revoked:
         return jsonify({"error": "対象の認証情報が見つかりません。"}, status_code=404)
@@ -180,7 +181,7 @@ async def patch_client(client_id: str, request: Request):
         return _disabled_response()
     user_id = _current_verified_user_id(request)
     if user_id is None:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     body, error = await require_json_dict(request)
     if error is not None:
         return error
@@ -202,7 +203,7 @@ async def delete_connection(grant_id: str, request: Request):
         return _disabled_response()
     user_id = _current_verified_user_id(request)
     if user_id is None:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     revoked = await revoke_connection(user_id, grant_id)
     if not revoked:
         return jsonify({"error": "対象の連携が見つかりません。"}, status_code=404)
@@ -218,7 +219,7 @@ async def patch_connection(grant_id: str, request: Request):
         return _disabled_response()
     user_id = _current_verified_user_id(request)
     if user_id is None:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     body, error = await require_json_dict(request)
     if error is not None:
         return error

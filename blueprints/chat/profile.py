@@ -37,13 +37,14 @@ from services.chat_service import (
 )
 from services.email_service import resolve_request_email_locale, send_email
 from services.error_messages import (
+    ERROR_AUTH_EMAIL_DAILY_LIMIT_TEMPLATE,
     ERROR_AVATAR_CONTENT_TYPE_MISMATCH,
     ERROR_AVATAR_EXTENSION_UNSUPPORTED,
     ERROR_AVATAR_FILENAME_INVALID,
-    ERROR_AVATAR_FORMAT_MISMATCH,
     ERROR_AVATAR_FORMAT_UNDETECTED,
     ERROR_AVATAR_MIME_UNSUPPORTED,
     ERROR_AVATAR_TOO_LARGE,
+    ERROR_IMAGE_FORMAT_MISMATCH,
     ERROR_LOGIN_REQUIRED,
     ERROR_PROFILE_EMAIL_CHANGE_REQUIRES_VERIFICATION,
     ERROR_PROFILE_INPUT_TOO_LONG,
@@ -225,7 +226,7 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
     # 拡張子と画像形式が合致しているか検証
     # Ensure extension matches the detected image format
     if extension not in _AVATAR_FORMAT_TO_EXTENSIONS[detected_format]:
-        raise ValueError(ERROR_AVATAR_FORMAT_MISMATCH)
+        raise ValueError(ERROR_IMAGE_FORMAT_MISMATCH)
 
     # Content-Typeと画像形式が合致しているか検証
     # Ensure Content-Type matches the detected image format
@@ -481,10 +482,7 @@ async def _send_email_change_code(
         service=llm_daily_limit_service,
     )
     if not can_send_email:
-        return (
-            f'本日の認証メール送信上限（全ユーザー合計 {daily_limit} 件）に達しました。'
-            '日付が変わってから再度お試しください。'
-        )
+        return ERROR_AUTH_EMAIL_DAILY_LIMIT_TEMPLATE.format(daily_limit=daily_limit)
 
     # メール送信処理を実行
     # Perform email dispatching
