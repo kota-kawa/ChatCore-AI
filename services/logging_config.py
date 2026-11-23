@@ -32,8 +32,6 @@ ERROR_LOG_HANDLER_NAME = "chatcore_error_file"
 CONSOLE_HANDLER_NAME = "chatcore_console"
 LOG_FORMAT = "%(asctime)s %(levelname)s [%(name)s] %(message)s"
 
-logger = logging.getLogger(__name__)
-
 
 # ログレコードを構造化されたJSON形式に変換するためのカスタムログフォーマッタクラス。
 # Custom log formatter class to structure log records into JSON strings.
@@ -97,13 +95,7 @@ class JsonLogFormatter(logging.Formatter):
 # 環境変数から正の整数値を安全に解析し、無効な場合はデフォルト値を返すヘルパー関数です。
 # Safely parse a positive integer from environment variables or fallback to a default value.
 def _parse_positive_int_env(env_name: str, default_value: int) -> int:
-    # 日本語: env_int は下限未満を黙って既定値へ戻すため、0 以下の設定ミスもここで警告に残します。
-    # English: env_int silently falls back below the minimum, so warn here about zero or negative values too.
-    value = env_int(env_name, default_value, minimum=None, warn_on_invalid=True)
-    if value > 0:
-        return value
-    logger.warning("Invalid %s value '%s'. Falling back to %s.", env_name, value, default_value)
-    return default_value
+    return env_int(env_name, default_value, minimum=1, warn_on_invalid=True)
 
 
 # 指定された名前を持つ既存のログハンドラをルートロガーから削除してクローズします。
