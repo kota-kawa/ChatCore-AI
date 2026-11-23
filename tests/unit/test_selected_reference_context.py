@@ -1,14 +1,14 @@
 """チャットで選択された参照元（メモなど）の事前検索（services.selected_reference_context）を検証するテスト。
 結果の挿入位置、0 件時の書き換え再検索と試行上限、保存済み一覧の引き渡し、
-制御用マークアップのエスケープ、並列検索の順序、リクエスト処理が使う非同期版で言い換えを 0 件のときだけ呼ぶことを確かめる。
+制御用マークアップのエスケープ、並列検索の順序、言い換えを 0 件のときだけ呼ぶことを、リクエスト処理が使う非同期版で確かめる。
 
 Tests for prefetching the references selected in chat (services.selected_reference_context): where results are inserted,
 retry with a rewritten query on zero hits and the attempt cap, handing over the saved inventory,
-escaping control markup, a stable order for parallel lookups, and that the async variant used by request
-handlers asks for a rewrite only after a zero-hit lookup.
+escaping control markup, a stable order for parallel lookups, and that a rewrite is requested only after a
+zero-hit lookup, all through the async variant that request handlers use.
 """
 
-import time
+import asyncio
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -18,7 +18,6 @@ from services.selected_reference_context import (
     PERSONAL_OVERVIEW_TAG,
     SHARED_PROMPT_SOURCE,
     CandidateQueryPlan,
-    augment_messages_with_selected_references,
     augment_messages_with_selected_references_async,
     lookup_query_key,
 )
@@ -27,7 +26,7 @@ from services.selected_reference_sources import DeduplicatedLookup
 
 # 日本語: 選択された参照元を検索し、その結果をメッセージへ組み込む処理全体を検証するテストクラス。
 # English: Test class for the whole flow that searches selected references and embeds the results into the messages.
-class SelectedReferenceContextTestCase(unittest.TestCase):
+class SelectedReferenceContextTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         # 既定の言い換えはLLMを呼ぶため、明示的に差し替えないテストでは無効化する。
         # The default rewrite calls an LLM, so tests that do not exercise it stub it out.
@@ -39,7 +38,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 選択された参照元は生成前に必ず検索され、システム文脈へ入ります。
     # English: Every selected source is searched before generation and inserted into system context.
-    def test_prefetches_all_selected_sources_and_inserts_results_before_user_message(self):
+    async def test_prefetches_all_selected_sources_and_inserts_results_before_user_message(self):
         personal_search = Mock(
             return_value={
                 "status": "ok",
@@ -59,7 +58,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
             {"role": "user", "content": "沖縄旅行の予算を整理して"},
         ]
 
-        augmented = augment_messages_with_selected_references(
+        augmented = await augment_messages_with_selected_references_async(
             messages,
             query="  沖縄旅行の予算を\n整理して  ",
             personal_knowledge_search=personal_search,
@@ -77,11 +76,11 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 0件のときは、言い換えたキーワードで引き直します。
     # English: A zero-hit lookup is retried with the rewritten keywords.
-    def test_zero_hit_is_retried_with_rewritten_keywords(self):
+    async def test_zero_hit_is_retried_with_rewritten_keywords(self):
         self.rewrite.return_value = ["2026年8月 8月 目標"]
         search = Mock(return_value={"status": "no_results", "query": "x"})
 
-        augment_messages_with_selected_references(
+        await augment_messages_with_selected_references_async(
             [{"role": "user", "content": "今月は何をしたらいいかな？"}],
             query="今月は何をしたらいいかな？",
             personal_knowledge_search=search,
@@ -93,7 +92,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 一致0件でも、直近のメモの見出しは棚卸しとして渡します。記憶は含みません。
     # English: A zero-match lookup still hands over an inventory of recent memo titles, and never memory.
-    def test_no_match_hands_over_the_saved_inventory(self):
+    async def test_no_match_hands_over_the_saved_inventory(self):
         overview = Mock(
             return_value={
                 "recent_memos": [{"id": 3, "title": "8月の目標"}],
@@ -101,7 +100,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
             }
         )
 
-        augmented = augment_messages_with_selected_references(
+        augmented = await augment_messages_with_selected_references_async(
             [{"role": "user", "content": "今月は何をしたらいいかな？"}],
             query="今月は何をしたらいいかな？",
             personal_knowledge_search=lambda _query: {"status": "no_results", "query": _query},
@@ -120,10 +119,10 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 一致した場合は棚卸しを行いません（無関係な内容で文脈を埋めないため）。
     # English: A successful match must not also pull in the inventory.
-    def test_successful_lookup_skips_the_inventory(self):
+    async def test_successful_lookup_skips_the_inventory(self):
         overview = Mock(return_value={"recent_memos": [{"id": 1, "title": "x"}]})
 
-        augmented = augment_messages_with_selected_references(
+        augmented = await augment_messages_with_selected_references_async(
             [{"role": "user", "content": "沖縄旅行"}],
             query="沖縄旅行",
             personal_knowledge_search=lambda _query: {
@@ -139,10 +138,10 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 検索自体が失敗したときは棚卸しへ流れません（0件と障害は別物）。
     # English: A failed lookup is not a zero-match, so the inventory must not stand in for it.
-    def test_failed_lookup_skips_the_inventory(self):
+    async def test_failed_lookup_skips_the_inventory(self):
         overview = Mock(return_value={"recent_memos": [{"id": 1, "title": "x"}]})
 
-        augment_messages_with_selected_references(
+        await augment_messages_with_selected_references_async(
             [{"role": "user", "content": "沖縄旅行"}],
             query="沖縄旅行",
             personal_knowledge_search=lambda _query: {"status": "failed", "query": _query},
@@ -153,10 +152,10 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 保存済みの内容が無ければ、空の棚卸しは渡しません。
     # English: Nothing saved means nothing to hand over.
-    def test_empty_inventory_is_not_injected(self):
+    async def test_empty_inventory_is_not_injected(self):
         overview = Mock(return_value={"recent_memos": [], "recent_memo_count": 0})
 
-        augmented = augment_messages_with_selected_references(
+        augmented = await augment_messages_with_selected_references_async(
             [{"role": "user", "content": "今月は何をしたらいいかな？"}],
             query="今月は何をしたらいいかな？",
             personal_knowledge_search=lambda _query: {"status": "no_results", "query": _query},
@@ -167,10 +166,10 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 棚卸しは「回答までのステップ」にも1ステップとして出します。
     # English: The inventory shows up as its own step in the answer trace.
-    def test_inventory_is_reported_in_the_answer_trace(self):
+    async def test_inventory_is_reported_in_the_answer_trace(self):
         traces = []
 
-        augment_messages_with_selected_references(
+        await augment_messages_with_selected_references_async(
             [{"role": "user", "content": "今月は何をしたらいいかな？"}],
             query="今月は何をしたらいいかな？",
             personal_knowledge_search=lambda _query: {"status": "no_results", "query": _query},
@@ -184,10 +183,10 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
         self.assertEqual([trace.payload["status"] for trace in traces], ["no_results", "overview"])
         self.assertEqual(traces[-1].source, PERSONAL_KNOWLEDGE_SOURCE)
 
-    def test_collects_lookup_results_for_the_answer_trace(self):
+    async def test_collects_lookup_results_for_the_answer_trace(self):
         traces = []
 
-        augment_messages_with_selected_references(
+        await augment_messages_with_selected_references_async(
             [{"role": "user", "content": "旅行計画"}],
             query="旅行計画",
             personal_knowledge_search=lambda _query: {
@@ -211,7 +210,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: メモ本文が制御タグを含んでも、システム文脈の区切りを偽装できません。
     # English: Memo content cannot forge the system-context delimiters.
-    def test_escapes_control_markup_inside_reference_data(self):
+    async def test_escapes_control_markup_inside_reference_data(self):
         personal_search = Mock(
             return_value={
                 "status": "ok",
@@ -220,7 +219,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
             }
         )
 
-        augmented = augment_messages_with_selected_references(
+        augmented = await augment_messages_with_selected_references_async(
             [{"role": "user", "content": "参照して"}],
             query="参照して",
             personal_knowledge_search=personal_search,
@@ -232,7 +231,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 一方の検索失敗で、もう一方の正常な参照結果を捨てません。
     # English: One failed lookup does not discard the other selected source's results.
-    def test_keeps_successful_source_when_another_lookup_fails(self):
+    async def test_keeps_successful_source_when_another_lookup_fails(self):
         personal_search = Mock(side_effect=RuntimeError("db down"))
         shared_search = Mock(
             return_value={
@@ -243,7 +242,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
         )
 
         with self.assertLogs("services.selected_reference_context", level="WARNING"):
-            augmented = augment_messages_with_selected_references(
+            augmented = await augment_messages_with_selected_references_async(
                 [{"role": "user", "content": "議事録"}],
                 query="議事録",
                 personal_knowledge_search=personal_search,
@@ -256,7 +255,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 自然文全体で0件なら、LLMが返した構造化クエリで自動再検索します。
     # English: A zero-hit natural-language query is retried with an LLM-produced structured query.
-    def test_retries_no_results_with_focused_query(self):
+    async def test_retries_no_results_with_focused_query(self):
         self.rewrite.return_value = ["沖縄旅行 予算"]
         shared_search = Mock(
             side_effect=[
@@ -270,7 +269,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
             ]
         )
 
-        augmented = augment_messages_with_selected_references(
+        augmented = await augment_messages_with_selected_references_async(
             [{"role": "user", "content": "去年の沖縄旅行の予算は？"}],
             query="去年の沖縄旅行の予算は？",
             shared_prompt_search=shared_search,
@@ -286,20 +285,20 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 参照元が選択されていないターンは、従来のメッセージ列を変更しません。
     # English: Turns with no selected source keep the original messages unchanged.
-    def test_no_selected_source_keeps_messages_unchanged(self):
+    async def test_no_selected_source_keeps_messages_unchanged(self):
         messages = [{"role": "user", "content": "こんにちは"}]
 
-        augmented = augment_messages_with_selected_references(messages, query="こんにちは")
+        augmented = await augment_messages_with_selected_references_async(messages, query="こんにちは")
 
         self.assertIs(augmented, messages)
 
     # 日本語: 障害は同じクエリで一度だけ引き直し、直らなければ言い換え試行を使い切りません。
     # English: A failure is retried once with the same query and does not burn the rephrasing attempts.
-    def test_failed_lookup_retries_once_and_then_stops(self):
+    async def test_failed_lookup_retries_once_and_then_stops(self):
         shared_search = Mock(side_effect=RuntimeError("service down"))
 
         with self.assertLogs("services.selected_reference_context", level="WARNING"):
-            augmented = augment_messages_with_selected_references(
+            augmented = await augment_messages_with_selected_references_async(
                 [{"role": "user", "content": "去年の沖縄旅行の予算は？"}],
                 query="去年の沖縄旅行の予算は？",
                 shared_prompt_search=shared_search,
@@ -315,7 +314,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 復帰した引き直しの結果を採用し、言い換え試行へは進みません。
     # English: A recovered retry is used as the result without moving on to a rephrased query.
-    def test_failed_lookup_uses_the_recovered_retry(self):
+    async def test_failed_lookup_uses_the_recovered_retry(self):
         shared_search = Mock(
             side_effect=[
                 RuntimeError("transient"),
@@ -324,7 +323,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
         )
 
         with self.assertLogs("services.selected_reference_context", level="WARNING"):
-            augmented = augment_messages_with_selected_references(
+            augmented = await augment_messages_with_selected_references_async(
                 [{"role": "user", "content": "去年の沖縄旅行の予算は？"}],
                 query="去年の沖縄旅行の予算は？",
                 shared_prompt_search=shared_search,
@@ -335,11 +334,11 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 0件が続いても、試行回数の上限を超えて検索し続けません。
     # English: Repeated zero-hit results never exceed the attempt cap.
-    def test_no_results_stops_at_the_attempt_cap(self):
+    async def test_no_results_stops_at_the_attempt_cap(self):
         self.rewrite.return_value = ["沖縄旅行 予算", "沖縄旅行 費用"]
         shared_search = Mock(return_value={"status": "no_results", "prompts": []})
 
-        augment_messages_with_selected_references(
+        await augment_messages_with_selected_references_async(
             [{"role": "user", "content": "去年の沖縄旅行の予算はいくらでしたか？"}],
             query="去年の沖縄旅行の予算はいくらでしたか？",
             shared_prompt_search=shared_search,
@@ -349,7 +348,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 指示語だけの追従発話は、LLMが前ターンを理解したクエリで検索します。
     # English: A pronoun-only follow-up is searched with a query produced by understanding the previous turn.
-    def test_follow_up_query_uses_the_previous_user_turn(self):
+    async def test_follow_up_query_uses_the_previous_user_turn(self):
         self.rewrite.return_value = ["沖縄旅行 予算 詳細"]
         shared_search = Mock(
             side_effect=[
@@ -363,7 +362,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
             {"role": "user", "content": "それを詳しく"},
         ]
 
-        augment_messages_with_selected_references(
+        await augment_messages_with_selected_references_async(
             messages,
             query="それを詳しく",
             shared_prompt_search=shared_search,
@@ -379,7 +378,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 検索語を含む発話は、前ターンに引きずられず自分自身のクエリを優先します。
     # English: A self-contained turn keeps its own query first instead of inheriting the previous one.
-    def test_self_contained_query_is_not_rewritten_with_the_previous_turn(self):
+    async def test_self_contained_query_is_not_rewritten_with_the_previous_turn(self):
         shared_search = Mock(
             return_value={"status": "ok", "prompt_count": 1, "prompts": [{"title": "議事録テンプレ"}]}
         )
@@ -389,7 +388,7 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
             {"role": "user", "content": "議事録の書き方を教えて"},
         ]
 
-        augment_messages_with_selected_references(
+        await augment_messages_with_selected_references_async(
             messages,
             query="議事録の書き方を教えて",
             shared_prompt_search=shared_search,
@@ -399,10 +398,10 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 有効なのに使えなかった参照元は、検索せずに理由付きで文脈へ残します。
     # English: An enabled but unusable source is reported with its reason instead of being dropped.
-    def test_unavailable_source_is_reported_without_searching(self):
+    async def test_unavailable_source_is_reported_without_searching(self):
         messages = [{"role": "user", "content": "メモを参照して"}]
 
-        augmented = augment_messages_with_selected_references(
+        augmented = await augment_messages_with_selected_references_async(
             messages,
             query="メモを参照して",
             unavailable_sources=("personal_knowledge_search",),
@@ -415,16 +414,16 @@ class SelectedReferenceContextTestCase(unittest.TestCase):
 
     # 日本語: 両方の参照元を選んだときは、並列実行してもブロック順が入れ替わりません。
     # English: With both sources selected, concurrent lookups still emit blocks in a stable order.
-    def test_parallel_lookups_keep_a_stable_block_order(self):
-        def slow_personal(_query):
-            time.sleep(0.05)
+    async def test_parallel_lookups_keep_a_stable_block_order(self):
+        async def slow_personal(_query):
+            await asyncio.sleep(0.05)
             return {"status": "ok", "memo_count": 1, "memos": [{"title": "沖縄メモ"}]}
 
         shared_search = Mock(
             return_value={"status": "ok", "prompt_count": 1, "prompts": [{"title": "旅行計画テンプレ"}]}
         )
 
-        augmented = augment_messages_with_selected_references(
+        augmented = await augment_messages_with_selected_references_async(
             [{"role": "user", "content": "沖縄旅行の予算"}],
             query="沖縄旅行の予算",
             personal_knowledge_search=slow_personal,
@@ -454,9 +453,9 @@ class SelectedReferenceContextAsyncTestCase(unittest.IsolatedAsyncioTestCase):
         ]
         self.query = "沖縄旅行の予算を整理して"
 
-    # 日本語: 全参照元が原文で当たれば言い換えを呼ばず、組み立てる文脈は同期版と一致します。
-    # English: When every source hits the original query, no rewrite is requested and the context matches the sync variant.
-    async def test_original_hits_skip_the_rewrite_and_match_the_sync_context(self):
+    # 日本語: 全参照元が原文で当たれば言い換えを呼ばず、組み立てる文脈は非同期・同期どちらのコールバックでも一致します。
+    # English: When every source hits the original query, no rewrite is requested and the context is identical for async and sync callbacks.
+    async def test_original_hits_skip_the_rewrite_and_accept_sync_callbacks(self):
         personal_payload = {"status": "ok", "memo_count": 1, "memos": [{"title": "沖縄メモ"}]}
         shared_payload = {"status": "ok", "prompt_count": 1, "prompts": [{"title": "旅行計画テンプレ"}]}
         personal_search = AsyncMock(return_value=personal_payload)
@@ -472,15 +471,13 @@ class SelectedReferenceContextAsyncTestCase(unittest.IsolatedAsyncioTestCase):
         self.rewrite.assert_not_called()
         personal_search.assert_awaited_once_with(self.query)
         shared_search.assert_awaited_once_with(self.query)
-        self.assertEqual(
-            augmented,
-            augment_messages_with_selected_references(
-                self.messages,
-                query=self.query,
-                personal_knowledge_search=lambda _query: personal_payload,
-                shared_prompt_search=lambda _query: shared_payload,
-            ),
+        with_sync_callbacks = await augment_messages_with_selected_references_async(
+            self.messages,
+            query=self.query,
+            personal_knowledge_search=lambda _query: personal_payload,
+            shared_prompt_search=lambda _query: shared_payload,
         )
+        self.assertEqual(augmented, with_sync_callbacks)
 
     # 日本語: 一部の参照元だけ 0 件なら、その参照元だけを言い換えで引き直します。
     # English: When only one source finds nothing, only that source is retried with the rewrite.
@@ -696,8 +693,8 @@ class RephrasingAfterAlreadySearchedTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"status":"no_results"', context)
         self.assertNotIn("already_searched", context)
 
-    # 日本語: 候補の重複除去を通っても already_searched が返った語は「試し済み」として次へ進み、直前の 0 件を保ちます（非同期）。
-    async def test_already_searched_candidate_moves_on_and_keeps_the_previous_result_async(self):
+    # 日本語: 候補の重複除去を通っても already_searched が返った語は「試し済み」として次へ進み、直前の 0 件を保ちます。
+    async def test_already_searched_candidate_moves_on_and_keeps_the_previous_result(self):
         calls: list[str] = []
 
         async def search(query):
@@ -718,8 +715,8 @@ class RephrasingAfterAlreadySearchedTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("already_searched", augmented[0]["content"])
         overview.assert_awaited_once()
 
-    # 日本語: 同期版も同じです。残りの言い換えがすべて試し済みでも、最終の結果は直前の 0 件です。
-    def test_already_searched_candidates_keep_the_previous_result_sync(self):
+    # 日本語: 残りの言い換えがすべて試し済みでも、最終の結果は直前の 0 件です。
+    async def test_already_searched_candidates_keep_the_previous_result_when_every_rewrite_was_tried(self):
         calls: list[str] = []
 
         def search(query):
@@ -732,7 +729,7 @@ class RephrasingAfterAlreadySearchedTestCase(unittest.IsolatedAsyncioTestCase):
         with patch(
             "services.selected_reference_context.rewrite_reference_query", return_value=["旧 計画", "別 計画"]
         ):
-            augmented = augment_messages_with_selected_references(
+            augmented = await augment_messages_with_selected_references_async(
                 self.messages, query=self.query, personal_knowledge_search=search, personal_overview=overview
             )
 
