@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, type MouseEvent } from "react";
 
 import type { RenderedTask } from "../../lib/memo/list_editing";
 import { buildHighlightPattern, highlightTextNodes } from "../../lib/memo/search_highlight";
-import { formatMemoOutput } from "../../scripts/chat/chat_ui";
-import { renderSanitizedHTML } from "../../scripts/chat/message_utils";
+import { formatMemoOutput } from "../../lib/chat_page/message_format/chat_ui";
+import { renderSanitizedHTML } from "../../lib/chat_page/message_format/message_utils";
 
 // ---------------------------------------------------------------------------
 // MemoMarkdown コンポーネント（LLM が整えた Markdown を描画する）

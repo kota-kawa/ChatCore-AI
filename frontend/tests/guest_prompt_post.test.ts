@@ -7,7 +7,7 @@ import test from "node:test";
 import {
   buildPromptCreateFormData,
   containsGuestPostUrl
-} from "../scripts/prompt_share/guest_post";
+} from "../lib/prompt_share/guest_post";
 
 test("guest prompt payload always uses the text-only contract", () => {
   const formData = buildPromptCreateFormData({

@@ -11,7 +11,7 @@
 [EN] Single source of truth for the prompt "two-axis" model. Adding a new format or
 media type should only require one entry here (no DB migration). Backend validation,
 persistence, and serialization all consult this registry. Mirror in
-frontend/scripts/prompt_share/prompt_type_registry.ts.
+frontend/lib/prompt_share/prompt_type_registry.ts.
 """
 
 from __future__ import annotations

@@ -4,8 +4,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseSettingsSection } from "../scripts/user/settings/section_url";
-import { formatUsageExpiryDate, formatUsageResetTime, usagePercent } from "../scripts/user/settings/usage";
+import { parseSettingsSection } from "../lib/settings/section_url";
+import { formatUsageExpiryDate, formatUsageResetTime, usagePercent } from "../lib/settings/usage";
 
 test("usage percent never reads 100% before the limit is reached", () => {
   assert.equal(usagePercent(0), 0);

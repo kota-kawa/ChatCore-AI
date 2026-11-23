@@ -9,11 +9,11 @@ const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : us
  * --chat-footer-height に反映する。
  * フッターを透明なオーバーレイとして浮かせるレイアウトでは、テキスト行数や
  * 添付チップの増減で入力欄の高さが変わるため、メッセージ一覧の下端余白と
- * スクロールボタンの位置をこの変数経由で追従させる。
+ * 下端のフェードの位置をこの変数経由で追従させる。
  *
  * Mirrors the composer's rendered height into the --chat-footer-height CSS
- * variable on the parent .chat-area so the message list padding and the
- * scroll-to-bottom button track the floating composer as it grows or shrinks.
+ * variable on the parent .chat-area so the message list padding and its
+ * bottom fade track the floating composer as it grows or shrinks.
  *
  * isEnabled が false の間は非表示チャットの observer を停止する。直前の値は退出アニメーション中も保持し、
  * 表示へ戻るときに paint 前のレイアウト effect で更新する。

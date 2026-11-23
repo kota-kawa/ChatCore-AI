@@ -6,7 +6,7 @@ import { getPromptCategoryPath } from "../prompt_share/prompt_category_seo";
 import {
   getCategoryLabel,
   PROMPT_CATEGORY_KEYS
-} from "../../scripts/prompt_share/prompt_category_registry";
+} from "../../lib/prompt_share/prompt_category_registry";
 
 // 扱える範囲と、扱えない範囲の両方を先に見せるセクション。
 // カテゴリはレジストリから引くので、実際の絞り込みUIと必ず一致する。

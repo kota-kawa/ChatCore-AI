@@ -28,16 +28,13 @@ import {
 } from "../../lib/auth/account_switcher";
 import { LOCALE_CHANGE_EVENT, getRuntimeLocale } from "../../lib/i18n/config";
 import { translate } from "../../lib/i18n/translate";
+import { normalizeText } from "../../lib/utils";
 import { ACCOUNT_LIST_STYLES, renderAccountList, renderCurrentAccount } from "./user_icon_accounts";
 // 右上ユーザーアイコン  +  ドロップダウンメニュー
 //  - /api/user/profile で avatar_url / username / email を取得
 //  - カスタム画像がある場合はデフォルト画像を先に出さない
 //  - メニューを開くたびに /api/auth/accounts でログイン中のほかのアカウントを取得
 // ────────────────────────────────────────────────
-
-function normalizeText(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
 
 function hasCustomAvatar(value: unknown) {
   const avatarUrl = normalizeText(value);

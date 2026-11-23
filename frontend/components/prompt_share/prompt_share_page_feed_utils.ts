@@ -6,15 +6,15 @@ import {
   normalizePromptContentFormat,
   normalizePromptData,
   normalizePromptMediaType
-} from "../../scripts/prompt_share/formatters";
-import type { PromptData } from "../../scripts/prompt_share/types";
+} from "../../lib/prompt_share/formatters";
+import type { PromptData } from "../../lib/prompt_share/types";
 import type { PromptRecord } from "./prompt_card";
 import type {
   ContentFormatFilter,
   MediaTypeFilter
 } from "./prompt_share_page_types";
 import { getCategoryCountLabel } from "./prompt_share_page_utils";
-import { promptShareText } from "../../scripts/prompt_share/i18n";
+import { promptShareText } from "../../lib/prompt_share/i18n";
 
 // SSR/API由来のPromptDataをReact側で扱うPromptRecordに揃える
 // Converts SSR/API PromptData into PromptRecords used by the React UI

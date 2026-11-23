@@ -7,7 +7,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PromptShareComposerModal } from "../components/prompt_share/prompt_share_composer_modal";
-import type { ContentFormat, MediaType, PromptResource } from "../scripts/prompt_share/types";
+import type { ContentFormat, MediaType, PromptResource } from "../lib/prompt_share/types";
 
 type ComposerType = "text" | "image" | "skill";
 

@@ -39,13 +39,13 @@ import {
   DEFAULT_AVATAR_URL,
   PASSKEY_INITIAL_SUPPORT_TEXT,
   PROFILE_SAVE_EFFECT_DURATION_MS
-} from "../scripts/user/settings/constants";
+} from "../lib/settings/constants";
 import {
   SETTINGS_SECTION_QUERY_KEY,
   buildSettingsSectionQuery,
   parseSettingsSection,
   shouldSyncSettingsSectionUrl
-} from "../scripts/user/settings/section_url";
+} from "../lib/settings/section_url";
 import {
   issueMcpOAuthClient,
   loadLocalePreference,
@@ -57,7 +57,7 @@ import {
   updateMcpOAuthClientLabel,
   updateMcpOAuthConnectionDisplayName,
   updateLocalePreference
-} from "../scripts/user/settings/api";
+} from "../lib/settings/api";
 import { translate, useTranslation } from "../contexts/locale_context";
 import type { Locale } from "../lib/i18n/config";
 import type {
@@ -67,7 +67,7 @@ import type {
   ProfileFormState,
   ProfileSaveStatus,
   SettingsSection
-} from "../scripts/user/settings/page_types";
+} from "../lib/settings/page_types";
 import {
   buildPromptUpdatePayload,
   parseLikedPromptsResponse,
@@ -78,11 +78,11 @@ import {
   type McpOAuthConnection,
   type LikedPrompt,
   type PromptRecord
-} from "../scripts/user/settings/types";
+} from "../lib/settings/types";
 import {
   buildDefaultLlmProfileContext,
   normalizePasskeyRecords
-} from "../scripts/user/settings/utils";
+} from "../lib/settings/utils";
 
 // 読み込みの呼び出し方を切り替えるオプション。background 指定時はスケルトンを出さず、
 // 既存の表示を保ったまま裏で差し替える。

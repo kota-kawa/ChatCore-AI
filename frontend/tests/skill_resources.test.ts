@@ -7,7 +7,7 @@ import test from "node:test";
 import {
   inferSkillResourceLanguage,
   normalizeSkillResources
-} from "../scripts/prompt_share/skill_resources";
+} from "../lib/prompt_share/skill_resources";
 
 test("skill resource language is inferred from common extensions", () => {
   assert.equal(inferSkillResourceLanguage("scripts/run.py"), "python");

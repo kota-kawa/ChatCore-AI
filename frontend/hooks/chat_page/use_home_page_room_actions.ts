@@ -27,7 +27,7 @@ import {
   readJsonBodySafe,
 } from "../../scripts/core/runtime_validation";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
-import { scheduleSetupViewportFit } from "../../scripts/setup/setup_viewport";
+import { scheduleSetupViewportFit } from "../../lib/chat_page/setup/setup_viewport";
 import { useTranslation } from "../../contexts/locale_context";
 import type { PinChatRoomRequest } from "../../types/generated/api_schemas";
 

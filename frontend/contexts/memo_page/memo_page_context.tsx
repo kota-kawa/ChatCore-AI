@@ -1,7 +1,8 @@
 // メモ画面のコントローラー（useMemoPageController）の戻り値を、用途別の Context に分けて配る。
 // Distributes the memo page controller (useMemoPageController) state through purpose-specific contexts.
-import { createContext, useContext, useMemo, type Context, type ReactNode } from "react";
+import { createContext, useMemo, type ReactNode } from "react";
 import { useMemoPageController } from "../../hooks/memo_page/use_memo_page_controller";
+import { useRequiredContext } from "../../hooks/use_required_context";
 
 // メモ画面の状態を子コンポーネントへ配る Context 群。
 // 値の型は controller hook の戻り値から Pick で切り出すので、hook 側のキー変更が
@@ -604,40 +605,34 @@ export function MemoPageControllerProvider({ children }: { children: ReactNode }
   return <MemoPageContextProvider controller={controller}>{children}</MemoPageContextProvider>;
 }
 
-// Provider の外で使われたら、原因が分かるエラーを投げる
-// Throw a descriptive error when used outside the provider
-function useRequiredContext<T>(context: Context<T | null>, contextName: string): T {
-  const value = useContext(context);
-  if (!value) {
-    throw new Error(`${contextName} must be used within MemoPageContextProvider.`);
-  }
-  return value;
-}
+// useRequiredContext のエラー文に出す、各 Context を提供する Provider の名前
+// Name of the provider that supplies these contexts, shown in the useRequiredContext error
+const MEMO_PAGE_PROVIDER_NAME = "MemoPageContextProvider";
 
 export function useMemoPageUiContext() {
-  return useRequiredContext(MemoPageUiContext, "MemoPageUiContext");
+  return useRequiredContext(MemoPageUiContext, "MemoPageUiContext", MEMO_PAGE_PROVIDER_NAME);
 }
 
 export function useMemoPageListContext() {
-  return useRequiredContext(MemoPageListContext, "MemoPageListContext");
+  return useRequiredContext(MemoPageListContext, "MemoPageListContext", MEMO_PAGE_PROVIDER_NAME);
 }
 
 export function useMemoPageComposerContext() {
-  return useRequiredContext(MemoPageComposerContext, "MemoPageComposerContext");
+  return useRequiredContext(MemoPageComposerContext, "MemoPageComposerContext", MEMO_PAGE_PROVIDER_NAME);
 }
 
 export function useMemoPageBoardContext() {
-  return useRequiredContext(MemoPageBoardContext, "MemoPageBoardContext");
+  return useRequiredContext(MemoPageBoardContext, "MemoPageBoardContext", MEMO_PAGE_PROVIDER_NAME);
 }
 
 export function useMemoPageDetailContext() {
-  return useRequiredContext(MemoPageDetailContext, "MemoPageDetailContext");
+  return useRequiredContext(MemoPageDetailContext, "MemoPageDetailContext", MEMO_PAGE_PROVIDER_NAME);
 }
 
 export function useMemoPageModalsContext() {
-  return useRequiredContext(MemoPageModalsContext, "MemoPageModalsContext");
+  return useRequiredContext(MemoPageModalsContext, "MemoPageModalsContext", MEMO_PAGE_PROVIDER_NAME);
 }
 
 export function useMemoPageFlashContext() {
-  return useRequiredContext(MemoPageFlashContext, "MemoPageFlashContext");
+  return useRequiredContext(MemoPageFlashContext, "MemoPageFlashContext", MEMO_PAGE_PROVIDER_NAME);
 }

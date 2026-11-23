@@ -9,7 +9,7 @@ import { readStoredHistory, readStoredUserScope, writeStoredActiveChatRoom, writ
 import { resilientFetch } from "../scripts/core/resilient_fetch";
 
 vi.mock("../scripts/core/toast", () => ({ showToast: vi.fn() }));
-vi.mock("../scripts/components/prompt_assist", () => ({ initPromptAssist: vi.fn(() => ({ destroy: vi.fn() })) }));
+vi.mock("../lib/prompt_assist", () => ({ initPromptAssist: vi.fn(() => ({ destroy: vi.fn() })) }));
 vi.mock("../scripts/core/resilient_fetch", () => ({ resilientFetch: vi.fn() }));
 
 const fetchMock = vi.mocked(resilientFetch);

@@ -7,7 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent
 } from "react";
 
-import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
+import { getCategoryLabelOrFallback } from "../../lib/prompt_share/prompt_category_registry";
 import { PROMPT_CATEGORY_OPTIONS } from "../prompt_share/prompt_share_page_constants";
 import { useTranslation } from "../../contexts/locale_context";
 import { useDismissOnOutsidePress } from "../../hooks/use_dismiss_on_outside_press";

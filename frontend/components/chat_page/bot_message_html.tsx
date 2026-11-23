@@ -4,9 +4,9 @@
 // and heavy re-renders are spaced out.
 import { memo, useEffect, useLayoutEffect, useRef } from "react";
 
-import { formatLLMOutput } from "../../scripts/chat/chat_ui";
-import { initMessageCopyButtons } from "../../scripts/chat/message_copy_buttons";
-import { patchSanitizedHTML } from "../../scripts/chat/message_utils";
+import { formatLLMOutput } from "../../lib/chat_page/message_format/chat_ui";
+import { initMessageCopyButtons } from "../../lib/chat_page/message_format/message_copy_buttons";
+import { patchSanitizedHTML } from "../../lib/chat_page/message_format/message_utils";
 import { prefersReducedMotion } from "../../lib/chat_page/dom";
 import { streamRenderGapMs } from "../../lib/chat_page/streaming_render_pace";
 import {

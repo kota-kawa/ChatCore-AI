@@ -11,6 +11,14 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * 文字列なら前後の空白を除いて返し、文字列以外は空文字にする
+ * Return a trimmed string; non-string values become an empty string
+ */
+export function normalizeText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/**
  * 値をRecord型（オブジェクト）として取得する。不正な場合は空オブジェクトを返す
  * Get the value as a Record (object). Return an empty object if invalid
  */

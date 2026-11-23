@@ -12,7 +12,7 @@ import {
   parseMyPromptsResponse,
   type LikedPrompt,
   type PromptRecord,
-} from "../scripts/user/settings/types";
+} from "../lib/settings/types";
 
 const authoredPrompt: PromptRecord = {
   id: "prompt-1",

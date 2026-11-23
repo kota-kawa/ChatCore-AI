@@ -7,7 +7,8 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 import MarkdownContent from "../../../../components/MarkdownContent";
 import { SeoHead } from "../../../../components/SeoHead";
-import { localizePublicPath } from "../../../../lib/seo";
+import { localizePublicPath, truncateMetaText } from "../../../../lib/seo";
+import { getRequestOrigin } from "../../../../lib/server/request_origin";
 import { formatDateTime } from "../../../../lib/datetime";
 import { buildPromptPath, buildPromptSlug } from "../../../../lib/promptSlug";
 import { renderMarkdownToSafeHtmlOnServer } from "../../../../lib/server/markdown_ssr";
@@ -21,14 +22,14 @@ import {
   getPromptMediaLabel,
   normalizePromptContentFormat,
   normalizePromptMediaType
-} from "../../../../scripts/prompt_share/formatters";
-import { getCategoryLabelOrFallback } from "../../../../scripts/prompt_share/prompt_category_registry";
-import { recordPromptView } from "../../../../scripts/prompt_share/api";
+} from "../../../../lib/prompt_share/formatters";
+import { getCategoryLabelOrFallback } from "../../../../lib/prompt_share/prompt_category_registry";
+import { recordPromptView } from "../../../../lib/prompt_share/api";
 import {
   getSkillResourceRoleLabel,
   normalizeSkillResources
-} from "../../../../scripts/prompt_share/skill_resources";
-import type { PromptResource } from "../../../../scripts/prompt_share/types";
+} from "../../../../lib/prompt_share/skill_resources";
+import type { PromptResource } from "../../../../lib/prompt_share/types";
 import { useTranslation } from "../../../../contexts/locale_context";
 
 // 共有プロンプトのデータ型（スキルプロンプトのフィールドも含む）
@@ -108,28 +109,6 @@ function formatDate(value?: string) {
   return formatDateTime(value) || value || "";
 }
 
-// Hostヘッダーの値を正規化する（配列の場合は先頭を取得）
-// Normalize the Host header value (take the first if it's an array)
-function normalizeHostHeader(header: string | string[] | undefined) {
-  if (Array.isArray(header)) return header[0] || "";
-  return header || "";
-}
-
-// X-Forwarded-Protoヘッダーを正規化する（カンマ区切りの最初の値を取得）
-// Normalize the X-Forwarded-Proto header (take the first comma-separated value)
-function normalizeProtoHeader(header: string | string[] | undefined) {
-  const raw = Array.isArray(header) ? header[0] : header;
-  if (!raw) return "";
-  return raw.split(",")[0]?.trim() || "";
-}
-
-// テキストを最大文字数で切り詰める
-// Truncate text to a maximum character count
-function truncateText(value: string, maxLength = 140) {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength - 1).trimEnd()}…`;
-}
-
 // 相対URLをオリジンを付与した絶対URLに変換する
 // Convert relative URL to absolute URL by prepending the origin
 function resolveAbsoluteUrl(value: string | null | undefined, origin: string) {
@@ -163,7 +142,7 @@ function emptyPromptHtml(): SharedPromptHtml {
 // Build the OGP meta description from the prompt content
 function buildMetaDescription(payload: SharedPromptPayload) {
   if (payload.error) {
-    return truncateText(payload.error);
+    return truncateMetaText(payload.error);
   }
   const prompt = payload.prompt;
   if (!prompt) {
@@ -179,7 +158,7 @@ function buildMetaDescription(payload: SharedPromptPayload) {
   if (!normalized) {
     return "Chat Core で共有されたプロンプトの閲覧ページです。";
   }
-  return truncateText(normalized);
+  return truncateMetaText(normalized);
 }
 
 // おすすめカード向けにMarkdownを含む本文から短いプレーンテキスト要約を作る
@@ -187,7 +166,7 @@ function buildMetaDescription(payload: SharedPromptPayload) {
 function buildRecommendationPreview(prompt: SharedPrompt) {
   const source = prompt.description?.trim() || prompt.content || prompt.skill_markdown || "";
   const preview = stripMarkdownForPreview(source);
-  return truncateText(preview || "詳細を開いてプロンプトの内容を確認してください。", 112);
+  return truncateMetaText(preview || "詳細を開いてプロンプトの内容を確認してください。", 112);
 }
 
 // プロンプトIDでデータを取得してSSRで返す（IDが無い場合は404、バックエンドのエラーはそのステータスを引き継ぐ）。
@@ -204,10 +183,7 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
   }
 
   const backendUrl = process.env.BACKEND_URL || "http://localhost:5004";
-  const host = normalizeHostHeader(context.req.headers["x-forwarded-host"]) || normalizeHostHeader(context.req.headers.host);
-  const proto = normalizeProtoHeader(context.req.headers["x-forwarded-proto"])
-    || (process.env.NODE_ENV === "development" ? "http" : "https");
-  const origin = host ? `${proto}://${host}` : "";
+  const origin = getRequestOrigin(context.req);
   const defaultOgImageUrl = origin ? `${origin}/static/img.jpg` : "/static/img.jpg";
 
   let payload: SharedPromptPayload;

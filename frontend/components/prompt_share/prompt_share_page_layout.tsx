@@ -16,8 +16,8 @@ import Link from "next/link";
 import { useTranslation } from "../../contexts/locale_context";
 import { useImeSubmitGuard } from "../../hooks/use_ime_submit_guard";
 import type { ImportActionState } from "../../hooks/use_import_action";
-import { getPromptFormatLabel, getPromptMediaLabel } from "../../scripts/prompt_share/formatters";
-import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
+import { getPromptFormatLabel, getPromptMediaLabel } from "../../lib/prompt_share/formatters";
+import { getCategoryLabelOrFallback } from "../../lib/prompt_share/prompt_category_registry";
 
 const EMPTY_IMPORT_ACTION_STATES: ReadonlyMap<string, ImportActionState> = new Map();
 
