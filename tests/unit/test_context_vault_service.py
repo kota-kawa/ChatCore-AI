@@ -136,7 +136,7 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
             importance=80,
         )
         with patch("services.context_vault_service._repository", return_value=repo), patch(
-            "services.context_vault_service.session_scope",
+            "services.db.session_scope",
             return_value=_TransactionSession(),
         ), patch("services.context_vault_service.schedule_embedding") as schedule:
             result = await create_fact(
@@ -165,7 +165,7 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
         repo = _repo()
         repo.create_fact.return_value = fact_row(_idempotent_replay=True)
         with patch("services.context_vault_service._repository", return_value=repo), patch(
-            "services.context_vault_service.session_scope",
+            "services.db.session_scope",
             return_value=_TransactionSession(),
         ), patch("services.context_vault_service.schedule_embedding") as schedule:
             result = await create_fact(
@@ -182,7 +182,7 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
         repo = _repo()
         repo.update_fact.return_value = fact_row(content="new", revision=3)
         with patch("services.context_vault_service._repository", return_value=repo), patch(
-            "services.context_vault_service.session_scope",
+            "services.db.session_scope",
             return_value=_TransactionSession(),
         ), patch("services.context_vault_service.schedule_embedding") as schedule:
             result = await update_fact(
@@ -255,7 +255,7 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
         repo.list_active_for_digest.return_value = [fact_row(deprecated_reason="capacity")]
         repo.text_search.return_value = [fact_row(deprecated_reason="capacity")]
         with patch("services.context_vault_service._repository", return_value=repo), patch(
-            "services.context_vault_service.session_scope", return_value=_TransactionSession()
+            "services.db.session_scope", return_value=_TransactionSession()
         ), patch("services.context_vault_service.schedule_embedding"):
             fetched = await get_fact(7, 3, session=object())
             updated = await update_fact(7, 3, expected_revision=1, status="deprecated")
@@ -278,7 +278,7 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
             with self.subTest(owner=owner), patch(
                 "services.context_vault_service._repository", return_value=repo
             ), patch(
-                "services.context_vault_service.session_scope",
+                "services.db.session_scope",
                 return_value=_TransactionSession(),
             ), patch("services.context_vault_service.schedule_embedding"):
                 await update_fact(7, 3, expected_revision=2, content="new", **extra)
@@ -345,7 +345,7 @@ class ContextVaultServiceTestCase(unittest.IsolatedAsyncioTestCase):
             )
         )
         with patch("services.context_vault_service.ContextFactCurationRepository", return_value=curation), patch(
-            "services.context_vault_service.session_scope", return_value=_TransactionSession()
+            "services.db.session_scope", return_value=_TransactionSession()
         ), patch("services.context_vault_service.schedule_embedding") as schedule:
             result = await revert_replacement(7, 4, expected_revision=2)
 

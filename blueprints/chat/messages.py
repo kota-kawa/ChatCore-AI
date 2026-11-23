@@ -18,7 +18,7 @@ from services.auth_limits import (
     AuthLimitService,
     consume_guest_chat_daily_limit,
     get_auth_limit_service,
-    get_seconds_until_tomorrow,
+    resolve_auth_limit_service,
 )
 from services.background_executor import submit_background_task
 from services.chat_context import build_context_messages
@@ -49,7 +49,6 @@ from services.chat_images import decode_chat_images_from_storage, encode_chat_im
 from services.chat_message_normalization import (
     find_latest_task_launch_request,
     normalize_messages_for_llm,
-    parse_task_launch_message,
 )
 from services.chat_post_dependencies import (
     ChatPostBackgroundDependencies,
@@ -112,10 +111,15 @@ from services.chat_use_case import ChatPostUseCase
 from services.context_vault_candidate_service import is_context_extraction_enabled
 from services.context_vault_extraction import schedule_context_extraction
 from services.error_messages import (
+    ERROR_CHAT_EDIT_TARGET_NOT_FOUND,
     ERROR_CHAT_GENERATION_ID_INVALID,
     ERROR_CHAT_GENERATION_ID_REUSED,
     ERROR_CHAT_GENERATION_STATE_UNAVAILABLE,
+    ERROR_CHAT_ROOM_FORBIDDEN,
+    ERROR_CHAT_ROOM_ID_FIELD_REQUIRED,
+    ERROR_CHAT_ROOM_ID_REQUIRED,
     ERROR_CHAT_ROOM_NOT_FOUND,
+    ERROR_GENERATION_JOB_NOT_FOUND,
 )
 from services.i18n import get_request_locale
 from services.llm import (
@@ -131,10 +135,12 @@ from services.llm_daily_limit import (
     consume_llm_daily_quota,
     get_llm_daily_limit_service,
     get_seconds_until_daily_reset,
+    resolve_llm_daily_limit_service,
 )
 from services.memory_search import search_memory_for_tool
 from services.personal_knowledge import search_personal_knowledge_for_tool
 from services.shared_prompt_lookup import search_shared_prompts_for_tool
+from services.time_windows import get_seconds_until_tomorrow
 from services.usage_limits import check_usage_limit
 from services.user_memory import load_user_memory_summary
 from services.user_skills import (
@@ -156,48 +162,12 @@ from . import (
     get_guest_room_ids,
     get_session_id,
     get_temporary_user_store_key,
+    legacy_error_response,
     register_guest_room,
     unregister_guest_room,
 )
 
 logger = logging.getLogger(__name__)
-
-# 日本語: タスク起動メッセージのパーサはロジックを services へ移したが、
-#         ブループリント経由で参照している既存の呼び出し元のために別名を残す。
-# English: The task-launch parser moved to services; this alias keeps the existing
-#          blueprint-level reference working for callers that import it from here.
-_parse_task_launch_message = parse_task_launch_message
-
-
-# リクエストから認証制限サービスを解決するヘルパー関数
-# Helper function to resolve the AuthLimitService instance from the request.
-def _resolve_auth_limit_service(
-    request: Request,
-    service: AuthLimitService | None,
-) -> AuthLimitService:
-    """
-    リクエストまたは依存注入された値から、認証制限サービスを取得・解決します。
-    Resolves the AuthLimitService instance from the request context or dependency.
-    """
-    if isinstance(service, AuthLimitService):
-        return service
-    return get_auth_limit_service(request)
-
-
-# リクエストからLLMの1日あたり制限サービスを解決するヘルパー関数
-# Helper function to resolve the LlmDailyLimitService instance from the request.
-def _resolve_llm_daily_limit_service(
-    request: Request,
-    service: LlmDailyLimitService | None,
-) -> LlmDailyLimitService:
-    """
-    リクエストまたは依存注入された値から、LLMの1日あたり制限サービスを取得・解決します。
-    Resolves the LlmDailyLimitService instance from the request context or dependency.
-    """
-    if isinstance(service, LlmDailyLimitService):
-        return service
-    return get_llm_daily_limit_service(request)
-
 
 # リクエストからチャット生成サービスを解決するヘルパー関数
 # Helper function to resolve the ChatGenerationService instance from the request.
@@ -214,8 +184,6 @@ def _resolve_chat_generation_service(
     return get_chat_generation_service(request)
 
 
-# ゲストユーザー用のチャットルームアクセス権を検証する非同期関数
-# Asynchronously validate the guest session's access privileges to the specified room.
 # 編集して送り直す発話へ、元の発話の添付（文書の本文と画像）を引き継ぐための引数。
 # Keyword arguments that carry the original message's attachments (document text and images)
 # over to the edited message.
@@ -553,23 +521,6 @@ def _parse_before_message_id(raw_value: str | None) -> int | None:
     return parsed
 
 
-# レガシーなエラーレスポンス形式を FastAPI 互換の JSONResponse に整形するヘルパー関数
-# Format a legacy error response payload into a FastAPI-compatible response.
-def _legacy_error_response(result: Any):
-    """
-    レガシーな検証結果のタプル (payload, status_code) を、FastAPI 互換のJSONResponseに整形します。
-    Formats a legacy error response payload into a FastAPI-compatible response.
-    """
-    if not (isinstance(result, tuple) and len(result) == 2):
-        return None
-    payload, status_code = result
-    if payload is None:
-        return None
-    if isinstance(payload, dict) and isinstance(status_code, int):
-        return jsonify(payload, status_code=status_code)
-    return None
-
-
 # 認証結果からチャットルームのモード("normal" または "temporary")を判定する関数
 # Resolve room mode ("normal" or "temporary") based on ownership resolution.
 def _resolved_room_mode(owner_result: Any) -> str:
@@ -610,7 +561,7 @@ async def _resolve_authenticated_room_target(
         return "temporary", temporary_sid, None
 
     owner_result = await validate_room_owner(chat_room_id, user_id, forbidden_message)
-    legacy_response = _legacy_error_response(owner_result)
+    legacy_response = legacy_error_response(owner_result)
     if legacy_response is not None:
         return None, None, legacy_response
 
@@ -781,8 +732,8 @@ async def chat(
     新規のチャットメッセージを投稿し、AIの回答生成プロセスを起動します。
     Posts a new user message and triggers AI response generation.
     """
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
-    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
+    resolved_auth_limit_service = resolve_auth_limit_service(request, auth_limit_service)
+    resolved_llm_daily_limit_service = resolve_llm_daily_limit_service(
         request,
         llm_daily_limit_service,
     )
@@ -884,7 +835,7 @@ async def chat_regenerate(
     指定されたAI返答メッセージに対する再生成を開始します。DB保存ルームの場合、新たなメッセージブランチを作成します。
     Initiates regeneration of the assistant response for the target message.
     """
-    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(request, llm_daily_limit_service)
+    resolved_llm_daily_limit_service = resolve_llm_daily_limit_service(request, llm_daily_limit_service)
     resolved_chat_generation_service = _resolve_chat_generation_service(request, chat_generation_service)
 
     await run_blocking(cleanup_ephemeral_chats)
@@ -906,7 +857,7 @@ async def chat_regenerate(
         theme_preference = None
 
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
-        return jsonify({"error": "chat_room_id is required"}, status_code=400)
+        return jsonify({"error": ERROR_CHAT_ROOM_ID_FIELD_REQUIRED}, status_code=400)
     chat_room_id = chat_room_id_raw.strip()
 
     try:
@@ -1041,7 +992,7 @@ async def chat_edit_and_regenerate(
     過去のユーザーメッセージを編集し、そこからの分岐（ブランチ）で新しいAI応答の生成を開始します。
     Edits a previous user message and spawns a new branch with a regenerated AI response.
     """
-    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(request, llm_daily_limit_service)
+    resolved_llm_daily_limit_service = resolve_llm_daily_limit_service(request, llm_daily_limit_service)
     resolved_chat_generation_service = _resolve_chat_generation_service(request, chat_generation_service)
 
     await run_blocking(cleanup_ephemeral_chats)
@@ -1065,7 +1016,7 @@ async def chat_edit_and_regenerate(
         theme_preference = None
 
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
-        return jsonify({"error": "chat_room_id is required"}, status_code=400)
+        return jsonify({"error": ERROR_CHAT_ROOM_ID_FIELD_REQUIRED}, status_code=400)
     chat_room_id = chat_room_id_raw.strip()
 
     if not isinstance(new_message_raw, str) or not new_message_raw.strip():
@@ -1127,7 +1078,7 @@ async def chat_edit_and_regenerate(
                 if message.get("role") == "user"
             ]
             if len(user_positions) <= trailing_user_count:
-                return jsonify({"error": "編集対象のメッセージが見つかりません"}, status_code=404)
+                return jsonify({"error": ERROR_CHAT_EDIT_TARGET_NOT_FOUND}, status_code=404)
             target_pos = user_positions[len(user_positions) - 1 - trailing_user_count]
             attachment_content_kwargs = _carried_attachment_kwargs(existing_messages[target_pos])
             await run_blocking(
@@ -1152,7 +1103,7 @@ async def chat_edit_and_regenerate(
             )
             user_positions = [i for i, node in enumerate(path) if node["sender"] == "user"]
             if len(user_positions) <= trailing_user_count:
-                return jsonify({"error": "編集対象のメッセージが見つかりません"}, status_code=404)
+                return jsonify({"error": ERROR_CHAT_EDIT_TARGET_NOT_FOUND}, status_code=404)
             target_pos = user_positions[len(user_positions) - 1 - trailing_user_count]
             edit_parent_id = path[target_pos - 1]["id"] if target_pos > 0 else None
             target_attached_file_names = path[target_pos].get("attached_file_names")
@@ -1218,7 +1169,7 @@ async def chat_edit_and_regenerate(
             if message.get("role") == "user"
         ]
         if len(user_positions) <= trailing_user_count:
-            return jsonify({"error": "編集対象のメッセージが見つかりません"}, status_code=404)
+            return jsonify({"error": ERROR_CHAT_EDIT_TARGET_NOT_FOUND}, status_code=404)
         target_pos = user_positions[len(user_positions) - 1 - trailing_user_count]
         attachment_content_kwargs = _carried_attachment_kwargs(existing_messages[target_pos])
         await run_blocking(
@@ -1291,7 +1242,7 @@ async def chat_switch_branch(request: Request):
     message_id_raw = data.get("message_id")
 
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
-        return jsonify({"error": "chat_room_id is required"}, status_code=400)
+        return jsonify({"error": ERROR_CHAT_ROOM_ID_FIELD_REQUIRED}, status_code=400)
     chat_room_id = chat_room_id_raw.strip()
 
     if not isinstance(message_id_raw, int) or message_id_raw < 1:
@@ -1308,7 +1259,7 @@ async def chat_switch_branch(request: Request):
         room_mode, _sid, legacy_response = await _resolve_authenticated_room_target(
             chat_room_id,
             user_id,
-            "他ユーザーのチャットルームは操作できません",
+            ERROR_CHAT_ROOM_FORBIDDEN,
         )
         if legacy_response is not None:
             return legacy_response
@@ -1362,7 +1313,7 @@ async def chat_stop(
 
     chat_room_id = data.get("chat_room_id")
     if not chat_room_id:
-        return jsonify({"error": "chat_room_id is required"}, status_code=400)
+        return jsonify({"error": ERROR_CHAT_ROOM_ID_FIELD_REQUIRED}, status_code=400)
 
     session = request.session
     resolved_chat_generation_service = _resolve_chat_generation_service(
@@ -1377,7 +1328,7 @@ async def chat_stop(
             _room_mode, sid, legacy_response = await _resolve_authenticated_room_target(
                 chat_room_id,
                 user_id,
-                "他ユーザーのチャットルームは操作できません",
+                ERROR_CHAT_ROOM_FORBIDDEN,
             )
             if legacy_response is not None:
                 return legacy_response
@@ -1415,7 +1366,7 @@ async def get_chat_history(request: Request):
     await run_blocking(cleanup_ephemeral_chats)
     chat_room_id = request.query_params.get("room_id")
     if not chat_room_id:
-        return jsonify({"error": "room_id is required"}, status_code=400)
+        return jsonify({"error": ERROR_CHAT_ROOM_ID_REQUIRED}, status_code=400)
     limit = _parse_page_size(request.query_params.get("limit"))
     before_message_id = _parse_before_message_id(request.query_params.get("before_id"))
 
@@ -1485,7 +1436,7 @@ async def chat_generation_stream(
     await run_blocking(cleanup_ephemeral_chats)
     chat_room_id = request.query_params.get("room_id")
     if not chat_room_id:
-        return jsonify({"error": "room_id is required"}, status_code=400)
+        return jsonify({"error": ERROR_CHAT_ROOM_ID_REQUIRED}, status_code=400)
     generation_id, generation_id_error = _parse_requested_generation_id(
         {"generation_id": request.query_params.get("generation_id")}
     )
@@ -1539,7 +1490,7 @@ async def chat_generation_stream(
             status_code=503,
         )
     if selected_generation_id is None:
-        return jsonify({"error": "生成ジョブが見つかりません"}, status_code=404)
+        return jsonify({"error": ERROR_GENERATION_JOB_NOT_FOUND}, status_code=404)
 
     job = get_generation_job(
         generation_key,
@@ -1574,7 +1525,7 @@ async def chat_generation_stream(
             status_code=503,
         )
     if not replayable and not active:
-        return jsonify({"error": "生成ジョブが見つかりません"}, status_code=404)
+        return jsonify({"error": ERROR_GENERATION_JOB_NOT_FOUND}, status_code=404)
 
     if not resolved_chat_generation_service.supports_distributed_streaming():
         if active:
@@ -1582,7 +1533,7 @@ async def chat_generation_stream(
                 {"error": "生成ジョブは進行中ですが、このインスタンスでは再接続できません。"},
                 status_code=409,
             )
-        return jsonify({"error": "生成ジョブが見つかりません"}, status_code=404)
+        return jsonify({"error": ERROR_GENERATION_JOB_NOT_FOUND}, status_code=404)
 
     distributed_events = iter_generation_events(
         generation_key,
@@ -1610,7 +1561,7 @@ async def chat_generation_status(
     await run_blocking(cleanup_ephemeral_chats)
     chat_room_id = request.query_params.get("room_id")
     if not chat_room_id:
-        return jsonify({"error": "room_id is required"}, status_code=400)
+        return jsonify({"error": ERROR_CHAT_ROOM_ID_REQUIRED}, status_code=400)
 
     session = request.session
     resolved_chat_generation_service = _resolve_chat_generation_service(

@@ -9,8 +9,9 @@ from unittest.mock import Mock, patch
 from blueprints.auth import api_send_login_code
 from blueprints.prompt_share.prompt_manage_api import get_my_prompts
 from services.api_errors import ApiServiceError, ResourceNotFoundError
+from services.error_messages import ERROR_INTERNAL
 from services.i18n import reset_current_locale, set_current_locale
-from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, log_and_internal_server_error
+from services.web import log_and_internal_server_error
 from tests.helpers.request_helpers import build_request
 
 
@@ -86,7 +87,7 @@ class ErrorHandlingTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["status"], "fail")
-        self.assertEqual(payload["error"], DEFAULT_INTERNAL_ERROR_MESSAGE)
+        self.assertEqual(payload["error"], ERROR_INTERNAL)
         mock_logger.exception.assert_called_once_with("operation failed")
 
     # 日本語: ログインコード送信処理でメール送信が失敗した場合に、内部のエラー詳細がレスポンスに漏れないことを検証します。
@@ -124,7 +125,7 @@ class ErrorHandlingTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["status"], "fail")
-        self.assertEqual(payload["error"], DEFAULT_INTERNAL_ERROR_MESSAGE)
+        self.assertEqual(payload["error"], ERROR_INTERNAL)
         self.assertNotIn("smtp auth failed", payload["error"])
         mock_log.assert_called_once()
 
@@ -152,7 +153,7 @@ class ErrorHandlingTestCase(unittest.TestCase):
         # English: Confirm 500 error response and sensitive DB details are not included
         self.assertEqual(response.status_code, 500)
         payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(payload["error"], DEFAULT_INTERNAL_ERROR_MESSAGE)
+        self.assertEqual(payload["error"], ERROR_INTERNAL)
         self.assertNotIn("sensitive-db-error", payload["error"])
         mock_log.assert_called_once()
 

@@ -12,7 +12,7 @@ const { loadToolAutoApprovalsMock, revokeToolAutoApprovalMock, showToastMock } =
   showToastMock: vi.fn(),
 }));
 
-vi.mock("../scripts/user/settings/api", () => ({
+vi.mock("../lib/settings/api", () => ({
   loadToolAutoApprovals: loadToolAutoApprovalsMock,
   revokeToolAutoApproval: revokeToolAutoApprovalMock,
 }));

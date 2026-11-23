@@ -51,8 +51,6 @@ def load_default_tasks(
     locale: str = "ja",
     revision: int = CURRENT_SYSTEM_TASK_REVISION,
 ) -> list[dict]:
-    # JSON からデフォルトタスクを読み込み、型とキーを正規化する
-    # Load default tasks from JSON and normalize schema/types.
     normalized_locale = str(locale or "ja").lower().replace("_", "-").split("-", 1)[0]
     revision_catalogs = DEFAULT_TASK_CATALOG_PATHS.get(revision)
     if revision_catalogs is None:
@@ -190,8 +188,6 @@ def localize_system_task(
 # データベース挿入用のタプル形式に変換したデフォルトタスクのリストを返す
 # Convert and return default tasks formatted as tuples for database insertion.
 def default_task_rows(locale: str = "ja", *, include_key: bool = False) -> list[tuple]:
-    # DB INSERT 用のタプル配列へ変換する
-    # Convert normalized tasks into DB insert row tuples.
     rows = []
     for task in load_default_tasks(locale):
         row = (

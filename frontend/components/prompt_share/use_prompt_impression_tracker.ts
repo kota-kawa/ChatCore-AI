@@ -2,7 +2,7 @@
 // Hook that records feed-card impressions in batches. Used by pages/prompt_share/index.tsx.
 import { useCallback, useEffect, useRef } from "react";
 
-import { recordPromptImpressions } from "../../scripts/prompt_share/api";
+import { recordPromptImpressions } from "../../lib/prompt_share/api";
 import { getPromptId } from "./prompt_share_page_utils";
 import type { PromptRecord } from "./prompt_card";
 

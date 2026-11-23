@@ -8,11 +8,12 @@ import os
 from werkzeug.utils import secure_filename
 
 from services.error_messages import (
+    ERROR_IMAGE_FORMAT_MISMATCH,
     ERROR_PROMPT_ATTACHMENT_EMPTY,
     ERROR_PROMPT_ATTACHMENT_FILENAME_INVALID,
-    ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH,
     ERROR_PROMPT_ATTACHMENT_MEDIA_UNSUPPORTED,
     ERROR_PROMPT_ATTACHMENT_MIME_UNSUPPORTED,
+    ERROR_PROMPT_ATTACHMENT_TOO_LARGE_TEMPLATE,
 )
 from services.prompt_attachment_processing import process_prompt_attachment
 from services.prompt_attachment_storage import (
@@ -67,11 +68,11 @@ def save_prompt_attachment(
         source = bytes(source)
     max_bytes = min(rule.max_bytes, PROMPT_ATTACHMENT_MAX_BYTES)
     if len(source) > max_bytes:
-        raise ValueError(f"添付ファイルのサイズは{max_bytes // (1024 * 1024)}MB以下にしてください。")
+        raise ValueError(ERROR_PROMPT_ATTACHMENT_TOO_LARGE_TEMPLATE.format(max_mb=max_bytes // (1024 * 1024)))
     if not source:
         raise ValueError(ERROR_PROMPT_ATTACHMENT_EMPTY)
     if not _prompt_attachment_signature_matches(extension, source[:16]):
-        raise ValueError(ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH)
+        raise ValueError(ERROR_IMAGE_FORMAT_MISMATCH)
 
     processed = process_prompt_attachment(source)
     stored = get_prompt_attachment_storage().save_variants(

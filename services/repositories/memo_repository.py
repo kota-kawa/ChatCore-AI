@@ -10,10 +10,9 @@ trashed memos are hidden except for the trash list, restore and permanent delete
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from decimal import Decimal
-from typing import Any, TypeVar
+from typing import Any
 
 from sqlalchemy import (
     Numeric,
@@ -32,37 +31,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api_errors import ApiServiceError, ResourceNotFoundError
 from services.datetime_serialization import serialize_datetime_iso
-from services.db import session_scope
+from services.db import in_transaction
 from services.embeddings import get_semantic_max_distance
+from services.error_messages import (
+    ERROR_COLLECTION_NOT_FOUND,
+    ERROR_MEMO_AI_RESPONSE_REQUIRED,
+    ERROR_MEMO_NOT_FOUND,
+    ERROR_MEMO_REORDER_POSITION_INVALID,
+    ERROR_MEMO_REORDER_STATE_MISMATCH,
+    ERROR_MEMO_REORDER_TARGET_NOT_FOUND,
+    ERROR_MEMO_SHARED_CHANGE_NOT_ALLOWED,
+    ERROR_MEMO_UPDATED_ELSEWHERE,
+)
 from services.models import MemoCollection, MemoEntry, SharedMemoEntry
 from services.models.types import Vector
 from services.search_terms import build_like_pattern, kana_variants, split_search_terms
 
 from .memo_constants import (
-    COLLECTION_NOT_FOUND_ERROR,
-    MEMO_NOT_FOUND_ERROR,
     MEMO_TRASH_PURGE_BATCH_SIZE,
     MEMO_TRASH_RETENTION_DAYS,
     TRASH_BULK_ACTIONS,
 )
 from .memo_helpers import date_end, date_start, ensure_title
 from .memo_serializers import serialize_memo_detail, serialize_memo_summary
-
-T = TypeVar("T")
-
-
-async def _in_transaction(
-    session: AsyncSession | None,
-    operation: Callable[[AsyncSession], Awaitable[T]],
-) -> T:
-    """session があればそれを使い、無ければ独立したトランザクションで 1 つの操作を実行する。
-
-    Run one repository operation in an isolated transaction when needed.
-    """
-    if session is not None:
-        return await operation(session)
-    async with session_scope() as owned_session, owned_session.begin():
-        return await operation(owned_session)
 
 
 def _row_dict(row: Any) -> dict[str, Any]:
@@ -248,7 +239,7 @@ async def fetch_memo_summaries(
             "memos": [_memo_from_row(row, detail=False) for row in rows],
         }
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 # 日本語: sort パラメータを ORDER BY 式に変換する。manual は sort_order、未設定なら作成時刻(エポック秒)で代用し、未知の値は作成の新しい順。
@@ -298,10 +289,10 @@ async def fetch_memo_detail(
             )
         ).mappings().first()
         if row is None:
-            raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+            raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND)
         return _memo_from_detail_row(row)
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 # 日本語: コレクションが指定ユーザーのものか確かめる。他人のコレクションへメモを紐づけさせないために使う。
@@ -356,7 +347,7 @@ async def insert_memo(
         )
         return (await db.execute(statement)).scalar_one_or_none()
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 # 日本語: メモを更新する。expected_revision が違えば 409(楽観ロック)。allow_shared_content_change=False のと
@@ -399,24 +390,24 @@ async def update_memo(
         )
         current_row = existing.mappings().first()
         if current_row is None:
-            raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+            raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND)
         current = dict(current_row)
         if expected_revision is not None and int(current["revision"] or 0) != expected_revision:
             raise ApiServiceError(
-                "メモが別の操作で更新されています。再読み込みしてからやり直してください。",
+                ERROR_MEMO_UPDATED_ELSEWHERE,
                 409,
                 status="fail",
             )
         if not allow_shared_content_change and bool(current["is_shared"]):
             raise ApiServiceError(
-                "共有中のメモを更新するには、公開内容の変更を明示的に許可してください。",
+                ERROR_MEMO_SHARED_CHANGE_NOT_ALLOWED,
                 409,
                 status="fail",
             )
 
         resolved_content = ai_response if ai_response is not None else current["ai_response"] or ""
         if not str(resolved_content).strip():
-            raise ApiServiceError("AIの回答を入力してください。", 400, status="fail")
+            raise ApiServiceError(ERROR_MEMO_AI_RESPONSE_REQUIRED, 400, status="fail")
         resolved_title = current["title"] or ""
         if title is not None:
             resolved_title = ensure_title(str(resolved_content), title)
@@ -468,7 +459,7 @@ async def update_memo(
             if not await db.scalar(
                 select(exists().where(MemoEntry.id == memo_id, MemoEntry.user_id == user_id, _live_memo()))
             ):
-                raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+                raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND)
             if not allow_shared_content_change and await db.scalar(
                 select(exists().where(
                     SharedMemoEntry.memo_entry_id == memo_id,
@@ -478,18 +469,18 @@ async def update_memo(
                 ))
             ):
                 raise ApiServiceError(
-                    "共有中のメモを更新するには、公開内容の変更を明示的に許可してください。",
+                    ERROR_MEMO_SHARED_CHANGE_NOT_ALLOWED,
                     409,
                     status="fail",
                 )
             raise ApiServiceError(
-                "メモが別の操作で更新されています。再読み込みしてからやり直してください。",
+                ERROR_MEMO_UPDATED_ELSEWHERE,
                 409,
                 status="fail",
             )
         return await fetch_memo_detail(user_id, memo_id, session=db)
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 async def set_memo_archive_state(
@@ -511,10 +502,10 @@ async def set_memo_archive_state(
             .returning(MemoEntry.id)
         )
         if (await db.execute(statement)).scalar_one_or_none() is None:
-            raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+            raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND)
         return await fetch_memo_detail(user_id, memo_id, session=db)
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 # 日本語: ピン留めの切り替え。ピン留めするときは、既存のピン留めメモの末尾に来るよう sort_order をサブクエリで最大値 + 1 にする。
@@ -551,10 +542,10 @@ async def set_memo_pin_state(
             .returning(MemoEntry.id)
         )
         if (await db.execute(statement)).scalar_one_or_none() is None:
-            raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+            raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND)
         return await fetch_memo_detail(user_id, memo_id, session=db)
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 # 日本語: sort_order(Numeric)を Decimal にそろえる。None は 0 として扱う。
@@ -579,7 +570,7 @@ async def reorder_memo(
     session: AsyncSession | None = None,
 ) -> dict[str, Any]:
     if before_id == memo_id or after_id == memo_id:
-        raise ApiServiceError("並べ替え位置が不正です。", 400, status="fail")
+        raise ApiServiceError(ERROR_MEMO_REORDER_POSITION_INVALID, 400, status="fail")
 
     async def operation(db: AsyncSession) -> dict[str, Any]:
         ids = [memo_id] + [value for value in (before_id, after_id) if value is not None]
@@ -601,7 +592,7 @@ async def reorder_memo(
         by_id = {int(row["id"]): dict(row) for row in rows}
         dragged = by_id.get(memo_id)
         if dragged is None:
-            raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+            raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND)
         dragged_pinned = dragged["pinned_at"] is not None
         dragged_archived = dragged["archived_at"] is not None
 
@@ -610,13 +601,13 @@ async def reorder_memo(
                 return None
             neighbor = by_id.get(neighbor_id)
             if neighbor is None:
-                raise ApiServiceError("並べ替え先のメモが見つかりません。", 400, status="fail")
+                raise ApiServiceError(ERROR_MEMO_REORDER_TARGET_NOT_FOUND, 400, status="fail")
             if (
                 (neighbor["pinned_at"] is not None) != dragged_pinned
                 or (neighbor["archived_at"] is not None) != dragged_archived
             ):
                 raise ApiServiceError(
-                    "ピン留めまたはアーカイブ状態が異なるメモの間には移動できません。",
+                    ERROR_MEMO_REORDER_STATE_MISMATCH,
                     400,
                     status="fail",
                 )
@@ -652,10 +643,10 @@ async def reorder_memo(
             .returning(MemoEntry.id)
         )
         if (await db.execute(statement)).scalar_one_or_none() is None:
-            raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+            raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND)
         return await fetch_memo_detail(user_id, memo_id, session=db)
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 async def _revoke_shares_on_trash(db: AsyncSession, memo_ids: list[int]) -> None:
@@ -692,10 +683,10 @@ async def delete_memo(
             .returning(MemoEntry.id)
         )
         if (await db.execute(statement)).scalar_one_or_none() is None:
-            raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+            raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND)
         await _revoke_shares_on_trash(db, [memo_id])
 
-    await _in_transaction(session, operation)
+    await in_transaction(session, operation)
 
 
 async def restore_memo(
@@ -717,10 +708,10 @@ async def restore_memo(
             .returning(MemoEntry.id)
         )
         if (await db.execute(statement)).scalar_one_or_none() is None:
-            raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+            raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND)
         return await fetch_memo_detail(user_id, memo_id, session=db)
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 async def purge_memo(
@@ -741,9 +732,9 @@ async def purge_memo(
             .returning(MemoEntry.id)
         )
         if (await db.execute(statement)).scalar_one_or_none() is None:
-            raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+            raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND)
 
-    await _in_transaction(session, operation)
+    await in_transaction(session, operation)
 
 
 async def empty_memo_trash(
@@ -764,7 +755,7 @@ async def empty_memo_trash(
         )
         return len(deleted.scalars().all())
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 async def purge_expired_memo_trash(
@@ -793,7 +784,7 @@ async def purge_expired_memo_trash(
         )
         return len(deleted.scalars().all())
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 # 日本語: 選択したメモへの一括操作(delete / restore / purge / archive / unarchive / pin / unpin / set_collection / clear_collection)。
@@ -869,7 +860,7 @@ async def bulk_action(
             await _revoke_shares_on_trash(db, list(affected))
         return {"affected": len(affected)}
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 # 日本語: コレクション一覧。memo_count はアーカイブ・ゴミ箱に入っていないメモだけを数える。
@@ -915,7 +906,7 @@ async def fetch_collections(
             for row in rows
         ]
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 async def insert_collection(
@@ -949,7 +940,7 @@ async def insert_collection(
             "updated_at": serialize_datetime_iso(row["updated_at"]),
         }
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 async def update_collection(
@@ -969,7 +960,7 @@ async def update_collection(
         )
         existing = current.mappings().first()
         if existing is None:
-            raise ResourceNotFoundError(COLLECTION_NOT_FOUND_ERROR)
+            raise ResourceNotFoundError(ERROR_COLLECTION_NOT_FOUND)
         statement = (
             update(MemoCollection)
             .where(MemoCollection.id == collection_id, MemoCollection.user_id == user_id)
@@ -988,7 +979,7 @@ async def update_collection(
         )
         row = (await db.execute(statement)).mappings().first()
         if row is None:
-            raise ResourceNotFoundError(COLLECTION_NOT_FOUND_ERROR)
+            raise ResourceNotFoundError(ERROR_COLLECTION_NOT_FOUND)
         count = await db.scalar(
             select(func.count(MemoEntry.id)).where(
                 MemoEntry.collection_id == collection_id,
@@ -1005,7 +996,7 @@ async def update_collection(
             "updated_at": serialize_datetime_iso(row["updated_at"]),
         }
 
-    return await _in_transaction(session, operation)
+    return await in_transaction(session, operation)
 
 
 # 日本語: コレクションを削除する。所属メモは削除せず collection_id を外す(revision も進める)。
@@ -1031,6 +1022,6 @@ async def delete_collection(
             MemoCollection.user_id == user_id,
         ).returning(MemoCollection.id)
         if (await db.execute(statement)).scalar_one_or_none() is None:
-            raise ResourceNotFoundError(COLLECTION_NOT_FOUND_ERROR)
+            raise ResourceNotFoundError(ERROR_COLLECTION_NOT_FOUND)
 
-    await _in_transaction(session, operation)
+    await in_transaction(session, operation)

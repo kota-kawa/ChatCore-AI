@@ -1,9 +1,11 @@
-"""セッション辞書の永続化フラグと、一度読むと消えるフラッシュメッセージを扱う小さなヘルパー。
+"""セッション辞書の永続化フラグ・ログイン中のユーザー ID・一度読むと消えるフラッシュメッセージを扱う小さなヘルパー。
 
-Small helpers for the session's permanence flag and for one-time flash messages kept in the session.
+Small helpers for the session's permanence flag, the signed-in user id and one-time flash messages kept in the session.
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 from fastapi import Request
 
@@ -15,6 +17,29 @@ def set_session_permanent(session: dict, value: bool) -> None:
         session["_permanent"] = True
     else:
         session.pop("_permanent", None)
+
+
+# セッションの user_id が整数のときだけ返す。それ以外は未ログイン扱いの None。
+# Return the session user_id only when it is an int; otherwise None, treated as not signed in.
+def user_id_from_session(session: dict[str, Any]) -> int | None:
+    user_id = session.get("user_id")
+    if isinstance(user_id, int):
+        return user_id
+    return None
+
+
+# セッションからログイン中のユーザー ID を整数で返す。未ログインや不正な値は None。
+# `user_id_from_session` と違い、数値の文字列も整数へ変換して受け入れる。
+# Return the signed-in user id from the session as an int; None when signed out or the value is invalid.
+# Unlike `user_id_from_session`, a numeric string is accepted and converted to an int.
+def authenticated_user_id(request: Request) -> int | None:
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return None
+    try:
+        return int(user_id)
+    except (TypeError, ValueError):
+        return None
 
 
 def flash(request: Request, message: str, category: str = "message") -> None:

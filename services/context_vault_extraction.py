@@ -220,7 +220,6 @@ class ExtractedContextCandidate(BaseModel):
 # LLM 応答全体の外枠。1 ターンで受け付ける候補数の上限をここで強制する。
 # Outer envelope of the LLM response; enforces the per-turn cap on candidate count.
 class ExtractedContextEnvelope(BaseModel):
-    # 1回のLLM応答から受け付ける候補数を制限する。
     """Bound the number of candidates accepted from one LLM response."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -242,7 +241,9 @@ def _contains_obvious_secret(candidate: ExtractedContextCandidate) -> bool:
     return any(pattern.search(combined) for pattern in _SECRET_VALUE_PATTERNS)
 
 
-def _normalized_for_evidence_match(value: str) -> str:
+# 照合用の正規化（NFKC・空白圧縮・大文字小文字無視）。evidence の照合と候補の指紋が同じ規則を使う。
+# Normalization for comparison (NFKC, collapsed whitespace, casefolded); evidence matching and candidate fingerprints share the rule.
+def normalize_for_comparison(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).split()).casefold()
 
 
@@ -254,7 +255,7 @@ def _is_span_in_user_message(span: str | None, normalized_user_message: str) -> 
     user asks to remember sensitive information) use this check. Both sides are normalized (NFKC, collapsed whitespace,
     casefolded) before the containment check.
     """
-    normalized_span = _normalized_for_evidence_match(span or "")
+    normalized_span = normalize_for_comparison(span or "")
     if not normalized_span:
         return False
     return normalized_span in normalized_user_message
@@ -318,7 +319,7 @@ def extract_context_candidates(
         logger.warning("Context candidate extraction returned an invalid payload.")
         return []
 
-    normalized_user_message = _normalized_for_evidence_match(bounded_user_message)
+    normalized_user_message = normalize_for_comparison(bounded_user_message)
     accepted: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
     for candidate in envelope.candidates:

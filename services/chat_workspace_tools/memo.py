@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api_errors import ResourceNotFoundError
@@ -47,7 +47,7 @@ from .registry import (
     WorkspaceToolArgumentError,
     WorkspaceToolError,
     build_function_definition,
-    validation_problems,
+    validated_arguments,
 )
 
 MEMO_TOOL_FAMILY = "memo"
@@ -162,13 +162,6 @@ class MemoEditArguments(_ToolArguments):
         return self
 
 
-def _validated(model: type[_ToolArguments], arguments: dict[str, Any]) -> Any:
-    try:
-        return model.model_validate(arguments)
-    except ValidationError as exc:
-        raise WorkspaceToolArgumentError(validation_problems(exc)) from None
-
-
 async def _owned_memo(user_id: int, memo_id: int, *, session: AsyncSession | None = None) -> McpMemoDetail:
     try:
         return await get_memo(user_id, memo_id, session=session)
@@ -193,7 +186,7 @@ def _memo_summary(memo: Any) -> dict[str, Any]:
 
 
 async def _read_memo_list(user_id: int, arguments: dict[str, Any], max_chars: int) -> ReadResult:
-    params = _validated(MemoListArguments, arguments)
+    params = validated_arguments(MemoListArguments, arguments)
     result = await list_memos(
         user_id,
         limit=params.limit,
@@ -227,7 +220,7 @@ def _consume_semantic_search(user_id: int) -> bool:
 
 
 async def _read_memo_search(user_id: int, arguments: dict[str, Any], max_chars: int) -> ReadResult:
-    params = _validated(MemoSearchArguments, arguments)
+    params = validated_arguments(MemoSearchArguments, arguments)
     mode = params.mode
     if mode == "semantic" and not _consume_semantic_search(user_id):
         mode = "keyword"
@@ -247,7 +240,7 @@ async def _read_memo_search(user_id: int, arguments: dict[str, Any], max_chars: 
 # Slice the body by character range, trimming the tail until the JSON escaping still fits the
 # read budget.
 async def _read_memo(user_id: int, arguments: dict[str, Any], max_chars: int) -> ReadResult:
-    params = _validated(MemoReadArguments, arguments)
+    params = validated_arguments(MemoReadArguments, arguments)
     memo = await _owned_memo(user_id, params.memo_id)
     body = normalize_memo_body(memo.content)
     start = min(params.start, len(body))
@@ -280,7 +273,7 @@ async def _read_memo(user_id: int, arguments: dict[str, Any], max_chars: int) ->
 
 
 async def _propose_memo_create(user_id: int, arguments: dict[str, Any]) -> Proposal:
-    params = _validated(MemoCreateArguments, arguments)
+    params = validated_arguments(MemoCreateArguments, arguments)
     title = ensure_title(params.content, params.title)
     return Proposal(
         arguments={"title": title, "content": params.content},
@@ -291,7 +284,7 @@ async def _propose_memo_create(user_id: int, arguments: dict[str, Any]) -> Propo
 
 
 async def _propose_memo_append(user_id: int, arguments: dict[str, Any]) -> Proposal:
-    params = _validated(MemoAppendArguments, arguments)
+    params = validated_arguments(MemoAppendArguments, arguments)
     memo = await _owned_memo(user_id, params.memo_id)
     appended_length = len(memo.content) + len(params.separator) + len(params.text)
     if appended_length > MAX_MEMO_STORED_CONTENT_LENGTH:
@@ -315,7 +308,7 @@ async def _propose_memo_append(user_id: int, arguments: dict[str, Any]) -> Propo
 # Partial edits are applied to the stored body when proposed; if they do not apply, no card is
 # made and the problems go back to the model.
 async def _propose_memo_edit(user_id: int, arguments: dict[str, Any]) -> Proposal:
-    params = _validated(MemoEditArguments, arguments)
+    params = validated_arguments(MemoEditArguments, arguments)
     memo = await _owned_memo(user_id, params.memo_id)
     edits = [edit.model_dump() for edit in params.edits or []]
     preview: dict[str, Any] = {

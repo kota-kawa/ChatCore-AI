@@ -742,10 +742,6 @@ async def add_task(
     )
 
 
-async def get_room_summary(chat_room_id: str, *, session: AsyncSession | None = None):
-    return await _read(lambda repo: repo.get_room_summary(chat_room_id), session)
-
-
 async def update_user_profile(
     user_id: int,
     *,

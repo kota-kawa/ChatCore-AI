@@ -26,6 +26,19 @@ def _dns_answer(ip: str):
     return [(family, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", sockaddr)]
 
 
+# 本文だけを取り出す補助関数。本文を得られなかった（文書が None）ときは None を返す。
+# Helper returning just the text; None when no document was fetched.
+def _fetch_text(url: str) -> str | None:
+    document = url_fetcher.fetch_url_document(url)
+    return document.text if document is not None else None
+
+
+# 複数 URL の本文を {url: text} で返す補助関数。
+# Helper returning {url: text} for several URLs.
+def _fetch_texts(urls: list[str]) -> dict[str, str]:
+    return {url: document.text for url, document in url_fetcher.fetch_urls_documents(urls).items()}
+
+
 # `stream=True` で取得した requests.Response の挙動を再現する疑似レスポンス。
 # 素の MagicMock だと `content` / `apparent_encoding` が何度でも読めてしまい、
 # 「ストリームを読み切った後に本文を参照すると RuntimeError になる」という
@@ -249,7 +262,7 @@ class ResolveSafeIpTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")) as resolve,
             patch("requests.Session.get", side_effect=capture_fetch) as get,
         ):
-            self.assertEqual(url_fetcher.fetch_url_content("https://例え.テスト/"), "IDN article")
+            self.assertEqual(_fetch_text("https://例え.テスト/"), "IDN article")
         ascii_host = "xn--r8jz45g.xn--zckzah"
         resolve.assert_called_once_with(ascii_host, 443, type=socket.SOCK_STREAM)
         self.assertEqual(get.call_args.args[0], f"https://{ascii_host}/")
@@ -452,7 +465,7 @@ class FetchUrlContentTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
             patch("requests.Session.get", return_value=resp),
         ):
-            result = url_fetcher.fetch_url_content("https://example.com")
+            result = _fetch_text("https://example.com")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertIn("Hello world", result)
@@ -581,7 +594,7 @@ class FetchUrlContentTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
             patch("requests.Session.get", return_value=resp),
         ):
-            result = url_fetcher.fetch_url_content("https://example.com/readme.txt")
+            result = _fetch_text("https://example.com/readme.txt")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertIn("Plain text here.", result)
@@ -594,7 +607,7 @@ class FetchUrlContentTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
             patch("requests.Session.get", return_value=resp),
         ):
-            result = url_fetcher.fetch_url_content("https://example.com")
+            result = _fetch_text("https://example.com")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertIn("Streamed body", result)
@@ -612,7 +625,7 @@ class FetchUrlContentTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
             patch("requests.Session.get", return_value=resp),
         ):
-            result = url_fetcher.fetch_url_content("https://example.com")
+            result = _fetch_text("https://example.com")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertIn("日本語の本文", result)
@@ -629,7 +642,7 @@ class FetchUrlContentTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
             patch("requests.Session.get", return_value=resp),
         ):
-            result = url_fetcher.fetch_url_content("https://example.com")
+            result = _fetch_text("https://example.com")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertIn("文字化けしない本文", result)
@@ -638,7 +651,7 @@ class FetchUrlContentTest(unittest.TestCase):
     # Verify that fetching from an unsafe host/IP resolves to None.
     def test_returns_none_for_unsafe_url(self):
         with patch("socket.getaddrinfo", return_value=_dns_answer("127.0.0.1")):
-            result = url_fetcher.fetch_url_content("http://localhost/admin")
+            result = _fetch_text("http://localhost/admin")
         self.assertIsNone(result)
 
     # テキスト系以外のコンテンツタイプ（PDF等）のフェッチ要求がNoneを返すことを検証します。
@@ -649,7 +662,7 @@ class FetchUrlContentTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
             patch("requests.Session.get", return_value=resp),
         ):
-            result = url_fetcher.fetch_url_content("https://example.com/doc.pdf")
+            result = _fetch_text("https://example.com/doc.pdf")
         self.assertIsNone(result)
 
     def test_rejects_content_type_that_only_contains_text_html_as_substring(self):
@@ -658,7 +671,7 @@ class FetchUrlContentTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
             patch("requests.Session.get", return_value=resp),
         ):
-            self.assertIsNone(url_fetcher.fetch_url_content("https://example.com"))
+            self.assertIsNone(_fetch_text("https://example.com"))
 
     def test_response_byte_limit_is_strict(self):
         body = b"x" * (url_fetcher.MAX_URL_RESPONSE_BYTES + 20_000)
@@ -668,7 +681,7 @@ class FetchUrlContentTest(unittest.TestCase):
             patch("requests.Session.get", return_value=resp),
             patch.object(url_fetcher, "decode_response_body", return_value="text") as decode,
         ):
-            self.assertEqual(url_fetcher.fetch_url_content("https://example.com"), "text")
+            self.assertEqual(_fetch_text("https://example.com"), "text")
         self.assertEqual(len(decode.call_args.args[0]), url_fetcher.MAX_URL_RESPONSE_BYTES)
 
     def test_direct_session_disables_proxy_and_netrc_environment(self):
@@ -690,7 +703,7 @@ class FetchUrlContentTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
             patch("requests.Session.get", return_value=resp),
         ):
-            result = url_fetcher.fetch_url_content("https://example.com/missing")
+            result = _fetch_text("https://example.com/missing")
         self.assertIsNone(result)
 
     # ネットワーク接続エラーが発生した際、例外を起こさずNoneが返却されることを検証します。
@@ -700,7 +713,7 @@ class FetchUrlContentTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
             patch("requests.Session.get", side_effect=ConnectionError("timeout")),
         ):
-            result = url_fetcher.fetch_url_content("https://example.com")
+            result = _fetch_text("https://example.com")
         self.assertIsNone(result)
 
     def test_single_fetch_stops_waiting_when_dns_stalls(self):
@@ -738,7 +751,7 @@ class FetchUrlContentTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
             patch("requests.Session.get", return_value=resp),
         ):
-            result = url_fetcher.fetch_url_content("https://example.com")
+            result = _fetch_text("https://example.com")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertLessEqual(len(result), url_fetcher.MAX_URL_TEXT_CHARS)
@@ -751,7 +764,7 @@ class FetchUrlContentTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
             patch("requests.Session.get", return_value=resp),
         ):
-            result = url_fetcher.fetch_url_content("https://example.com")
+            result = _fetch_text("https://example.com")
         self.assertIsNone(result)
 
 
@@ -789,7 +802,7 @@ class FetchUrlRedirectTest(unittest.TestCase):
             patch("socket.getaddrinfo", side_effect=lambda host, *_args, **_kwargs: _dns_answer(resolver(host))),
             patch("requests.Session.get", return_value=redirect) as mock_get,
         ):
-            result = url_fetcher.fetch_url_content("https://example.com")
+            result = _fetch_text("https://example.com")
 
         self.assertIsNone(result)
         # 危険なメタデータサーバーへのリクエストは一度も発生していないことを検証
@@ -812,7 +825,7 @@ class FetchUrlRedirectTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
             patch("requests.Session.get", side_effect=lambda *a, **k: next(responses)),
         ):
-            result = url_fetcher.fetch_url_content("https://a.example.com")
+            result = _fetch_text("https://a.example.com")
 
         self.assertIsNotNone(result)
         assert result is not None
@@ -854,7 +867,7 @@ class FetchUrlRedirectTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
             patch("requests.Session.get", side_effect=loop) as mock_get,
         ):
-            result = url_fetcher.fetch_url_content("https://loop.example.com")
+            result = _fetch_text("https://loop.example.com")
 
         self.assertIsNone(result)
         self.assertLessEqual(mock_get.call_count, url_fetcher.MAX_REDIRECT_HOPS + 1)
@@ -873,7 +886,7 @@ class FetchUrlRedirectTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("93.184.216.34")),
             patch("requests.Session.get", side_effect=capture),
         ):
-            url_fetcher.fetch_url_content("https://example.com")
+            _fetch_text("https://example.com")
 
         self.assertIs(captured["kwargs"].get("allow_redirects"), False)
 
@@ -893,7 +906,7 @@ class DnsPinningTest(unittest.TestCase):
             patch("socket.getaddrinfo", return_value=_dns_answer("2001:4860:4860::8888")),
             patch("requests.Session.get", side_effect=capture_fetch),
         ):
-            self.assertEqual(url_fetcher.fetch_url_content("https://example.com"), "IPv6 article")
+            self.assertEqual(_fetch_text("https://example.com"), "IPv6 article")
         self.assertEqual(observed_mapping, {"example.com": "2001:4860:4860::8888"})
 
     # DNSピニングのスコープ内において、元の接続作成時にホスト名が事前検証済みのIPアドレスに置換されることを検証します。
@@ -965,7 +978,7 @@ class UrlLoggingTest(unittest.TestCase):
             patch("requests.Session.get", side_effect=RuntimeError(f"Failed {signed_url}")),
             self.assertLogs(url_fetcher.logger, level="DEBUG") as captured,
         ):
-            self.assertIsNone(url_fetcher.fetch_url_content(signed_url))
+            self.assertIsNone(_fetch_text(signed_url))
         logs = "\n".join(captured.output)
         self.assertIn("https://example.com/file", logs)
         self.assertNotIn("SECRET", logs)
@@ -1005,7 +1018,7 @@ class FetchUrlsContentTest(unittest.TestCase):
             return _document(url, text) if text else None
 
         with patch.object(url_fetcher, "fetch_url_document", side_effect=fetch):
-            result = url_fetcher.fetch_urls_content(
+            result = _fetch_texts(
                 ["https://a.com", "https://b.com", "https://c.com"]
             )
         self.assertEqual(result, {"https://a.com": "text-a", "https://c.com": "text-c"})
@@ -1033,13 +1046,13 @@ class FetchUrlsContentTest(unittest.TestCase):
     # Verify that an empty dictionary is returned if all URL fetches fail.
     def test_returns_empty_dict_when_all_fail(self):
         with patch.object(url_fetcher, "fetch_url_document", return_value=None):
-            result = url_fetcher.fetch_urls_content(["https://example.com"])
+            result = _fetch_texts(["https://example.com"])
         self.assertEqual(result, {})
 
     # 入力URLリストが空の場合に、空の辞書が即座に返却されることを検証します。
     # Verify that passing an empty list returns an empty dictionary immediately.
     def test_returns_empty_dict_for_empty_input(self):
-        self.assertEqual(url_fetcher.fetch_urls_content([]), {})
+        self.assertEqual(_fetch_texts([]), {})
 
     def test_turn_budget_stops_waiting_for_three_stalled_urls(self):
         release = Event()
@@ -1049,7 +1062,7 @@ class FetchUrlsContentTest(unittest.TestCase):
                 patch.object(url_fetcher, "fetch_url_document", side_effect=lambda _url: release.wait(0.5)),
             ):
                 started = time.monotonic()
-                result = url_fetcher.fetch_urls_content(["https://a.com", "https://b.com", "https://c.com"])
+                result = _fetch_texts(["https://a.com", "https://b.com", "https://c.com"])
                 elapsed = time.monotonic() - started
             self.assertEqual(result, {})
             self.assertLess(elapsed, 0.4)
@@ -1070,7 +1083,7 @@ class FetchUrlsContentTest(unittest.TestCase):
                 patch.object(url_fetcher, "URL_FETCH_TURN_BUDGET", 0.1),
                 patch.object(url_fetcher, "fetch_url_document", side_effect=fetch),
             ):
-                result = url_fetcher.fetch_urls_content(["https://slow.com", "https://safe.com"])
+                result = _fetch_texts(["https://slow.com", "https://safe.com"])
             self.assertEqual(result, {"https://safe.com": "safe article"})
         finally:
             release.set()
@@ -1084,7 +1097,7 @@ class FetchUrlsContentTest(unittest.TestCase):
                 patch.object(url_fetcher, "fetch_url_document", side_effect=lambda _url: release.wait(0.5)),
             ):
                 started = time.monotonic()
-                self.assertEqual(url_fetcher.fetch_urls_content(["https://slow.com"]), {})
+                self.assertEqual(_fetch_texts(["https://slow.com"]), {})
                 elapsed = time.monotonic() - started
             self.assertLess(elapsed, 0.15)
         finally:

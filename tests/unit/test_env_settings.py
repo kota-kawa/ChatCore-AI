@@ -40,6 +40,24 @@ class EnvBoolTestCase(unittest.TestCase):
             self.assertFalse(env_settings.env_bool("FLAG"))
 
 
+class EnvEnabledUnlessFalseTestCase(unittest.TestCase):
+    def test_only_the_false_spellings_disable(self) -> None:
+        for raw in ("0", "false", "FALSE", " no ", "Off"):
+            with self.subTest(raw=raw), patch.dict(os.environ, {"FLAG": raw}, clear=True):
+                self.assertFalse(env_settings.env_enabled_unless_false("FLAG"))
+
+    def test_any_other_value_stays_enabled(self) -> None:
+        for raw in ("1", "true", "yes", "on", "maybe", "  "):
+            with self.subTest(raw=raw), patch.dict(os.environ, {"FLAG": raw}, clear=True):
+                self.assertTrue(env_settings.env_enabled_unless_false("FLAG"))
+
+    def test_unset_and_empty_use_the_default(self) -> None:
+        for environ in ({}, {"FLAG": ""}):
+            with self.subTest(environ=environ), patch.dict(os.environ, environ, clear=True):
+                self.assertTrue(env_settings.env_enabled_unless_false("FLAG"))
+                self.assertFalse(env_settings.env_enabled_unless_false("FLAG", default=False))
+
+
 class EnvIntTestCase(unittest.TestCase):
     def test_returns_default_when_unset_or_unparsable(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
@@ -68,6 +86,16 @@ class EnvIntTestCase(unittest.TestCase):
     def test_ignores_surrounding_whitespace(self) -> None:
         with patch.dict(os.environ, {"SIZE": " 12 "}, clear=True):
             self.assertEqual(env_settings.env_int("SIZE", 7), 12)
+
+    def test_warns_below_minimum_only_when_requested(self) -> None:
+        with patch.dict(os.environ, {"SIZE": "0"}, clear=True):
+            with self.assertLogs(env_settings.logger, level="WARNING") as captured:
+                self.assertEqual(env_settings.env_int("SIZE", 7, warn_on_invalid=True), 7)
+            self.assertIn("Invalid SIZE value '0'", captured.output[0])
+
+        with patch.dict(os.environ, {"SIZE": "0"}, clear=True):
+            with self.assertNoLogs(env_settings.logger, level="DEBUG"):
+                self.assertEqual(env_settings.env_int("SIZE", 7), 7)
 
     def test_warns_only_when_requested(self) -> None:
         with patch.dict(os.environ, {"SIZE": "abc"}, clear=True):

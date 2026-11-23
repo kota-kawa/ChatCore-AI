@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import atexit
 import contextvars
+import inspect
 import logging
 import threading
 from collections.abc import AsyncIterator, Callable, Iterable, Iterator
@@ -133,6 +134,15 @@ async def run_blocking(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     # 専用エグゼキュータ上で関数を実行し、完了を非同期に待機する
     # Execute the function on the dedicated executor and await completion asynchronously.
     return await loop.run_in_executor(get_blocking_executor(), context.run, bound)
+
+
+# 非同期の値(コルーチンなど)は await し、同期の値はそのまま返す。本番の依存は非同期でも、軽量な単体テストの代役は同期の値を返すため。
+# Await an awaitable (such as a coroutine) and return any other value unchanged, so async production
+# dependencies and light synchronous test doubles can be called the same way.
+async def maybe_await(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
 
 
 # 同期イテレータの終端をスレッド境界越しに伝えるためのセンチネル。

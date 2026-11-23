@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import os
 import re
-import tempfile
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -18,6 +17,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - only relevant on non-POSIX hosts
     fcntl = None
 
+from services.atomic_file import atomic_write_bytes
 from services.env_settings import env_int
 from services.web_constants import BASE_DIR
 
@@ -31,6 +31,7 @@ _DEFAULT_PROMPT_ATTACHMENT_UPLOAD_ROOT = os.path.join(
     "uploads",
     "prompt_share",
 )
+_TEMPORARY_PREFIX = ".prompt-upload-"
 _SAFE_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$")
 _IMAGE_CONTENT_TYPES = {
     ".gif": "image/gif",
@@ -109,8 +110,8 @@ class LocalPromptAttachmentStorage:
             display_path = self.resolve_path(display_filename)
             thumbnail_path = self.resolve_path(thumbnail_filename)
             try:
-                _atomic_write(display_path, display_bytes)
-                _atomic_write(thumbnail_path, thumbnail_bytes)
+                atomic_write_bytes(display_path, display_bytes, temporary_prefix=_TEMPORARY_PREFIX)
+                atomic_write_bytes(thumbnail_path, thumbnail_bytes, temporary_prefix=_TEMPORARY_PREFIX)
             except Exception:
                 for path in (display_path, thumbnail_path):
                     if os.path.isfile(path):
@@ -197,23 +198,6 @@ def get_prompt_attachment_upload_root() -> str:
 
 def _random_token() -> str:
     return uuid4().hex
-
-
-def _atomic_write(destination: str, content: bytes) -> None:
-    # 読み手が書きかけの画像を見ないよう、原子的に書き込む。
-    """Write a variant atomically so readers never observe a partial image."""
-    directory = os.path.dirname(destination)
-    fd, temporary_path = tempfile.mkstemp(prefix=".prompt-upload-", dir=directory)
-    try:
-        with os.fdopen(fd, "wb") as file_obj:
-            file_obj.write(content)
-            file_obj.flush()
-            os.fsync(file_obj.fileno())
-        os.replace(temporary_path, destination)
-    except Exception:
-        if os.path.exists(temporary_path):
-            os.remove(temporary_path)
-        raise
 
 
 @contextmanager

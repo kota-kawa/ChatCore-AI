@@ -4,7 +4,7 @@
 import { fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { initPromptAssist } from "../scripts/components/prompt_assist/init";
+import { initPromptAssist } from "../lib/prompt_assist/init";
 import { resilientFetch } from "../scripts/core/resilient_fetch";
 
 vi.mock("../scripts/core/resilient_fetch", () => ({

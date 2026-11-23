@@ -9,11 +9,13 @@ The import at the bottom registers every route module (rooms / messages / tasks 
 """
 
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends
 
 from services.csrf import require_csrf
 from services.ephemeral_store import EphemeralChatStore
+from services.web import jsonify
 
 # チャット系の全ルートに CSRF 検証を掛けたルーター。
 # Router that applies CSRF verification to every chat route.
@@ -89,6 +91,19 @@ def cleanup_ephemeral_chats():
     ephemeral_store.cleanup()
 
 
+# 検証サービスが返す (payload, status_code) 形式のエラーを JSONResponse に整形する。エラーでなければ None。
+# Format a (payload, status_code) error tuple returned by a validation service into a JSON response; None when it is not an error.
+def legacy_error_response(result: Any):
+    if not (isinstance(result, tuple) and len(result) == 2):
+        return None
+    payload, status_code = result
+    if payload is None:
+        return None
+    if isinstance(payload, dict) and isinstance(status_code, int):
+        return jsonify(payload, status_code=status_code)
+    return None
+
+
 # ルートハンドラを import して APIRouter へ登録する
 # Import route modules so handlers are registered on APIRouter.
 from . import (  # noqa: F401, E402
@@ -115,6 +130,7 @@ __all__ = [
     "get_guest_room_ids",
     "get_session_id",
     "get_temporary_user_store_key",
+    "legacy_error_response",
     "register_guest_room",
     "unregister_guest_room",
 ]

@@ -8,7 +8,7 @@ import type { PromptRecord } from "../components/prompt_share/prompt_card";
 
 const recordPromptImpressions = vi.fn((_ids: Array<string | number>) => Promise.resolve({ status: "success", counted: 1 }));
 
-vi.mock("../scripts/prompt_share/api", () => ({
+vi.mock("../lib/prompt_share/api", () => ({
   recordPromptImpressions: (ids: Array<string | number>) => recordPromptImpressions(ids)
 }));
 

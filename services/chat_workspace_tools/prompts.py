@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from services.api_errors import ApiServiceError, ResourceNotFoundError
 from services.async_utils import run_blocking
@@ -57,7 +57,7 @@ from .registry import (
     WorkspaceToolArgumentError,
     WorkspaceToolError,
     build_function_definition,
-    validation_problems,
+    validated_arguments,
 )
 
 # 書き込みのカード上の family（公開投稿・自分用プロンプト・個人Skill、すべて "prompts"）。
@@ -108,13 +108,6 @@ class _ToolArguments(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
-def _validated(model: type[_ToolArguments], arguments: dict[str, Any]) -> Any:
-    try:
-        return model.model_validate(arguments)
-    except ValidationError as exc:
-        raise WorkspaceToolArgumentError(validation_problems(exc)) from None
-
-
 # repositoryが返す例外を、カード・モデルへ見せる理由コードへ変える。
 # Turn a repository-layer exception into the reason code shown on the card and to the model.
 def _map_repository_error(exc: Exception) -> str:
@@ -160,7 +153,7 @@ class SharedPromptReadArguments(_ToolArguments):
 
 
 async def _read_shared_prompt(user_id: int, arguments: dict[str, Any], max_chars: int) -> ReadResult:
-    params = _validated(SharedPromptReadArguments, arguments)
+    params = validated_arguments(SharedPromptReadArguments, arguments)
     service = SharedContentService()
     try:
         detail = await service.get_public_content(params.prompt_id)
@@ -227,7 +220,7 @@ class MyPromptReadArguments(_ToolArguments):
 
 
 async def _read_my_prompt_list(user_id: int, arguments: dict[str, Any], max_chars: int) -> ReadResult:
-    params = _validated(MyPromptListArguments, arguments)
+    params = validated_arguments(MyPromptListArguments, arguments)
     tasks = await fetch_tasks(user_id, get_current_locale())
     entries = [_task_index_entry(task) for task in tasks[params.offset : params.offset + params.limit]]
     payload: dict[str, Any] = {
@@ -242,7 +235,7 @@ async def _read_my_prompt_list(user_id: int, arguments: dict[str, Any], max_char
 
 
 async def _read_my_prompt(user_id: int, arguments: dict[str, Any], max_chars: int) -> ReadResult:
-    params = _validated(MyPromptReadArguments, arguments)
+    params = validated_arguments(MyPromptReadArguments, arguments)
     try:
         task = await get_owned_task(user_id, params.task_id)
     except ResourceNotFoundError:
@@ -303,7 +296,7 @@ class MySkillReadArguments(_ToolArguments):
 
 
 async def _read_my_skill_list(user_id: int, arguments: dict[str, Any], max_chars: int) -> ReadResult:
-    params = _validated(MySkillListArguments, arguments)
+    params = validated_arguments(MySkillListArguments, arguments)
     skills = await list_personal_user_skills(user_id)
     entries = [_skill_index_entry(skill) for skill in skills[params.offset : params.offset + params.limit]]
     payload: dict[str, Any] = {
@@ -318,7 +311,7 @@ async def _read_my_skill_list(user_id: int, arguments: dict[str, Any], max_chars
 
 
 async def _read_my_skill(user_id: int, arguments: dict[str, Any], max_chars: int) -> ReadResult:
-    params = _validated(MySkillReadArguments, arguments)
+    params = validated_arguments(MySkillReadArguments, arguments)
     try:
         skill = await get_user_skill(user_id, params.skill_id)
     except ResourceNotFoundError:
@@ -392,7 +385,7 @@ def _publish_prompt_request(params: PublishPromptArguments) -> SharedPromptCreat
 
 
 async def _propose_publish_prompt(user_id: int, arguments: dict[str, Any]) -> Proposal:
-    params = _validated(PublishPromptArguments, arguments)
+    params = validated_arguments(PublishPromptArguments, arguments)
     # 検証だけを行い、承認前には prompts テーブルへ行を作らない。
     # Validate only; no row is created in prompts before approval.
     try:
@@ -429,7 +422,7 @@ async def _execute_publish_prompt(
     if not allowed:
         raise WorkspaceToolError("prompt_rate_limited")
     try:
-        params = _validated(PublishPromptArguments, arguments)
+        params = validated_arguments(PublishPromptArguments, arguments)
         payload = _publish_prompt_request(params)
     except (WorkspaceToolArgumentError, ValueError) as exc:
         raise WorkspaceToolError("invalid_content") from exc
@@ -462,7 +455,7 @@ class MyPromptSaveArguments(_ToolArguments):
 
 
 async def _propose_my_prompt_save(user_id: int, arguments: dict[str, Any]) -> Proposal:
-    params = _validated(MyPromptSaveArguments, arguments)
+    params = validated_arguments(MyPromptSaveArguments, arguments)
     target_ref: dict[str, Any] = {}
     task: dict[str, Any] = {}
     if params.task_id is not None:
@@ -584,7 +577,7 @@ class MySkillSaveArguments(_ToolArguments):
 
 
 async def _propose_my_skill_save(user_id: int, arguments: dict[str, Any]) -> Proposal:
-    params = _validated(MySkillSaveArguments, arguments)
+    params = validated_arguments(MySkillSaveArguments, arguments)
     target_ref: dict[str, Any] = {}
     display_name = params.name or ""
     current_name: str | None = None

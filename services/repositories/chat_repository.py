@@ -95,10 +95,6 @@ def _jsonb_value(encoded: str | None) -> Any:
         return encoded
 
 
-def _is_unique_violation(exc: BaseException) -> bool:
-    return is_unique_violation(exc)
-
-
 # 日本語: ルームツリーの SELECT で取る列。attached_file_contents / message_parts /
 #         web_search_context は JSONB に添付ファイル本文がそのまま入るため、本文が要らない
 #         経路（リーフ判定・枝の走査）では読み出さない。
@@ -457,7 +453,7 @@ class ChatRepository:
         if len(found) != len(unique_room_ids):
             raise ResourceNotFoundError(ERROR_CHAT_ROOM_NOT_FOUND)
         if any(owner_id != user_id for owner_id in found.values()):
-            raise ForbiddenOperationError("他ユーザーのチャットルームは削除できません")
+            raise ForbiddenOperationError(ERROR_CHAT_ROOM_DELETE_FORBIDDEN)
         await self.session.execute(delete(ChatRoom).where(ChatRoom.id.in_(unique_room_ids)))
         return {"message": "削除しました", "deleted_count": len(unique_room_ids), "deleted_room_ids": unique_room_ids}
 
@@ -648,7 +644,7 @@ class ChatRepository:
                     return {"share_token": token, "expires_at": expires_at, "revoked_at": None, "is_reused": False}
                 return {**dict(row), "is_reused": False}
             except IntegrityError as exc:
-                if not _is_unique_violation(exc):
+                if not is_unique_violation(exc):
                     raise
                 await asyncio.sleep(DB_RETRY_BACKOFF_SECONDS)
                 await load_owned_room(self.session, room_id, user_id, ERROR_CHAT_ROOM_SHARE_FORBIDDEN)

@@ -21,9 +21,8 @@ from pydantic import BaseModel, ValidationError
 from starlette.responses import JSONResponse
 
 from .api_errors import ApiServiceError
-from .error_messages import ERROR_INVALID_JSON
+from .error_messages import ERROR_INTERNAL, ERROR_INVALID_JSON
 from .i18n import translate, translate_text
-from .web_constants import DEFAULT_INTERNAL_ERROR_MESSAGE
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +138,7 @@ def log_and_internal_server_error(
     context: str,
     *,
     status: str | None = None,
-    message: str = DEFAULT_INTERNAL_ERROR_MESSAGE,
+    message: str = ERROR_INTERNAL,
     error_key: str = "error",
     log_exception_text: bool = True,
 ) -> JSONResponse:
@@ -161,7 +160,7 @@ def log_and_internal_server_error(
         )
     localized_message = (
         translate("common.internal_error")
-        if message == DEFAULT_INTERNAL_ERROR_MESSAGE
+        if message == ERROR_INTERNAL
         else translate_text(message)
     )
     payload: dict[str, Any] = {

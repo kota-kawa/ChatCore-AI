@@ -12,7 +12,7 @@ DBには安定キー (例: "writing") を保存し、日本語ラベルは表示
 task-oriented (what the prompt makes the AI do), not topic-oriented, so the set
 stays stable over time. The DB stores stable keys; Japanese labels are resolved
 at render time. Legacy Japanese values are normalized via aliases. Mirror in
-frontend/scripts/prompt_share/prompt_category_registry.ts.
+frontend/lib/prompt_share/prompt_category_registry.ts.
 """
 
 from __future__ import annotations

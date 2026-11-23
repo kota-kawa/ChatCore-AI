@@ -24,8 +24,6 @@ logger = logging.getLogger(__name__)
 # テキストからJSON部分（Markdownコードフェンス等を含む）を抽出し、辞書オブジェクトに変換します。
 # Extract and parse JSON from raw text, stripping markdown code fences.
 def _extract_json(raw: str) -> dict[str, Any]:
-    # テキストからMarkdownのコードフェンスを除去し、最初に見つかったJSONオブジェクトをパースします。
-    # Strip Markdown code fences and parse the first JSON object found.
     """Markdown のコードフェンスを除き、最初に見つかった JSON オブジェクトをパースする。
 
     Strip Markdown code fences and parse the first JSON object found.
@@ -48,8 +46,6 @@ def _extract_json(raw: str) -> dict[str, Any]:
 # AIからの応答テキストの最初の空でない行から、簡易的なタイトルを抽出するフォールバック処理。
 # Extract a simple fallback title from the first non-empty line of AI response.
 def _fallback_suggest(ai_response: str) -> dict[str, Any]:
-    # AI応答の最初の空行以外の行から、最小限のタイトル案を生成します。
-    # Return a minimal suggestion from the first non-empty line of the AI response.
     """AI 応答の最初の空でない行から、最小限のタイトル案を返す。
 
     Return a minimal suggestion from the first non-empty line of the AI response.
@@ -119,8 +115,6 @@ def suggest_title(ai_response: str, *, locale: str = "ja") -> dict[str, Any]:
 # メモのタイトルと本文を、埋め込みベクトル生成に最適な形式に結合します。
 # Combine the title and body content into a format optimized for embedding.
 def build_memo_embedding_text(title: str, ai_response: str) -> str:
-    # メモのタイトルと本文を、埋め込みベクトル生成に最適な形式に結合します。
-    # Combine the title and body content into a format optimized for embedding.
     """メモの各項目を、埋め込みに適した1つの文字列にまとめる。
 
     Combine memo fields into a single string optimised for embedding.

@@ -45,17 +45,12 @@ from services.models import (
 )
 from services.models.types import Vector
 from services.prompt_types import normalize_content_format, normalize_media_type
+from services.repositories.sql_results import affected_row_count
 from services.search_terms import build_like_pattern, split_search_terms
 
 # 日本語: 一覧カードの抜粋の元にするテキストの最大文字数(SQL の LEFT で切る)。
 # English: Maximum characters of source text for a list-card snippet (cut in SQL with LEFT).
 SNIPPET_SOURCE_MAX_LENGTH = 1000
-
-
-def _rowcount(result: Any) -> int:
-    # PostgreSQLの更新結果から影響行数を読む。
-    """Read the affected-row count exposed by PostgreSQL DML results."""
-    return int(getattr(result, "rowcount", 0) or 0)
 
 
 # 日本語: 行に含まれるアバターURLの列名です。旧 `/static/uploads/...` が残った行も
@@ -942,7 +937,7 @@ class SharedContentRepository:
             )
             .values(deleted_at=func.now())
         )
-        return _rowcount(result)
+        return affected_row_count(result)
 
     async def get_active_prompt_attachments(
         self,
@@ -1255,7 +1250,7 @@ class SharedContentRepository:
             )
             .values(deleted_at=func.now())
         )
-        if not _rowcount(result):
+        if not affected_row_count(result):
             return {"message": "チャットで使う設定はすでに解除されています。", "used_in_chat": False}, 200
         return {"message": "チャットで使う設定を解除しました。", "used_in_chat": False}, 200
 
@@ -1301,7 +1296,7 @@ class SharedContentRepository:
                 PromptLike.prompt_id == int(prompt_id),
             )
         )
-        return _rowcount(result)
+        return affected_row_count(result)
 
     # 日本語: 表示されるコメント数。削除済みと、通報により自動非表示になったコメントは数えない。
     # English: Number of visible comments, excluding deleted ones and those hidden automatically after reports.
@@ -1531,7 +1526,7 @@ class SharedContentRepository:
                 )
                 .values(hidden_by_reports_at=func.now(), hidden_reason="reported")
             )
-            hidden = bool(_rowcount(hide_result))
+            hidden = bool(affected_row_count(hide_result))
         return {
             "prompt_id": prompt_id,
             "comment_count": await self.count_visible_comments(session, prompt_id),

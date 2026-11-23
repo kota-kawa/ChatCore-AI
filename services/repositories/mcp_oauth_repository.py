@@ -31,6 +31,7 @@ from services.models import (
     McpOAuthUserClient,
     User,
 )
+from services.repositories.sql_results import affected_row_count
 
 # ``mcp_oauth_clients.registration_method`` の CHECK 制約が許す値。
 # The values allowed by the ``mcp_oauth_clients.registration_method`` check constraint.
@@ -61,12 +62,6 @@ class AccessTokenRecord:
     grant_id: UUID
     user_id: int
     scope_version: int
-
-
-def _rowcount(result: Any) -> int:
-    # PostgreSQLの更新結果から影響行数を読む。
-    """Read the affected-row count exposed by PostgreSQL DML results."""
-    return int(getattr(result, "rowcount", 0) or 0)
 
 
 class McpOAuthRepository:
@@ -212,7 +207,7 @@ class McpOAuthRepository:
             )
             .values(label=label)
         )
-        return _rowcount(result) == 1
+        return affected_row_count(result) == 1
 
     # 日本語: 個人クライアントを失効し、そのクライアントとユーザーの付与・トークンもまとめて失効させる。すでに失効済みなら何もせず False。
     # English: Revokes a personal client together with its grants and tokens for that user; returns False
@@ -229,7 +224,7 @@ class McpOAuthRepository:
             )
             .values(revoked_at=func.now())
         )
-        if _rowcount(result) != 1:
+        if affected_row_count(result) != 1:
             return False
 
         grant_ids = select(McpOAuthGrant.id).where(
@@ -394,7 +389,7 @@ class McpOAuthRepository:
             )
             .values(used_at=func.now())
         )
-        return _rowcount(result) == 1
+        return affected_row_count(result) == 1
 
     # 日本語: 有効なリフレッシュトークンを、付与が失効しておらずユーザーが認証済みの場合に限って返す。for_update
     # で行ロックして回転の競合を防ぐ。
@@ -443,7 +438,7 @@ class McpOAuthRepository:
                 last_used_at=func.now(),
             )
         )
-        return _rowcount(result) == 1
+        return affected_row_count(result) == 1
 
     # 日本語: 有効なアクセストークンを、付与が失効しておらずユーザーが認証済みの場合に限って返す。
     # English: Returns a live access token only if its grant is not revoked and the user is verified.
@@ -536,7 +531,7 @@ class McpOAuthRepository:
             )
             .values(revoked_at=func.now())
         )
-        if _rowcount(result) != 1:
+        if affected_row_count(result) != 1:
             return False
         await session.execute(
             update(McpOAuthToken)
@@ -560,7 +555,7 @@ class McpOAuthRepository:
             )
             .values(display_name=display_name)
         )
-        return _rowcount(result) == 1
+        return affected_row_count(result) == 1
 
     # 日本語: 提示されたトークン値の所属する付与全体を失効させる(トークンが無ければ何もしない)。
     # English: Revokes the whole grant family of a presented token value; does nothing if the token is unknown.

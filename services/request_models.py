@@ -131,8 +131,6 @@ GenerationIdStr = Annotated[str, Field(pattern=r"^[0-9a-f]{32}$")]
 # 日本語: すべてのAPIリクエストペイロードモデルの共通基底クラス。余分なフィールドを無視し、文字列の空白をトリムします。
 # English: Common base class for all request payload models. Ignores extra fields and strips whitespaces.
 class RequestPayloadModel(BaseModel):
-    # 余分なキーを無視しつつ文字列の前後空白を自動で除去する共通ベース
-    # Common base model that strips string whitespace and ignores extra fields.
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
 
@@ -147,8 +145,6 @@ class LocalePreferenceUpdateRequest(RequestPayloadModel):
 # 日本語: メールアドレス登録またはログイン用のリクエストペイロード。
 # English: Request payload for email address registration or login.
 class EmailRequest(RequestPayloadModel):
-    # メールアドレス入力用ペイロード
-    # Payload for email address input.
     email: NonEmptyStr
 
     @model_validator(mode="after")
@@ -160,8 +156,6 @@ class EmailRequest(RequestPayloadModel):
 # 日本語: 新しいメールアドレスへの変更を要求するリクエストペイロード。
 # English: Request payload to change to a new email address.
 class EmailChangeRequest(RequestPayloadModel):
-    # メールアドレス変更APIの入力（新しいメールアドレス）
-    # Payload for the email-change request endpoint.
     new_email: NonEmptyStr
 
     @model_validator(mode="after")
@@ -225,8 +219,6 @@ class DemoAccessCodeCreateRequest(RequestPayloadModel):
 # 日本語: 新しいチャットルームを作成する際のリクエストペイロード。
 # English: Request payload for creating a new chat room.
 class NewChatRoomRequest(RequestPayloadModel):
-    # チャットルーム新規作成APIの入力
-    # Input payload for chat room creation.
     id: str
     title: str = "新規チャット"
     mode: Literal["normal", "temporary"] = "normal"
@@ -660,8 +652,6 @@ class PromptUpdateRequest(RequestPayloadModel):
 # 日本語: 新しいメモを作成し、指定のコレクションや配色で保存する際のリクエストペイロード。
 # English: Request payload for creating a new memo with options like collections and colors.
 class MemoCreateRequest(RequestPayloadModel):
-    # メモ保存APIの入力
-    # Input payload for memo creation API.
     ai_response: str = ""
     title: str = ""
     collection_id: int | None = None
@@ -907,8 +897,6 @@ class MemoShareCreateRequest(RequestPayloadModel):
 # 日本語: 保存した回答テキストから、AIにタイトルやタグの提案を求める際のリクエストペイロード。
 # English: Request payload for asking AI to suggest titles and tags from the response body.
 class MemoSuggestRequest(RequestPayloadModel):
-    # AI タイトル・タグ提案APIの入力
-    # Input payload for AI-powered title/tag suggestion.
     ai_response: NonEmptyStr
 
 
@@ -929,8 +917,6 @@ class MemoBulkActionRequest(RequestPayloadModel):
 # 日本語: メモカードのドラッグ＆ドロップによる並べ替え（挿入位置）を指定するリクエストペイロード。
 # English: Request payload specifying destination bounds for dragging and dropping a memo card.
 class MemoReorderRequest(RequestPayloadModel):
-    # メモカードのドラッグ並べ替え入力
-    # Input payload for drag-and-drop memo card reordering.
     memo_id: int
     before_id: int | None = None
     after_id: int | None = None
@@ -939,8 +925,6 @@ class MemoReorderRequest(RequestPayloadModel):
 # 日本語: メモ整理用のコレクション（フォルダ）を新規作成する際のリクエストペイロード。
 # English: Request payload for creating a new memo collection folder.
 class MemoCollectionCreateRequest(RequestPayloadModel):
-    # コレクション作成APIの入力
-    # Input payload for memo collection creation.
     name: str = Field(min_length=1, max_length=100)
     color: str = Field(default="#6b7280", max_length=20)
 
@@ -948,8 +932,6 @@ class MemoCollectionCreateRequest(RequestPayloadModel):
 # 日本語: メモコレクションの表示名やカラーコードを更新する際のリクエストペイロード。
 # English: Request payload for updating the name or color code of a memo collection.
 class MemoCollectionUpdateRequest(RequestPayloadModel):
-    # コレクション更新APIの入力
-    # Input payload for memo collection update.
     name: str | None = Field(default=None, min_length=1, max_length=100)
     color: str | None = Field(default=None, max_length=20)
 

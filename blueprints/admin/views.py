@@ -22,6 +22,7 @@ from services.auth_limits import (
     AuthLimitService,
     consume_admin_login_limit,
     get_auth_limit_service,
+    resolve_auth_limit_service,
 )
 from services.env_settings import env_text
 from services.repositories.admin_repository import (
@@ -38,9 +39,6 @@ from services.repositories.admin_repository import (
 )
 from services.repositories.admin_repository import (
     load_dashboard_data as repository_load_dashboard_data,
-)
-from services.repositories.admin_repository import (
-    quote_identifier,
 )
 from services.security import constant_time_compare
 from services.session_middleware import rotate_session_identifier
@@ -95,25 +93,6 @@ DEFAULT_VALUE_PATTERN = re.compile(
 )
 
 
-# リクエストから認証制限サービスを解決するヘルパー関数
-# Helper function to resolve the AuthLimitService instance from the request.
-def _resolve_auth_limit_service(
-    request: Request,
-    service: AuthLimitService | None,
-) -> AuthLimitService:
-    """
-    指定されたAuthLimitServiceインスタンスを検証・返却し、存在しない場合はリクエストから生成する。
-    Return the provided AuthLimitService instance, or instantiate one from the Request if None.
-    """
-    # 既に有効なサービスインスタンスがある場合はそのまま返す
-    # Return directly if service is already a valid instance.
-    if isinstance(service, AuthLimitService):
-        return service
-    # それ以外はリクエストから生成して返す
-    # Otherwise build it from the active Request object.
-    return get_auth_limit_service(request)
-
-
 # 入力された管理者パスワードを検証する関数
 # Verify the provided password against the administrator password.
 def _verify_admin_password(password: str) -> bool:
@@ -127,12 +106,6 @@ def _verify_admin_password(password: str) -> bool:
     if not ADMIN_PASSWORD or not isinstance(password, str):
         return False
     return constant_time_compare(password, ADMIN_PASSWORD)
-
-
-# SQLAlchemyのPostgreSQL識別子quoteを使って安全なSQL識別子を構築する。
-# Construct a safely quoted SQLAlchemy PostgreSQL identifier.
-def _sql_identifier(name: str):
-    return quote_identifier(name)
 
 
 # SQLフラグメント末尾のセミコロンや前後の余白を除去する関数
@@ -497,7 +470,7 @@ async def api_login(
     """
     # 制限サービスの取得
     # Obtain limiting helpers.
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    resolved_auth_limit_service = resolve_auth_limit_service(request, auth_limit_service)
     payload = await _get_payload(request)
     password = payload.get("password") or ""
     next_url = sanitize_next_path(payload.get("next"), default="/admin")

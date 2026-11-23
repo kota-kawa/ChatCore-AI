@@ -284,7 +284,7 @@ class UsageSubjectPropagationTests(unittest.TestCase):
         )
         candidate = {"fact_type": "profile", "title": "Home", "content": "Lives in Osaka"}
         with (
-            patch.object(service, "_transaction", new=run_transaction),
+            patch.object(service, "in_transaction_with_retry", new=run_transaction),
             patch.object(service, "_repository", return_value=repo),
             patch.object(service, "ContextFactRepository", return_value=facts),
             patch.object(service, "embeddings_available", return_value=True),

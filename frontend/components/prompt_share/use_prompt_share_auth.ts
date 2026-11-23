@@ -3,11 +3,9 @@
 import { useEffect, useState } from "react";
 
 import { setLoggedInState } from "../../scripts/core/app_state";
+import { readCachedAuthState } from "../../scripts/core/auth_state_cache";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
-import {
-  readCachedAuthState,
-  writeCachedAuthState
-} from "../../scripts/prompt_share/storage";
+import { writeCachedAuthState } from "../../lib/prompt_share/storage";
 
 // 認証状態の管理。キャッシュから即座にUIを表示し、API確認後に最新の状態へ更新する
 // Auth state management: shows UI immediately from cache, then syncs with the API

@@ -57,6 +57,7 @@ from services.ephemeral_store import EphemeralChatStore
 from services.error_messages import (
     ERROR_CHAT_GENERATION_ID_REUSED,
     ERROR_CHAT_GENERATION_STATE_UNAVAILABLE,
+    ERROR_LLM_DAILY_LIMIT_TEMPLATE,
 )
 from services.generative_ui import (
     artifact_status_part,
@@ -477,10 +478,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     )
     if not can_access_llm:
         return ChatRegenerationRateLimited(
-            message=(
-                f"本日のLLM API利用上限（1ユーザーあたり {daily_limit} 回）に達しました。"
-                "日付が変わってから再度お試しください。"
-            ),
+            message=ERROR_LLM_DAILY_LIMIT_TEMPLATE.format(daily_limit=daily_limit),
             retry_after=get_seconds_until_daily_reset(),
         )
 

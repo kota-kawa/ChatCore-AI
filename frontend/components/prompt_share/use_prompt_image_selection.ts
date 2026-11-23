@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 
 import { showToast } from "../../scripts/core/toast";
-import { validateAttachmentFile } from "../../scripts/prompt_share/prompt_type_registry";
-import type { MediaType } from "../../scripts/prompt_share/types";
+import { validateAttachmentFile } from "../../lib/prompt_share/prompt_type_registry";
+import type { MediaType } from "../../lib/prompt_share/types";
 
 // 投稿フォームの添付ファイル選択、プレビューURL、検証、解放処理をまとめて管理する
 // Manages composer attachment selection, preview URL, validation, and cleanup

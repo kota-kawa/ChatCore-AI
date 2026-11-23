@@ -6,13 +6,10 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BotMessageHtml } from "../components/chat_page/bot_message_html";
 
-// 本文中のコピーボタンは document 委譲で動く。以前はその初期化が initChatUi() の中だけに
-// あり、その initChatUi() をどこも呼んでいなかったため、共有ページ以外ではコードブロックの
-// コピーボタンが無反応だった。ボタンを描く BotMessageHtml が自分で用意することを固定する。
-// The in-message copy buttons run on a delegated document listener. Its setup used to live
-// only inside initChatUi(), which nothing ever called, so outside the shared page a code
-// block's copy button did nothing. Pin that BotMessageHtml — which renders the buttons —
-// sets the listener up itself.
+// 本文中のコピーボタンは document 委譲で動く。その初期化はページ側ではなく、ボタンを描く
+// BotMessageHtml が自分で行うことを固定する。
+// The in-message copy buttons run on a delegated document listener. Pin that BotMessageHtml —
+// which renders the buttons — sets the listener up itself, with no page-level setup.
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });

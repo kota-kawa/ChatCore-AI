@@ -17,11 +17,12 @@ import hashlib
 import hmac
 import os
 import re
-import tempfile
 import time
 from collections.abc import Iterable
 from uuid import uuid4
 
+from services.atomic_file import atomic_write_bytes
+from services.env_settings import env_text
 from services.runtime_config import get_session_secret_key
 from services.web_constants import BASE_DIR
 
@@ -32,6 +33,7 @@ _OWNER_DIGEST_LENGTH = 16
 _CHAT_IMAGE_ID_PATTERN = re.compile(r"^[0-9a-f]{48}$")
 _DISPLAY_SUFFIX = ".webp"
 _THUMBNAIL_SUFFIX = "_thumb.webp"
+_TEMPORARY_PREFIX = ".chat-image-"
 # 秘密鍵が無い開発環境でも ID の形は保つ。本番は app.py が FASTAPI_SECRET_KEY を必須にしている。
 # Keeps the id shape in development without a key; app.py requires FASTAPI_SECRET_KEY in production.
 _DEVELOPMENT_OWNER_SECRET = "chat-image-development-owner-secret"
@@ -42,7 +44,7 @@ def get_chat_image_upload_root() -> str:
 
     Return the configured absolute storage directory for chat images.
     """
-    configured = str(os.getenv(CHAT_IMAGE_UPLOAD_ROOT_ENV, "") or "").strip()
+    configured = (env_text(CHAT_IMAGE_UPLOAD_ROOT_ENV) or "").strip()
     if not configured:
         return os.path.abspath(_DEFAULT_CHAT_IMAGE_UPLOAD_ROOT)
     if not os.path.isabs(configured):
@@ -114,8 +116,8 @@ def save_chat_image(owner_key: str, display_bytes: bytes, thumbnail_bytes: bytes
     display_path = resolve_chat_image_path(image_id)
     thumbnail_path = resolve_chat_image_path(image_id, thumbnail=True)
     try:
-        _atomic_write(display_path, display_bytes)
-        _atomic_write(thumbnail_path, thumbnail_bytes)
+        atomic_write_bytes(display_path, display_bytes, temporary_prefix=_TEMPORARY_PREFIX)
+        atomic_write_bytes(thumbnail_path, thumbnail_bytes, temporary_prefix=_TEMPORARY_PREFIX)
     except Exception:
         for path in (display_path, thumbnail_path):
             if os.path.isfile(path):
@@ -161,21 +163,3 @@ def cleanup_unreferenced_chat_images(referenced_ids: Iterable[str], grace_second
         os.remove(entry.path)
         deleted += 1
     return deleted
-
-
-def _atomic_write(destination: str, content: bytes) -> None:
-    """一時ファイルへ書いてから置き換え、読み手が書きかけの画像を見ないようにする。
-
-    Write a variant atomically so readers never observe a partial image.
-    """
-    fd, temporary_path = tempfile.mkstemp(prefix=".chat-image-", dir=os.path.dirname(destination))
-    try:
-        with os.fdopen(fd, "wb") as file_obj:
-            file_obj.write(content)
-            file_obj.flush()
-            os.fsync(file_obj.fileno())
-        os.replace(temporary_path, destination)
-    except Exception:
-        if os.path.exists(temporary_path):
-            os.remove(temporary_path)
-        raise

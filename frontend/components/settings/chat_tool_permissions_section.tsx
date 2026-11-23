@@ -6,7 +6,7 @@ import { InlineLoading } from "../ui/inline_loading";
 import { SettingsSectionHeader } from "./settings_sections";
 import { useTranslation } from "../../contexts/locale_context";
 import type { MessageKey } from "../../lib/i18n/catalogs/ja";
-import { loadToolAutoApprovals, revokeToolAutoApproval } from "../../scripts/user/settings/api";
+import { loadToolAutoApprovals, revokeToolAutoApproval } from "../../lib/settings/api";
 import { showToast } from "../../scripts/core/toast";
 import type { ToolAutoApprovalApi } from "../../types/generated/api_schemas";
 

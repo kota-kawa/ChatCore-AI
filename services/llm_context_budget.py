@@ -115,15 +115,6 @@ def _non_negative_int(value: Any, default: int) -> int:
     return parsed if parsed >= 0 else default
 
 
-# 日本語: 環境変数を 0 以上の整数として読む。未設定なら default。
-# English: Read an environment variable as a non-negative integer; default when unset.
-def _non_negative_int_env(name: str, default: int) -> int:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    return _non_negative_int(raw, default)
-
-
 def _model_env_suffix(model_name: str) -> str:
     """モデル名を、環境変数名に使える読みやすい接尾辞（英数字と _）に変換する。
 
@@ -193,9 +184,10 @@ def get_safety_margin_tokens() -> int:
     Return the configured safety margin for provider-side accounting drift.
     """
 
-    return _non_negative_int_env(
+    return env_int(
         "LLM_CONTEXT_SAFETY_MARGIN_TOKENS",
         DEFAULT_SAFETY_MARGIN_TOKENS,
+        minimum=0,
     )
 
 
@@ -205,9 +197,10 @@ def get_tool_definition_overhead_tokens() -> int:
     Return the per-tool schema framing allowance.
     """
 
-    return _non_negative_int_env(
+    return env_int(
         "LLM_TOOL_SCHEMA_OVERHEAD_TOKENS",
         DEFAULT_TOOL_DEFINITION_OVERHEAD_TOKENS,
+        minimum=0,
     )
 
 
@@ -333,14 +326,6 @@ class LlmContextBudget:
         """
 
         return max(self.context_window_tokens - self.reserved_tokens, 0)
-
-    def fits_message_tokens(self, message_tokens: int) -> bool:
-        """メッセージだけの見積もりがこの予算に収まるかを返す。
-
-        Return whether a message-only estimate fits this budget.
-        """
-
-        return _non_negative_int(message_tokens, 0) <= self.available_input_tokens
 
 
 def get_context_budget(

@@ -34,19 +34,17 @@ from services.context_vault_service import (
 )
 from services.csrf import require_csrf
 from services.error_messages import (
-    ERROR_CONTEXT_EXTRACTION_SETTINGS_PAYLOAD_INVALID,
     ERROR_CONTEXT_FACT_DELETE_ALL_CONFIRMATION_REQUIRED,
     ERROR_CONTEXT_FACT_REVISION_REQUIRED,
     ERROR_CONTEXT_FACT_SEARCH_QUERY_INVALID,
     ERROR_CONTEXT_FACT_SEARCH_QUERY_TOO_LONG,
-    ERROR_CONTEXT_MEMORY_USE_SETTINGS_PAYLOAD_INVALID,
+    ERROR_CONTEXT_SETTINGS_ENABLED_INVALID,
     ERROR_CONTEXT_VAULT_EXPORT_FORMAT_INVALID,
     ERROR_CONTEXT_VAULT_IMPORT_PAYLOAD_INVALID,
     ERROR_CONTEXT_VAULT_IMPORT_REQUEST_TOO_LARGE,
     ERROR_CONTEXT_VAULT_PORTABILITY_FAILED,
     ERROR_LOGIN_REQUIRED,
 )
-from services.repositories.memo_helpers import user_id_from_session
 from services.request_models import (
     ContextExtractionSettingsUpdateRequest,
     ContextFactCreateRequest,
@@ -64,6 +62,7 @@ from services.web import (
     require_json_dict,
     validate_payload_model,
 )
+from services.web_session import user_id_from_session
 
 from .constants import (
     CONTEXT_FACT_CREATE_ERROR,
@@ -327,7 +326,7 @@ async def api_update_context_extraction_settings(request: Request):
     payload, validation_error = validate_payload_model(
         data,
         ContextExtractionSettingsUpdateRequest,
-        error_message=ERROR_CONTEXT_EXTRACTION_SETTINGS_PAYLOAD_INVALID,
+        error_message=ERROR_CONTEXT_SETTINGS_ENABLED_INVALID,
         status="fail",
     )
     if validation_error is not None:
@@ -376,7 +375,7 @@ async def api_update_context_memory_use_settings(request: Request):
     payload, validation_error = validate_payload_model(
         data,
         ContextMemoryUseSettingsUpdateRequest,
-        error_message=ERROR_CONTEXT_MEMORY_USE_SETTINGS_PAYLOAD_INVALID,
+        error_message=ERROR_CONTEXT_SETTINGS_ENABLED_INVALID,
         status="fail",
     )
     if validation_error is not None:

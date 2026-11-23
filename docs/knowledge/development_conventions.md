@@ -36,7 +36,7 @@
 - JavaScript / TypeScript: `frontend/components/`・`frontend/hooks/`・`frontend/lib/` にある既存のモジュールパターン（機能別ディレクトリ、用途別 hook と Context への分割、`lib/` の再利用ロジック）に従い、ファイルを単一責任に保ちます。`frontend/scripts/` はブラウザ側の共通ランタイム（CSRF、テーマ、再試行付き fetch）とテストランナーの置き場で、画面ロジックは置きません。
 - CSS: フロントエンド（Next.js）の共通スタイルは `frontend/pages/_app.tsx` から import し、境界を確認できるページ専用スタイルは所有ページのlinkで読み込みます。配置・カスケード・読み込みの基準は `../../frontend/STYLING_STRATEGY.md` に従ってください。ベーススタイルは `frontend/public/static/css/base/` に、再利用可能なコンポーネントは `frontend/public/static/css/components/` に、ページの各エントリーポイントは `frontend/public/static/css/pages/<page>/` に配置します。ブループリント固有のスタイルは `frontend/public/<blueprint>/static/css/`（例: `frontend/public/prompt_share/static/css/`）に置きます。1 ファイルに無関係なスタイルを混在させないでください。BEM スタイルの `kebab-case` クラス名を推奨します。
 - フォーマッターは強制されませんが、lint は強制されます。行長は 140 桁（`pyproject.toml` の `line-length`）で、日本語コメントは全角幅で計算されます。
-- 環境変数の読み取りは `services/env_settings.py` の共通ヘルパー（`env_text`／`env_bool`／`env_int`／`env_int_in_range`／`env_float`）を使ってください。モジュールごとに独自の変換ヘルパーを再実装しないでください。
+- 環境変数の読み取りは `services/env_settings.py` の共通ヘルパー（`env_text`／`env_bool`／`env_enabled_unless_false`／`env_int`／`env_int_in_range`／`env_float`）を使ってください。モジュールごとに独自の変換ヘルパーを再実装しないでください。
 
 ## 責務分割とファイル肥大化の防止
 - 1つのファイル・関数・クラスに責務を詰め込みすぎないでください。単一責任の原則（SRP）を守り、役割が増えてきたら早めにモジュールへ分割します。

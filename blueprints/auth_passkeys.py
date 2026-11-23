@@ -21,18 +21,18 @@ from blueprints.auth_common import (
     _copy_default_tasks_after_login,
     _passkey_unavailable_response,
     _resolve_auth_limit_service,
-    _user_id_from_session,
 )
 from blueprints.auth_support import call_dependency, dep, get_auth_limit_service_dependency
-from services.error_messages import ERROR_PASSKEY_USAGE_UPDATE_FAILED
+from services.error_messages import ERROR_LOGIN_REQUIRED, ERROR_PASSKEY_USAGE_UPDATE_FAILED, ERROR_USER_NOT_FOUND
+from services.web_session import user_id_from_session
 
 
 # ログイン中ユーザーが登録した Passkey の一覧を返す。
 # List the passkeys registered by the signed-in user.
 async def api_list_passkeys(request: Request):
-    user_id = _user_id_from_session(request.session)
+    user_id = user_id_from_session(request.session)
     if user_id is None:
-        return dep("jsonify")({"status": "fail", "error": "ログインが必要です"}, status_code=401)
+        return dep("jsonify")({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     passkeys = await call_dependency("list_passkeys_for_user", user_id)
     return dep("jsonify")({"status": "success", "passkeys": passkeys})
@@ -41,9 +41,9 @@ async def api_list_passkeys(request: Request):
 # 指定した Passkey を、ログイン中ユーザー自身のものに限って削除する。
 # Delete the given passkey, only if it belongs to the signed-in user.
 async def api_delete_passkey(request: Request):
-    user_id = _user_id_from_session(request.session)
+    user_id = user_id_from_session(request.session)
     if user_id is None:
-        return dep("jsonify")({"status": "fail", "error": "ログインが必要です"}, status_code=401)
+        return dep("jsonify")({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     data, error_response = await dep("require_json_dict")(request, status="fail")
     if error_response is not None:
@@ -81,13 +81,13 @@ async def api_passkey_register_options(request: Request):
     ):
         return _passkey_unavailable_response()
 
-    user_id = _user_id_from_session(request.session)
+    user_id = user_id_from_session(request.session)
     if user_id is None:
-        return dep("jsonify")({"status": "fail", "error": "ログインが必要です"}, status_code=401)
+        return dep("jsonify")({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     user = await call_dependency("get_user_by_id", user_id)
     if not user:
-        return dep("jsonify")({"status": "fail", "error": "ユーザーが存在しません"}, status_code=404)
+        return dep("jsonify")({"status": "fail", "error": ERROR_USER_NOT_FOUND}, status_code=404)
 
     existing_passkeys = await call_dependency("list_passkeys_for_user", user_id)
     exclude_credentials = [
@@ -132,9 +132,9 @@ async def api_passkey_register_verify(request: Request):
     ):
         return _passkey_unavailable_response()
 
-    user_id = _user_id_from_session(request.session)
+    user_id = user_id_from_session(request.session)
     if user_id is None:
-        return dep("jsonify")({"status": "fail", "error": "ログインが必要です"}, status_code=401)
+        return dep("jsonify")({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     ceremony = dep("get_passkey_registration_ceremony")(request.session)
     if ceremony is None:

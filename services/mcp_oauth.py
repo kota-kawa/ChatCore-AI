@@ -195,7 +195,6 @@ def _loopback_redirect_uris_match(registered: str, requested: str) -> bool:
 # CIMD クライアントの情報。通常の照合に失敗したときだけ、RFC 8252 のループバック(ポート違いを許容)で照合し直す。
 # CIMD client information; only when the normal check fails, fall back to the RFC 8252 loopback match (any port).
 class CimdOAuthClientInformation(OAuthClientInformationFull):
-    # RFC 8252のループバック互換性を持つCIMDクライアント情報。
     """CIMD client metadata with RFC 8252 loopback redirect compatibility."""
 
     def validate_redirect_uri(self, redirect_uri: AnyUrl | None) -> AnyUrl:
@@ -1020,7 +1019,6 @@ async def _load_access(raw_token: str) -> AccessToken | None:
 # MCP SDK の認可プロバイダ実装。Chat-Core の PostgreSQL をバックエンドに、クライアント解決・認可・トークン交換・失効を行う。
 # MCP SDK authorization provider backed by Chat-Core's PostgreSQL: client lookup, authorization, token exchange and revocation.
 class ChatCoreOAuthProvider(OAuthAuthorizationServerProvider[StoredAuthorizationCode, StoredRefreshToken, AccessToken]):
-    # Chat-CoreのPostgreSQLを使う公式MCP SDKのプロバイダー実装。
     """Official MCP SDK provider backed by Chat-Core's PostgreSQL database."""
 
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:

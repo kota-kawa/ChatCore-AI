@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Request
 
 from services.async_utils import run_blocking
 from services.csrf import require_csrf
+from services.error_messages import ERROR_NOT_LOGGED_IN, ERROR_REQUIRED_FIELDS_MISSING_PERIOD
 from services.prompt_attachment_storage import delete_prompt_attachment
 from services.prompt_types import serialize_axes
 from services.request_models import PromptUpdateRequest
@@ -143,15 +144,6 @@ async def _update_prompt_for_user(
     return int(updated)
 
 
-async def _delete_prompt_for_user(user_id: int, prompt_id: int) -> int:
-    """プロンプトを削除し、削除件数だけを返す（添付ファイル情報は捨てる）。
-
-    Delete a prompt and return only the deleted count, discarding the attachment info.
-    """
-    _, deleted = await _service().delete_prompt(user_id=user_id, prompt_id=prompt_id)
-    return deleted
-
-
 def _delete_prompt_attachment_files(attachments: list[dict[str, Any]]) -> int:
     """プロンプトの添付ファイルをストレージから削除し、削除できた数を返す（同期処理のため呼び出し側でスレッドに逃がす）。
 
@@ -166,7 +158,7 @@ async def get_my_prompts(request: Request):
     #
     # Return the prompts posted by the signed-in user.
     if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     try:
         return jsonify({"prompts": await _fetch_my_prompts(int(request.session["user_id"]))})
     except Exception:
@@ -179,7 +171,7 @@ async def get_liked_prompts(request: Request):
     #
     # Return the prompts liked by the signed-in user.
     if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     try:
         return jsonify({"prompts": await _fetch_liked_prompts(int(request.session["user_id"]))})
     except Exception:
@@ -192,14 +184,14 @@ async def update_prompt(prompt_id: int, request: Request):
     #
     # Update one of the user's own prompts; returns 404 when it is not found (including someone else's).
     if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
     payload, validation_error = validate_payload_model(
         data,
         PromptUpdateRequest,
-        error_message="必要なフィールドが不足しています。",
+        error_message=ERROR_REQUIRED_FIELDS_MISSING_PERIOD,
     )
     if validation_error is not None:
         return validation_error
@@ -219,7 +211,7 @@ async def delete_prompt(prompt_id: int, request: Request):
     # Delete one of the user's own prompts. Attachment files are removed after the DB delete; a file-removal failure is only logged and
     # does not change the success response.
     if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
+        return jsonify({"error": ERROR_NOT_LOGGED_IN}, status_code=401)
     try:
         attachments, deleted = await _service().delete_prompt(
             user_id=int(request.session["user_id"]),

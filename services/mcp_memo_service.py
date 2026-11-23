@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.api_errors import ApiServiceError
 from services.db import session_scope
 from services.embeddings import embeddings_available, generate_embedding
+from services.error_messages import ERROR_MEMO_APPEND_TOO_LONG_TEMPLATE, ERROR_MEMO_CREATE_FAILED, ERROR_SEARCH_QUERY_REQUIRED
 from services.memo_embedding_service import schedule_embedding
 from services.repositories.memo_helpers import ensure_title
 from services.repositories.memo_repository import (
@@ -46,7 +47,6 @@ logger = logging.getLogger(__name__)
 # 認可済み MCP クライアントへ返してよいメモのメタデータ（本文は含まない）。
 # Memo metadata that may be returned to an authorized MCP client (no body).
 class McpMemoSummary(BaseModel):
-    # 認可済みMCPクライアントへ返せる非公開メモのメタデータ。
     """Private memo metadata safe to return to an authorized MCP client."""
 
     id: int
@@ -203,7 +203,7 @@ async def search_memos(
     """
     normalized_query = query.strip()
     if not normalized_query:
-        raise ApiServiceError("検索語を指定してください。", 400, status="fail")
+        raise ApiServiceError(ERROR_SEARCH_QUERY_REQUIRED, 400, status="fail")
 
     # 意味検索の埋め込み生成に失敗しても、検索は埋め込み無し（キーワード検索）で続ける。
     # If generating the semantic embedding fails, the search continues without it (keyword search).
@@ -309,7 +309,7 @@ async def create_memo(
             session=db,
         )
         if memo_id is None:
-            raise ApiServiceError("メモを作成できませんでした。", 500, status="fail")
+            raise ApiServiceError(ERROR_MEMO_CREATE_FAILED, 500, status="fail")
         return _to_detail(await fetch_memo_detail(user_id, memo_id, session=db))
 
     # 呼び出し側のセッションがあればその中で実行する。無ければ自前のトランザクションで確定してから埋め込みを予約する。
@@ -344,7 +344,7 @@ async def append_memo(
         appended_content = f"{current_content}{payload.separator}{payload.text}"
         if len(appended_content) > MAX_MEMO_STORED_CONTENT_LENGTH:
             raise ApiServiceError(
-                f"追記後のメモ本文は{MAX_MEMO_STORED_CONTENT_LENGTH}文字以内にしてください。",
+                ERROR_MEMO_APPEND_TOO_LONG_TEMPLATE.format(max_length=MAX_MEMO_STORED_CONTENT_LENGTH),
                 400,
                 status="fail",
             )

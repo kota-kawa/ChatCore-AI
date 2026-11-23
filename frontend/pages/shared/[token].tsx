@@ -6,6 +6,8 @@ import { SharedChatContinueButton } from "../../components/shared_chat/shared_ch
 import { SharedChatMessageList } from "../../components/shared_chat/shared_chat_message_list";
 import { SeoHead } from "../../components/SeoHead";
 import { formatDateTime } from "../../lib/datetime";
+import { getRequestOrigin } from "../../lib/server/request_origin";
+import { truncateMetaText } from "../../lib/seo";
 import { decodeStoredMessage } from "../../lib/shared_chat/message_text";
 import type { SharedChatPayload } from "../../lib/shared_chat/types";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
@@ -28,21 +30,6 @@ type SharedChatPageProps = {
 // Type alias for the API response (same shape as the payload)
 type SharedChatResponse = SharedChatPayload;
 
-// リバースプロキシ経由でも正しいホスト名を取得するためにヘッダーを正規化する
-// Normalises the Host header so it works correctly behind reverse proxies
-function normalizeHostHeader(header: string | string[] | undefined) {
-  if (Array.isArray(header)) return header[0] || "";
-  return header || "";
-}
-
-// カンマ区切りで複数の値が来た場合に最初のプロトコルだけを取り出す
-// Extracts only the first protocol value when the header contains a comma-separated list
-function normalizeProtoHeader(header: string | string[] | undefined) {
-  const raw = Array.isArray(header) ? header[0] : header;
-  if (!raw) return "";
-  return raw.split(",")[0]?.trim() || "";
-}
-
 // OGP用のdescriptionからMarkdown記法や画像・リンクを除去してプレーンテキスト化する
 // Strips Markdown syntax to produce plain text suitable for OGP meta descriptions
 function stripPreviewText(value: string) {
@@ -56,18 +43,11 @@ function stripPreviewText(value: string) {
     .trim();
 }
 
-// SEOのmeta descriptionが長くなり過ぎないよう指定文字数で切り詰める
-// Truncates text to keep meta descriptions within a reasonable length for SEO
-function truncateText(value: string, maxLength = 140) {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength - 1).trimEnd()}…`;
-}
-
 // ページのmeta descriptionをペイロードの内容から動的に生成する
 // Dynamically builds the meta description from the payload content
 function buildMetaDescription(payload: SharedChatPayload, english = false) {
   if (payload.error) {
-    return truncateText(payload.error);
+    return truncateMetaText(payload.error);
   }
   const messages = Array.isArray(payload.messages) ? payload.messages : [];
   // アシスタントの最初のメッセージを優先してdescriptionのソースにする
@@ -77,7 +57,7 @@ function buildMetaDescription(payload: SharedChatPayload, english = false) {
     return english ? "A read-only chat shared from Chat Core." : "Chat Core で共有されたチャットの閲覧ページです。";
   }
   const normalized = stripPreviewText(decodeStoredMessage(previewTarget.message));
-  return truncateText(normalized || (english ? "A read-only chat shared from Chat Core." : "Chat Core で共有されたチャットの閲覧ページです。"));
+  return truncateMetaText(normalized || (english ? "A read-only chat shared from Chat Core." : "Chat Core で共有されたチャットの閲覧ページです。"));
 }
 
 // サーバーサイドでトークンを検証し、共有チャットデータをバックエンドから取得する
@@ -92,10 +72,7 @@ export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async
   const backendUrl = process.env.BACKEND_URL || "http://localhost:5004";
   // プロキシ環境でも正しい正規URLを構築するためにリクエストヘッダーを参照する
   // Use request headers to build the correct canonical URL when running behind a proxy
-  const host = normalizeHostHeader(context.req.headers["x-forwarded-host"]) || normalizeHostHeader(context.req.headers.host);
-  const proto = normalizeProtoHeader(context.req.headers["x-forwarded-proto"])
-    || (process.env.NODE_ENV === "development" ? "http" : "https");
-  const origin = host ? `${proto}://${host}` : "";
+  const origin = getRequestOrigin(context.req);
   const resolvedPath = context.resolvedUrl || `/shared/${encodeURIComponent(token)}`;
   const pageUrl = origin ? `${origin}${resolvedPath}` : resolvedPath;
   const ogImageUrl = origin ? `${origin}/static/Chat-Core-OG-compressed.jpg` : "/static/Chat-Core-OG-compressed.jpg";

@@ -3,6 +3,7 @@
 import type { ReactNode, RefObject } from "react";
 
 import type { SocialShareLinks } from "../../lib/share";
+import { joinClasses } from "../../lib/ui/class_names";
 import { CopyButton } from "./copy_button";
 
 export type ShareDialogStatus = {
@@ -44,10 +45,6 @@ export type ShareDialogContentProps = {
 // SVG path of the X logo
 const X_LOGO_PATH =
   "M18.901 1.153h3.68l-8.04 9.188L24 22.847h-7.406l-5.8-7.584-6.63 7.584H.48l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Zm-1.291 19.49h2.039L6.486 3.24H4.298L17.61 20.643Z";
-
-function joinClassNames(...classNames: Array<string | undefined>) {
-  return classNames.filter(Boolean).join(" ");
-}
 
 type ShareChannelLinkProps = {
   id?: string;
@@ -111,7 +108,7 @@ export function ShareDialogContent({
   const shareReady = Boolean(shareUrl.trim()) && !shareLoading;
 
   return (
-    <div className={joinClassNames(bodyClassName, "cc-share-modal__body")}>
+    <div className={joinClasses(bodyClassName, "cc-share-modal__body")}>
       <div className="cc-share-modal__field">
         <input
           type="text"
@@ -136,7 +133,7 @@ export function ShareDialogContent({
       {shareStatus ? (
         <p
           id={shareStatusId}
-          className={joinClassNames(
+          className={joinClasses(
             shareStatusClassName,
             shareStatus.isError ? shareStatusErrorClassName : undefined,
           )}

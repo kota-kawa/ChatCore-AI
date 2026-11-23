@@ -29,6 +29,7 @@ from services.auth_limits import (
     consume_rate_limit,
     get_auth_limit_service,
     get_request_client_ip,
+    resolve_auth_limit_service,
 )
 from services.chat_service import (
     add_task as add_task_record,
@@ -47,6 +48,7 @@ from services.chat_service import (
 )
 from services.code_search import search_codebase
 from services.default_tasks import default_task_payloads
+from services.error_messages import ERROR_LLM_DAILY_LIMIT_TEMPLATE, ERROR_LOGIN_REQUIRED, ERROR_MEMO_NOT_FOUND
 from services.i18n import build_response_language_policy, get_request_locale, translate
 from services.intent_classifier import classify_intent
 from services.llm import (
@@ -65,6 +67,7 @@ from services.llm_daily_limit import (
     get_llm_daily_limit_service,
     get_seconds_until_daily_reset,
     get_seconds_until_monthly_reset,
+    resolve_llm_daily_limit_service,
 )
 from services.manual_rag import search_manual
 from services.memo_agent_actions import (
@@ -171,36 +174,6 @@ Response rules:
 - Do not use Markdown that is purely decorative.
 - When advising on screen operations or prompt writing, give concrete drafts and improvement suggestions.
 """.strip()
-
-
-# リクエストから認証制限サービスを解決するヘルパー関数
-# Helper function to resolve the AuthLimitService instance from the request.
-def _resolve_auth_limit_service(
-    request: Request,
-    service: AuthLimitService | None,
-) -> AuthLimitService:
-    """
-    リクエストオブジェクトまたはDependsによる依存注入値から、AuthLimitServiceのインスタンスを解決します。
-    Resolves the AuthLimitService instance from the request context or dependency.
-    """
-    if isinstance(service, AuthLimitService):
-        return service
-    return get_auth_limit_service(request)
-
-
-# リクエストからLLMの1日あたり制限サービスを解決するヘルパー関数
-# Helper function to resolve the LlmDailyLimitService instance from the request.
-def _resolve_llm_daily_limit_service(
-    request: Request,
-    service: LlmDailyLimitService | None,
-) -> LlmDailyLimitService:
-    """
-    リクエストオブジェクトまたはDependsによる依存注入値から、LlmDailyLimitServiceのインスタンスを解決します。
-    Resolves the LlmDailyLimitService instance from the request context or dependency.
-    """
-    if isinstance(service, LlmDailyLimitService):
-        return service
-    return get_llm_daily_limit_service(request)
 
 
 # プロンプト支援の利用制限チェックを行う関数
@@ -366,7 +339,7 @@ async def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> Mem
     the truncation flag are returned as well, because edit plans are matched against the full stored body.
     """
     if not user_id:
-        raise ResourceNotFoundError("メモが見つかりません。")
+        raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND)
 
     # DBからメモ詳細を取得
     # Fetch memo from database
@@ -513,12 +486,8 @@ async def get_tasks(request: Request):
 
         except Exception:
             logger.exception("Database error while loading tasks.")
-            # ログインユーザーの場合、DBエラーはそのままエラーとして扱う（または空リスト？）
-            # For logged-in users, surface DB failures as server errors.
-            # ここでは安全のためエラーをログに出しつつ、
-            # We log the exception and keep fallback path for guests only.
-            # もし未ログインならデフォルトタスクを返すようにフローを継続する
-            # Continue to guest fallback flow when not authenticated.
+            # DBエラーはログに残す。ログインユーザーには下で再送出し、未ログインならデフォルトタスクの代替処理へ進む。
+            # Log the DB error; it is re-raised for logged-in users below, while guests continue to the default-task fallback.
             if user_id:
                 # ユーザーがいるのにDBエラーなら500にする（frontendでハンドリングされる）
                 # Raise for authenticated users so frontend receives 500.
@@ -542,8 +511,6 @@ async def get_tasks(request: Request):
         )
 
 
-# タスクカード並び替え
-# Reorder task cards for authenticated users.
 # タスクの並び順を更新するAPIエンドポイント
 # API endpoint to update the display order of tasks for the authenticated user.
 @chat_bp.post("/api/update_tasks_order", name="chat.update_tasks_order")
@@ -562,7 +529,7 @@ async def update_tasks_order(request: Request):
     # Validate user authentication
     user_id = request.session.get("user_id")
     if not user_id:
-        return jsonify({"error": "ログインが必要です"}, status_code=403)
+        return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 
     # スキーマバリデーション
     # Validate order parameters
@@ -607,7 +574,7 @@ async def delete_task(request: Request):
     # Validate user authentication
     user_id = request.session.get("user_id")
     if not user_id:
-        return jsonify({"error": "ログインが必要です"}, status_code=403)
+        return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 
     # スキーマバリデーション
     # Validate delete parameter payload
@@ -651,7 +618,7 @@ async def edit_task(request: Request):
     # Validate user authentication
     user_id = request.session.get("user_id")
     if not user_id:
-        return jsonify({"error": "ログインが必要です"}, status_code=403)
+        return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 
     # スキーマバリデーション
     # Validate edit parameter payload
@@ -705,7 +672,7 @@ async def add_task(request: Request):
     # Validate user authentication
     user_id = request.session.get("user_id")
     if not user_id:
-        return jsonify({"error": "ログインが必要です"}, status_code=403)
+        return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 
     # スキーマバリデーション
     # Validate add parameter payload
@@ -753,8 +720,8 @@ async def prompt_assist(
     """
     # レート制限サービスを解決
     # Resolve the AuthLimitService and LlmDailyLimitService instances
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
-    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
+    resolved_auth_limit_service = resolve_auth_limit_service(request, auth_limit_service)
+    resolved_llm_daily_limit_service = resolve_llm_daily_limit_service(
         request,
         llm_daily_limit_service,
     )
@@ -769,7 +736,7 @@ async def prompt_assist(
     # Validate user authentication
     user_id = request.session.get("user_id")
     if not user_id:
-        return jsonify({"error": "ログインが必要です"}, status_code=403)
+        return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=403)
 
     # スキーマバリデーション
     # Validate prompt-assist payload keys
@@ -816,10 +783,7 @@ async def prompt_assist(
     )
     if not can_access_llm:
         return jsonify_rate_limited(
-            (
-                f"本日のLLM API利用上限（1ユーザーあたり {daily_limit} 回）に達しました。"
-                "日付が変わってから再度お試しください。"
-            ),
+            ERROR_LLM_DAILY_LIMIT_TEMPLATE.format(daily_limit=daily_limit),
             retry_after=get_seconds_until_daily_reset(),
         )
 
@@ -887,8 +851,8 @@ async def ai_agent(
     """
     # 制限サービスを解決
     # Resolve the AuthLimitService and LlmDailyLimitService instances
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
-    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
+    resolved_auth_limit_service = resolve_auth_limit_service(request, auth_limit_service)
+    resolved_llm_daily_limit_service = resolve_llm_daily_limit_service(
         request,
         llm_daily_limit_service,
     )

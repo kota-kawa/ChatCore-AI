@@ -1,10 +1,10 @@
 // コピーボタンのフィードバック（アイコンをチェックマークに差し替えて戻す）に関わる共有定数。
-// React フック（hooks/use_copy_feedback.ts）と本文中のコピーボタン（scripts/chat/message_copy_buttons.ts）の
+// React フック（hooks/use_copy_feedback.ts）と本文中のコピーボタン（lib/chat_page/message_format/message_copy_buttons.ts）の
 // 両方から参照できるよう、React 非依存のここに置く。
 //
 // Shared constants for the copy-button feedback (swap the icon to a check mark, then revert).
 // Kept React-free so both the hook (hooks/use_copy_feedback.ts) and the in-message copy buttons
-// (scripts/chat/message_copy_buttons.ts) can import it.
+// (lib/chat_page/message_format/message_copy_buttons.ts) can import it.
 
 // 成功／失敗アイコンを見せてから通常アイコンへ戻すまでの時間（ミリ秒）。全コピーボタンで共通。
 // How long the success / failure icon stays before the normal icon returns. Shared by every copy button.

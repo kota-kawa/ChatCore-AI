@@ -11,7 +11,7 @@ import time
 from typing import Any
 
 from services.answer_trace import is_answer_trace_part, with_answer_trace_part
-from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE
+from services.error_messages import ERROR_CHAT_EMPTY_RESPONSE, ERROR_INTERNAL
 from services.generative_ui import (
     NormalizedGenerativeResponse,
     artifact_status_part,
@@ -177,10 +177,7 @@ class ChatGenerationFinalizationMixin(ChatGenerationJobBase):
             return
         if isinstance(exc, LlmServiceError):
             retryable = is_retryable_llm_error(exc)
-            if retryable:
-                error_message = "一時的な内部エラーが発生しました。時間をおいて再試行してください。"
-            else:
-                error_message = "内部エラーが発生しました。"
+            error_message = "一時的な内部エラーが発生しました。時間をおいて再試行してください。" if retryable else ERROR_INTERNAL
             logger.exception(
                 "Chat generation stopped due to an LLM service error (retryable=%s).",
                 retryable,
@@ -196,7 +193,7 @@ class ChatGenerationFinalizationMixin(ChatGenerationJobBase):
             "Unexpected error while generating chat response.",
             extra=self._telemetry.as_log_extra(),
         )
-        error_message = "内部エラーが発生しました。"
+        error_message = ERROR_INTERNAL
         self._handle_error(
             error_message,
             {"message": error_message, "retryable": False},

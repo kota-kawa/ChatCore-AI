@@ -6,7 +6,7 @@
 
 import { Lexer, type Token } from "marked";
 
-import type { DisplaySourceSpan } from "../../scripts/chat/display_source_positions";
+import type { DisplaySourceSpan } from "../chat_page/message_format/display_source_positions";
 import { prepareMemoPreviewSource } from "./preview_source";
 
 // 表示される文字 1 つと、それに対応する原文上の範囲（start〜end）。空白は含めない。

@@ -2,7 +2,7 @@
 // Modal for editing a prompt, used by both the settings page and the prompt-share page (pages/prompt_share/index.tsx).
 import type { ChangeEvent, FormEvent, MutableRefObject } from "react";
 
-import type { EditPromptFormState } from "../../scripts/user/settings/page_types";
+import type { EditPromptFormState } from "../../lib/settings/page_types";
 import { useTranslation } from "../../contexts/locale_context";
 import { ModalCloseButton } from "../ui/modal_close_button";
 import { ModalShell } from "../ui/modal_shell";

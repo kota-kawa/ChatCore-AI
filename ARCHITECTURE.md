@@ -287,7 +287,7 @@ HTTPクライアントは`X-ChatCore-UI-Version: 1`で対応を通知します�
 
 - `frontend/components/ui/copy_button.tsx`（`CopyButton`）: アイコンのみ（ラベル文字なし）のボタン描画。文字列コピーは `getText`、副作用（トースト・共有URL生成など）を伴う場合は成否を `boolean` で返す `onCopy` を渡します。
 - `frontend/hooks/use_copy_feedback.ts`（`useCopyFeedback`）: コピー実行・二重実行防止・状態遷移（`idle`/`copied`/`error`）を担う土台。`CopyButton` から利用します。
-- `frontend/lib/copy_feedback.ts`: React 非依存の共有定数（成功時にチェックマークを見せる時間、アイコンのクラス名）。本文中のコピーボタン（`frontend/scripts/chat/message_copy_buttons.ts`、`frontend/hooks/chat_page/use_home_page_controller.ts` のコードブロック用委譲）はこの定数を共有します。
+- `frontend/lib/copy_feedback.ts`: React 非依存の共有定数（成功時にチェックマークを見せる時間、アイコンのクラス名）。本文中のコピーボタン（`frontend/lib/chat_page/message_format/message_copy_buttons.ts`、`frontend/hooks/chat_page/use_home_page_controller.ts` のコードブロック用委譲）はこの定数を共有します。
 
 挙動の統一仕様: 押すと数秒だけアイコンがチェックマーク（`bi-check-lg`）に変わり、その後元へ戻ります。
 

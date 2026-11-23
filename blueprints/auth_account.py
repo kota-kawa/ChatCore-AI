@@ -12,15 +12,16 @@ from fastapi import Request
 
 from blueprints.auth_common import (
     _clear_google_oauth_session,
-    _user_id_from_session,
 )
 from blueprints.auth_support import call_dependency, dep
+from services.error_messages import ERROR_LOGIN_REQUIRED_PERIOD
 from services.i18n import (
     PREFERRED_LOCALE_LOADED_SESSION_KEY,
     PREFERRED_LOCALE_SESSION_KEY,
     get_request_locale,
     normalize_locale,
 )
+from services.web_session import user_id_from_session
 
 
 async def _sign_out_current_account(request: Request) -> bool:
@@ -43,9 +44,9 @@ async def _sign_out_current_account(request: Request) -> bool:
 # このブラウザでログイン済みのアカウント(現在のものと待機中のもの)を一覧で返す。削除済みのアカウントは除く。
 # List the accounts signed in on this browser (the active one plus parked ones), skipping deleted accounts.
 async def api_list_accounts(request: Request):
-    current_user_id = _user_id_from_session(request.session)
+    current_user_id = user_id_from_session(request.session)
     if current_user_id is None:
-        return dep("jsonify")({"error": "ログインが必要です。"}, status_code=401)
+        return dep("jsonify")({"error": ERROR_LOGIN_REQUIRED_PERIOD}, status_code=401)
 
     parked_sessions = await dep("run_blocking")(dep("load_parked_sessions"), request) or []
     accounts = []
@@ -68,8 +69,8 @@ async def api_list_accounts(request: Request):
 # 待機中のアカウントのうち指定した user_id のものを表示中に切り替える。現在のセッションは待機側へ退避する(keep_current=True)。
 # Make the parked account with the given user_id the active one, parking the current session (keep_current=True).
 async def api_switch_account(request: Request):
-    if _user_id_from_session(request.session) is None:
-        return dep("jsonify")({"error": "ログインが必要です。"}, status_code=401)
+    if user_id_from_session(request.session) is None:
+        return dep("jsonify")({"error": ERROR_LOGIN_REQUIRED_PERIOD}, status_code=401)
 
     data, error_response = await dep("require_json_dict")(request)
     if error_response is not None:
@@ -147,9 +148,9 @@ async def api_current_user(request: Request):
 # 確認文字列が一致したときだけ、ログイン中のアカウントを削除してそのアカウントからサインアウトする。
 # Delete the signed-in account only when the confirmation text matches, then sign out of that account.
 async def api_delete_user_account(request: Request):
-    user_id = _user_id_from_session(request.session)
+    user_id = user_id_from_session(request.session)
     if user_id is None:
-        return dep("jsonify")({"error": "ログインが必要です。"}, status_code=401)
+        return dep("jsonify")({"error": ERROR_LOGIN_REQUIRED_PERIOD}, status_code=401)
 
     data, error_response = await dep("require_json_dict")(request)
     if error_response is not None:

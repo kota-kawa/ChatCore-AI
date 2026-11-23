@@ -8,7 +8,6 @@ Holds Japanese and English templates for registration, sign-in and email-address
 from __future__ import annotations
 
 import html
-import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -16,6 +15,7 @@ from dataclasses import dataclass
 import requests
 
 from services import http_client
+from services.env_settings import env_text
 from services.i18n import get_request_locale
 
 # 日本語: Resend の API 設定。認証情報は環境変数（RESEND_API_KEY / RESEND_FROM_ADDRESS）から読む。メール言語は ja / en のみ。
@@ -149,8 +149,8 @@ def resolve_request_email_locale(request: object) -> str:
 # 日本語: Resend の API キーと送信元アドレスを環境変数から読む。どちらかが未設定なら送信せずに例外にする。
 # English: Read the Resend API key and sender address from the environment; raise instead of sending if either is missing.
 def _load_resend_config() -> tuple[str, str]:
-    api_key = (os.getenv(RESEND_API_KEY_ENV) or "").strip()
-    from_address = (os.getenv(RESEND_FROM_ADDRESS_ENV) or "").strip()
+    api_key = (env_text(RESEND_API_KEY_ENV) or "").strip()
+    from_address = (env_text(RESEND_FROM_ADDRESS_ENV) or "").strip()
     if not api_key or not from_address:
         raise RuntimeError(
             "Resend email credentials are not configured. "
@@ -210,8 +210,6 @@ def render_verification_email(
 # 日本語: 種別を渡さない旧呼び出し向けの互換処理。件名の文言からテンプレート種別を推測する。新しい呼び出しでは使わない。
 # English: Compatibility for old callers that pass no kind: guess the template kind from the subject text. New callers do not use it.
 def _legacy_template_kind(subject: str) -> str:
-    # 非構造化呼び出し専用の互換処理。新しい呼び出しはkindを明示する。
-    # Deprecated compatibility only. Structured callers always provide a kind.
     if "ログイン" in subject or "sign-in" in subject.lower() or "login" in subject.lower():
         return "login_verification"
     if "メールアドレス変更" in subject or "email address" in subject.lower():

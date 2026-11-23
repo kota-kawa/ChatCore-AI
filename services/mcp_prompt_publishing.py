@@ -18,6 +18,7 @@ import requests
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field
 
 from services.error_messages import (
+    ERROR_IMAGE_FORMAT_MISMATCH,
     ERROR_MCP_PROMPT_IMAGE_BASE64_INVALID,
     ERROR_MCP_PROMPT_IMAGE_DATA_URL_INVALID,
     ERROR_MCP_PROMPT_IMAGE_DOWNLOAD_FAILED,
@@ -27,7 +28,6 @@ from services.error_messages import (
     ERROR_MCP_PROMPT_IMAGE_MIME_UNSUPPORTED,
     ERROR_MCP_PROMPT_IMAGE_TOO_LARGE,
     ERROR_PROMPT_ATTACHMENT_EMPTY,
-    ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH,
 )
 from services.prompt_attachment_storage import PROMPT_ATTACHMENT_MAX_BYTES
 from services.prompt_attachment_upload import (
@@ -68,7 +68,6 @@ logger = logging.getLogger(__name__)
 # ChatGPT の ``openai/fileParams`` で渡されるファイル引数（ダウンロード URL とメタデータ）。
 # File parameter passed by ChatGPT's ``openai/fileParams`` (download URL and metadata).
 class OpenAIFileInput(BaseModel):
-    # openai/fileParamsで定義されるChatGPTのファイル引数payload。
     """ChatGPT file parameter payload documented for ``openai/fileParams``."""
 
     model_config = ConfigDict(extra="forbid")
@@ -160,7 +159,7 @@ def _save_mcp_prompt_image_source(
         raise ValueError(ERROR_MCP_PROMPT_IMAGE_FORMAT_UNKNOWN)
     resolved_mime = declared_mime or source_mime_type or detected_mime
     if resolved_mime != detected_mime:
-        raise ValueError(ERROR_PROMPT_ATTACHMENT_FORMAT_MISMATCH)
+        raise ValueError(ERROR_IMAGE_FORMAT_MISMATCH)
 
     # 共通の保存処理はファイル名の拡張子で形式を確かめるが、クライアントが送る名前は
     # 日本語だけの名前（secure_filename で拡張子しか残らない）や拡張子なしのことがある。

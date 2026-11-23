@@ -74,3 +74,9 @@ export function getRuntimeLocale(): Locale {
   if (typeof document === "undefined") return DEFAULT_LOCALE;
   return normalizeLocale(document.documentElement.lang) ?? DEFAULT_LOCALE;
 }
+
+// React 外のバニラ JS が、実行時の言語（getRuntimeLocale）に応じて日本語か英語の文言を選ぶ。
+// Lets vanilla JS outside React pick the Japanese or English text for the runtime locale (getRuntimeLocale).
+export function localized(ja: string, en: string): string {
+  return getRuntimeLocale() === "en" ? en : ja;
+}

@@ -19,7 +19,7 @@ vi.mock("next/router", () => ({
   })
 }));
 
-vi.mock("../scripts/user/settings/api", () => ({
+vi.mock("../lib/settings/api", () => ({
   McpOAuthApiError: class McpOAuthApiError extends Error {},
   decideMcpOAuthConsent: mocks.decideMcpOAuthConsent,
   loadMcpOAuthConsent: mocks.loadMcpOAuthConsent

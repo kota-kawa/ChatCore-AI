@@ -9,14 +9,14 @@ import {
 } from "react";
 
 import { showToast } from "../../scripts/core/toast";
-import { deriveLegacyPromptType } from "../../scripts/prompt_share/prompt_type_registry";
-import type { ContentFormat, MediaType } from "../../scripts/prompt_share/types";
-import { settingsFetchJsonOrThrow } from "../../scripts/user/settings/api";
-import type { EditPromptFormState } from "../../scripts/user/settings/page_types";
+import { deriveLegacyPromptType } from "../../lib/prompt_share/prompt_type_registry";
+import type { ContentFormat, MediaType } from "../../lib/prompt_share/types";
+import { settingsFetchJsonOrThrow } from "../../lib/settings/api";
+import type { EditPromptFormState } from "../../lib/settings/page_types";
 import {
   buildPromptUpdatePayload,
   parsePromptManageMutationResponse
-} from "../../scripts/user/settings/types";
+} from "../../lib/settings/types";
 import { useTranslation } from "../../contexts/locale_context";
 import type { PromptRecord } from "./prompt_card";
 import { getPromptId } from "./prompt_share_page_utils";

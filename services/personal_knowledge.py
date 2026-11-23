@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from services.mcp_memo_service import get_memo, list_memos, search_memos
+from services.text_trim import trim_text
 
 logger = logging.getLogger(__name__)
 
@@ -90,13 +91,6 @@ def get_personal_knowledge_tool_definition() -> dict[str, Any]:
     }
 
 
-def _trim(text: str, limit: int) -> str:
-    normalized = (text or "").strip()
-    if len(normalized) <= limit:
-        return normalized
-    return f"{normalized[:limit]}…"
-
-
 # 検索モードを決める。埋め込みが使えない環境では semantic 指定でもキーワード検索へ落ちる
 # Pick the search mode; the service falls back to keyword search when embeddings are unavailable
 async def _search_memos(user_id: int, query: str, *, limit: int) -> list[dict[str, Any]]:
@@ -112,12 +106,12 @@ async def _search_memos(user_id: int, query: str, *, limit: int) -> list[dict[st
             "title": memo.title,
             "updated_at": memo.updated_at,
             "collection": memo.collection_name,
-            "excerpt": _trim(memo.excerpt, MAX_MEMO_CONTENT_CHARS),
+            "excerpt": trim_text(memo.excerpt, MAX_MEMO_CONTENT_CHARS),
         }
         if index < FULL_CONTENT_MEMO_LIMIT:
             try:
                 detail = await get_memo(user_id, memo.id)
-                entry["content"] = _trim(detail.content, MAX_MEMO_CONTENT_CHARS)
+                entry["content"] = trim_text(detail.content, MAX_MEMO_CONTENT_CHARS)
             except Exception:
                 # 全文が読めなくても抜粋だけで回答を続けられるようにする
                 # Keep the excerpt-only entry so the answer can still use the hit

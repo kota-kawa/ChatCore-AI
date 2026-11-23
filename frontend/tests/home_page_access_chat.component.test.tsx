@@ -21,7 +21,7 @@ vi.mock("../scripts/core/runtime_validation", () => ({
   extractApiErrorMessage: vi.fn(() => "サーバーエラー"),
   readJsonBodySafe: vi.fn(),
 }));
-vi.mock("../scripts/setup/setup_viewport", () => ({
+vi.mock("../lib/chat_page/setup/setup_viewport", () => ({
   scheduleSetupViewportFit: vi.fn(),
 }));
 
