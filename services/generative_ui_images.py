@@ -41,7 +41,6 @@ _ARTIFACT_SOURCE_FIELDS = ("html", "css", "js")
 # 日本語: 生成 UI が読み込んでよい Web 検索画像 1 件の検証モデル。url は署名付きの中継パスに限る。
 # English: Validation model for one web-search image a generated UI may load; url must be a signed relay path.
 class GenerativeUiImageV1(BaseModel):
-    # 生成UIに読み込みを許可するWeb検索画像。
     """One web-search image a generated UI is allowed to load."""
 
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)

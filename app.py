@@ -326,8 +326,6 @@ app.state.session_cookie = "session"
 # Generate a new CSRF token or retrieve an existing one, then return it to the client.
 @app.get("/api/csrf-token")
 async def issue_csrf_token(request: Request):
-    # CSRFトークンを取得、または新規生成してJSONで返却
-    # Retrieve or generate CSRF token and return as JSON
     token = get_or_create_csrf_token(request)
     return jsonify({"csrf_token": token})
 
@@ -336,8 +334,6 @@ async def issue_csrf_token(request: Request):
 # Endpoint for checking the liveness status of the application.
 @app.get("/healthz")
 async def healthz():
-    # 生存状態チェック結果をJSONで返却
-    # Return the liveness check result as JSON
     return jsonify(get_liveness_status())
 
 
@@ -345,8 +341,8 @@ async def healthz():
 # Endpoint for checking the readiness status of the application.
 @app.get("/readyz")
 async def readyz():
-    # 接続先DBや各種サービスのステータスを含む準備状態をJSONで返却
-    # Return the readiness check results and corresponding HTTP status code
+    # 準備状態の確認結果を、対応する HTTP ステータスコードとともに JSON で返却
+    # Return the readiness check results as JSON with the corresponding HTTP status code
     payload, status_code = await get_readiness_status()
     return jsonify(payload, status_code=status_code)
 

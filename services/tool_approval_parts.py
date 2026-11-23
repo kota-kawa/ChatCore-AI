@@ -24,7 +24,6 @@ TOOL_APPROVAL_DECISIONS: tuple[str, ...] = get_args(ToolApprovalDecision)
 # 日本語: 承認カードの内容が契約を満たさないときに送出する例外。
 # English: Exception raised when an approval-card payload violates the contract.
 class ToolApprovalValidationError(ValueError):
-    # 承認カードのpayloadが契約を満たさないことを示す。
     """Raised when an approval-card payload does not satisfy the contract."""
 
 

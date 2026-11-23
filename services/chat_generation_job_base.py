@@ -508,10 +508,6 @@ class ChatGenerationJobBase:
     # ジョブの実行をキャンセルし、生成途中のテキストを保存して abortedイベントを発行する
     # Cancel the job, persist any partial text, and publish an aborted event
     def cancel(self) -> None:
-        # 生成をキャンセルし、aborted イベントを発行して完了とする。
-        # ここまでに生成されたテキストがあれば保存し、停止後も残るようにする。
-        # Cancel generation and mark it complete with an aborted event.
-        # If any text was produced before the stop, persist it so it is not lost.
         if self.is_done:
             return
         self._cancelled = True

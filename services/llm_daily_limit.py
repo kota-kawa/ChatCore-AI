@@ -120,8 +120,6 @@ class LlmDailyLimitService:
     # オンメモリのカウント状態をすべてクリアします。
     # Clear all in-memory counts.
     def reset_in_memory_state(self) -> None:
-        # コンテキストマネージャを使用して、必要なリソースの確保とクリーンアップを制御します。
-        # Secure and clean up the required resource using a context manager.
         with self._in_memory_lock:
             self._in_memory_daily_counts.clear()
             self._in_memory_monthly_counts.clear()
@@ -184,8 +182,6 @@ return {1, current}
     ) -> tuple[bool, int]:
         # Redis 不可時のフォールバック。期間が変わったキーを都度掃除します。
         # Fallback path when Redis is unavailable; prune stale period keys on each call.
-        # コンテキストマネージャを使用して、必要なリソースの確保とクリーンアップを制御します。
-        # Secure and clean up the required resource using a context manager.
         with self._in_memory_lock:
             period_suffix = f":{current_period}"
             stale_keys = [
@@ -316,8 +312,6 @@ return {1, current}
         self,
         current_date: str | None = None,
     ) -> tuple[bool, int, int]:
-        # 認証メール送信用の日次上限を 1 回分消費します。
-        # Consume one unit from the daily quota for auth email sending.
         return self._consume_daily_quota(
             key_prefix=_AUTH_EMAIL_DAILY_COUNT_KEY_PREFIX,
             env_name=AUTH_EMAIL_DAILY_SEND_LIMIT_ENV,
