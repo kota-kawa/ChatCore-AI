@@ -221,7 +221,6 @@ class HybridSessionMiddleware:
             # are intentionally ignored here: they used to embed sensitive session
             # data directly in the cookie, so we treat any such cookie as expired
             # to force the user to re-authenticate against the Redis-backed flow.
-            # レガシーなクッキー保存型のセッションデータは意図的に無視する。
             if payload.get("backend") == REDIS_BACKEND:
                 return payload
             return None
@@ -273,8 +272,6 @@ class HybridSessionMiddleware:
     def _restore_session(
         self, cookie_state: dict[str, Any] | None
     ) -> tuple[dict[str, Any], str | None, str]:
-        # Redisからセッションデータを取得してロードする
-        # Fetch and load session data from Redis
         if not cookie_state:
             return {}, None, SESSION_RESTORE_NEW
 
@@ -392,7 +389,6 @@ class HybridSessionMiddleware:
         # anyone who could read the cookie. Clearing the cookie forces the
         # user to re-authenticate once Redis comes back, which is the safe
         # failure mode.
-        # Redisが利用不可の場合は、セッション維持を拒否してCookieをクリアする。
         logger.warning(
             "Session not persisted because Redis is unavailable; clearing session cookie."
         )
@@ -411,8 +407,6 @@ class HybridSessionMiddleware:
         *,
         original_session: dict[str, Any] | None = None,
     ) -> bool | None:
-        # セッションデータをRedisに保存する
-        # Save session data to Redis
         redis_client = get_redis_client()
         if redis_client is None:
             return False

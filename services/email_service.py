@@ -210,8 +210,6 @@ def render_verification_email(
 # 日本語: 種別を渡さない旧呼び出し向けの互換処理。件名の文言からテンプレート種別を推測する。新しい呼び出しでは使わない。
 # English: Compatibility for old callers that pass no kind: guess the template kind from the subject text. New callers do not use it.
 def _legacy_template_kind(subject: str) -> str:
-    # 非構造化呼び出し専用の互換処理。新しい呼び出しはkindを明示する。
-    # Deprecated compatibility only. Structured callers always provide a kind.
     if "ログイン" in subject or "sign-in" in subject.lower() or "login" in subject.lower():
         return "login_verification"
     if "メールアドレス変更" in subject or "email address" in subject.lower():

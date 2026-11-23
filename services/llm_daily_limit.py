@@ -316,8 +316,6 @@ return {1, current}
         self,
         current_date: str | None = None,
     ) -> tuple[bool, int, int]:
-        # 認証メール送信用の日次上限を 1 回分消費します。
-        # Consume one unit from the daily quota for auth email sending.
         return self._consume_daily_quota(
             key_prefix=_AUTH_EMAIL_DAILY_COUNT_KEY_PREFIX,
             env_name=AUTH_EMAIL_DAILY_SEND_LIMIT_ENV,

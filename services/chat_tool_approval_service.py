@@ -102,7 +102,6 @@ class ToolApprovalConflictError(ApiServiceError):
 
 # ロックを取る前に、その行がすでに承認待ちでなくなっていたことを知らせる内部用の例外（トランザクション内で送出する）。
 class _ApprovalAlreadySettledError(Exception):
-    # ロック取得前に保留状態が変わったことをトランザクション内で通知する。
     """Raised inside a transaction when the row stopped being pending before it was locked."""
 
     def __init__(self, row: ChatToolApproval) -> None:

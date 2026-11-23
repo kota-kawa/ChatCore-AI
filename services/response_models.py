@@ -19,8 +19,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # 日本語: すべてのAPIレスポンスペイロードの共通基底モデル。将来の拡張キーを許容します。
 # English: Common base model for all response payloads. Allows forward-compatible extra keys.
 class ResponsePayloadModel(BaseModel):
-    # 応答ペイロードは将来の拡張キーを受け入れる。
-    # Allow forward-compatible response payload keys.
     model_config = ConfigDict(extra="allow")
 
 

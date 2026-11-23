@@ -542,8 +542,6 @@ async def get_tasks(request: Request):
         )
 
 
-# タスクカード並び替え
-# Reorder task cards for authenticated users.
 # タスクの並び順を更新するAPIエンドポイント
 # API endpoint to update the display order of tasks for the authenticated user.
 @chat_bp.post("/api/update_tasks_order", name="chat.update_tasks_order")

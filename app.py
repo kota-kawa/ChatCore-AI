@@ -326,8 +326,6 @@ app.state.session_cookie = "session"
 # Generate a new CSRF token or retrieve an existing one, then return it to the client.
 @app.get("/api/csrf-token")
 async def issue_csrf_token(request: Request):
-    # CSRFトークンを取得、または新規生成してJSONで返却
-    # Retrieve or generate CSRF token and return as JSON
     token = get_or_create_csrf_token(request)
     return jsonify({"csrf_token": token})
 
@@ -336,8 +334,6 @@ async def issue_csrf_token(request: Request):
 # Endpoint for checking the liveness status of the application.
 @app.get("/healthz")
 async def healthz():
-    # 生存状態チェック結果をJSONで返却
-    # Return the liveness check result as JSON
     return jsonify(get_liveness_status())
 
 

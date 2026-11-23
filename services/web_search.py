@@ -301,8 +301,6 @@ _SWEDISH_HINTS = frozenset("åäöÅÄÖ")
 # 日本語: 根拠 ID を作る。URL を正規化したうえでハッシュにするので、結果の順序やターンが変わっても同じ URL は同じ ID になる。
 # English: Build an evidence ID; the URL is normalized and hashed so the same URL keeps its ID across result order and turns.
 def build_web_search_evidence_id(url: str) -> str:
-    # URLを正規化し、検索順やターンをまたいでも変わらない根拠IDを生成する
-    # Normalize a URL and derive a stable evidence ID independent of result order/turn.
     raw_url = str(url or "").strip()
     try:
         parsed = urlsplit(raw_url)

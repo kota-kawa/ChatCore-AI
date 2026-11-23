@@ -220,7 +220,6 @@ class ExtractedContextCandidate(BaseModel):
 # LLM 応答全体の外枠。1 ターンで受け付ける候補数の上限をここで強制する。
 # Outer envelope of the LLM response; enforces the per-turn cap on candidate count.
 class ExtractedContextEnvelope(BaseModel):
-    # 1回のLLM応答から受け付ける候補数を制限する。
     """Bound the number of candidates accepted from one LLM response."""
 
     model_config = ConfigDict(extra="forbid", strict=True)

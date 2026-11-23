@@ -313,8 +313,6 @@ async def _update_user_profile(user_id, username, email, bio, avatar_url, llm_pr
     )
 
 
-# --- プロフィール取得 ---
-# User profile read/update endpoint.
 # プロフィール情報の取得・更新を行うAPIエンドポイント
 # API endpoint to retrieve or update user profile information.
 @chat_bp.api_route('/api/user/profile', methods=['GET', 'POST'], name="chat.user_profile")
