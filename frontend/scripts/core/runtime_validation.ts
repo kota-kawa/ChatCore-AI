@@ -3,6 +3,7 @@
 
 import { ApiErrorPayloadSchema } from "../../types/chat";
 import { getRuntimeLocale } from "../../lib/i18n/config";
+import { isRecord } from "../../lib/utils";
 
 type JsonLikeRecord = Record<string, unknown>;
 type FetchJsonResult<TPayload> = {
@@ -19,10 +20,6 @@ type FetchJsonOrThrowOptions<TPayload> = {
   // Optional hook to inject a fetch implementation (e.g. with timeout/retry) for read requests.
   fetchImpl?: FetchImpl;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function parseJsonText(raw: string): unknown {
   return JSON.parse(raw);
@@ -111,7 +108,6 @@ export {
   extractApiErrorMessage,
   fetchJson,
   fetchJsonOrThrow,
-  isRecord,
   parseJsonText,
   readJsonBodySafe
 };

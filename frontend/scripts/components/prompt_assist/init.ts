@@ -4,7 +4,7 @@
 import { animateAppliedField } from "./animation";
 import { createSuggestionRow } from "./cards";
 import { PROMPT_ASSIST_PRIMARY_FIELDS, getPromptAssistImageMeta, getPromptAssistSkillMeta, getPromptAssistTargetMeta } from "./constants";
-import { localized } from "./strings";
+import { localized } from "../../../lib/i18n/config";
 import { createPromptAssistMarkup } from "./markup";
 import { fetchJsonOrThrow } from "../../core/runtime_validation";
 import { resilientFetch } from "../../core/resilient_fetch";

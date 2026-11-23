@@ -1,17 +1,13 @@
 // スピナーとラベルを横に並べて表示する、インライン用のローディング表示。
 // Inline loading indicator showing a spinner next to a label.
+import { joinClasses } from "../../lib/ui/class_names";
+
 // インラインローディングコンポーネントのprops型定義
 // Props type definition for the inline loading component
 type InlineLoadingProps = {
   label: string;
   className?: string;
 };
-
-// クラス名を結合するユーティリティ（undefinedをフィルタリングする）
-// Utility to join class names (filters out undefined values)
-function joinClasses(...classes: Array<string | undefined>) {
-  return classes.filter(Boolean).join(" ");
-}
 
 // スピナーとラベルをインラインで表示するローディングコンポーネント
 // Loading component that displays a spinner and label inline

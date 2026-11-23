@@ -8,9 +8,7 @@
 
 import type { CSSProperties } from "react";
 
-function joinClasses(...classes: Array<string | undefined | false>): string {
-  return classes.filter(Boolean).join(" ");
-}
+import { joinClasses } from "../../lib/ui/class_names";
 
 export type SkeletonProps = {
   // 角丸の形状。テキスト行・矩形ブロック・円形（アバター等）。
