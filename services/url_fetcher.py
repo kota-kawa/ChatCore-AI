@@ -815,4 +815,3 @@ def fetch_urls_documents(urls: list[str]) -> dict[str, FetchedUrlDocument]:
         # English: A stalled resolver or read must not hold the chat turn after its waiting budget.
         executor.shutdown(wait=False, cancel_futures=True)
     return {url: result[url] for url in unique_urls if url in result}
-

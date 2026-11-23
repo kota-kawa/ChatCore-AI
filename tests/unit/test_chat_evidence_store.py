@@ -133,6 +133,7 @@ class EvidenceStoreTestCase(unittest.TestCase):
             {"evidence_ids": [reference["evidence_id"], "ref_missing"]}
         )
         invalid = store.execute_get_evidence({"evidence_ids": []})
+        not_an_array = store.execute_get_evidence({"evidence_ids": "ref_x"})
         too_many = store.execute_get_evidence(
             {"evidence_ids": [f"ref_{index}" for index in range(MAX_EVIDENCE_IDS_PER_CALL + 1)]}
         )
@@ -141,6 +142,7 @@ class EvidenceStoreTestCase(unittest.TestCase):
         self.assertEqual(len(partial["evidence"]), 1)
         self.assertEqual(partial["missing_ids"], ["ref_missing"])
         self.assertEqual(invalid["status"], "invalid_arguments")
+        self.assertEqual(not_an_array["status"], "invalid_arguments")
         self.assertEqual(too_many["status"], "invalid_arguments")
 
     # 日本語: 再取得した根拠が予算を超える場合、IDを残したまま本文から落とし、最後は
