@@ -5,6 +5,7 @@ import MarkdownContent from "../../../components/MarkdownContent";
 import { SeoHead } from "../../../components/SeoHead";
 import { formatDateTime } from "../../../lib/datetime";
 import { stripMarkdownForDescription, truncateSeoText } from "../../../lib/seo";
+import { getRequestOrigin } from "../../../lib/server/request_origin";
 import { resilientFetch } from "../../../scripts/core/resilient_fetch";
 import { useTranslation } from "../../../contexts/locale_context";
 
@@ -32,21 +33,6 @@ type SharedMemoPageProps = {
   ogImageUrl: string;
 };
 
-// Hostヘッダーの値を正規化する（配列の場合は先頭を取得）
-// Normalize the Host header value (take the first if it's an array)
-function normalizeHostHeader(header: string | string[] | undefined) {
-  if (Array.isArray(header)) return header[0] || "";
-  return header || "";
-}
-
-// X-Forwarded-Protoヘッダーを正規化する（カンマ区切りの最初の値を取得）
-// Normalize the X-Forwarded-Proto header (take the first comma-separated value)
-function normalizeProtoHeader(header: string | string[] | undefined) {
-  const raw = Array.isArray(header) ? header[0] : header;
-  if (!raw) return "";
-  return raw.split(",")[0]?.trim() || "";
-}
-
 // OGP用のmeta descriptionをメモ本文から生成する
 // Build the OGP meta description from the memo content
 function buildMetaDescription(payload: SharedMemoPayload, english = false) {
@@ -69,10 +55,7 @@ export const getServerSideProps: GetServerSideProps<SharedMemoPageProps> = async
   }
 
   const backendUrl = process.env.BACKEND_URL || "http://localhost:5004";
-  const host = normalizeHostHeader(context.req.headers["x-forwarded-host"]) || normalizeHostHeader(context.req.headers.host);
-  const proto = normalizeProtoHeader(context.req.headers["x-forwarded-proto"])
-    || (process.env.NODE_ENV === "development" ? "http" : "https");
-  const origin = host ? `${proto}://${host}` : "";
+  const origin = getRequestOrigin(context.req);
   const resolvedPath = context.resolvedUrl || `/shared/memo/${encodeURIComponent(token)}`;
   const pageUrl = origin ? `${origin}${resolvedPath}` : resolvedPath;
   const ogImageUrl = origin ? `${origin}/static/img.jpg` : "/static/img.jpg";

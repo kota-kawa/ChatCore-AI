@@ -3,8 +3,8 @@
 
 import { useState, type RefObject } from "react";
 
-import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";
-import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
+import { DEFAULT_AUTHOR_AVATAR_URL } from "../../lib/prompt_share/constants";
+import { getCategoryLabelOrFallback } from "../../lib/prompt_share/prompt_category_registry";
 import {
   formatPromptDate,
   getPromptFormatIconClass,
@@ -16,8 +16,8 @@ import {
   normalizePromptContentFormat,
   normalizePromptMediaType,
   truncateContent
-} from "../../scripts/prompt_share/formatters";
-import type { PromptAuthorProfile } from "../../scripts/prompt_share/types";
+} from "../../lib/prompt_share/formatters";
+import type { PromptAuthorProfile } from "../../lib/prompt_share/types";
 import type { PromptRecord } from "./prompt_card";
 import { useTranslation } from "../../contexts/locale_context";
 import { ModalCloseButton } from "../ui/modal_close_button";

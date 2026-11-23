@@ -10,9 +10,9 @@ import { localizePublicPath } from "../../lib/seo";
 import { modalOriginKey } from "../../lib/ui/modal_return_target";
 import { useDismissOnEscape } from "../../hooks/use_dismiss_on_escape";
 import { useDismissOnOutsidePress } from "../../hooks/use_dismiss_on_outside_press";
-import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";
-import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
-import { DEFAULT_CONTENT_FORMAT, DEFAULT_MEDIA_TYPE } from "../../scripts/prompt_share/prompt_type_registry";
+import { DEFAULT_AUTHOR_AVATAR_URL } from "../../lib/prompt_share/constants";
+import { getCategoryLabelOrFallback } from "../../lib/prompt_share/prompt_category_registry";
+import { DEFAULT_CONTENT_FORMAT, DEFAULT_MEDIA_TYPE } from "../../lib/prompt_share/prompt_type_registry";
 import {
   formatPromptDate,
   getPromptFormatIconClass,
@@ -24,8 +24,8 @@ import {
   normalizePromptContentFormat,
   normalizePromptMediaType,
   truncateContent,
-} from "../../scripts/prompt_share/formatters";
-import type { PromptData } from "../../scripts/prompt_share/types";
+} from "../../lib/prompt_share/formatters";
+import type { PromptData } from "../../lib/prompt_share/types";
 import { useTranslation } from "../../contexts/locale_context";
 import type { ImportActionState } from "../../hooks/use_import_action";
 import { ContentImportButton } from "../ui/content_import_button";

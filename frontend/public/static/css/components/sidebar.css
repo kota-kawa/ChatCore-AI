@@ -585,7 +585,7 @@
 }
 
 :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--delete {
-  color: #dc2626;
+  color: var(--danger-color);
 }
 
 :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--delete:hover,
@@ -640,7 +640,7 @@
 
 :where(body.chat-page, .chat-page-shell) .room-selection-bar__button--danger {
   border-color: rgba(220, 38, 38, 0.2);
-  color: #dc2626;
+  color: var(--danger-color);
 }
 
 :where(body.chat-page, .chat-page-shell) .room-selection-bar__button:hover:not(:disabled),

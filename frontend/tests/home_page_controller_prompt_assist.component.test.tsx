@@ -6,11 +6,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { useHomePageController } from "../hooks/chat_page/use_home_page_controller";
 import { NewPromptModal } from "../components/chat_page/modals/new_prompt_modal";
-import { initPromptAssist } from "../scripts/components/prompt_assist";
+import { initPromptAssist } from "../lib/prompt_assist";
 import { resilientFetch } from "../scripts/core/resilient_fetch";
 
 vi.mock("../scripts/core/toast", () => ({ showToast: vi.fn() }));
-vi.mock("../scripts/components/prompt_assist", () => ({ initPromptAssist: vi.fn(() => ({ destroy: vi.fn() })) }));
+vi.mock("../lib/prompt_assist", () => ({ initPromptAssist: vi.fn(() => ({ destroy: vi.fn() })) }));
 vi.mock("../scripts/core/resilient_fetch", () => ({ resilientFetch: vi.fn() }));
 
 const fetchMock = vi.mocked(resilientFetch);

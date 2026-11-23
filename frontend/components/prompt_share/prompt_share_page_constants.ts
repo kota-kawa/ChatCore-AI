@@ -3,11 +3,11 @@
 import {
   CATEGORY_UNSET,
   PROMPT_CATEGORY_REGISTRY
-} from "../../scripts/prompt_share/prompt_category_registry";
+} from "../../lib/prompt_share/prompt_category_registry";
 import {
   CONTENT_FORMATS,
   MEDIA_TYPES
-} from "../../scripts/prompt_share/prompt_type_registry";
+} from "../../lib/prompt_share/prompt_type_registry";
 import type {
   ContentFormatFilter,
   MediaTypeFilter,

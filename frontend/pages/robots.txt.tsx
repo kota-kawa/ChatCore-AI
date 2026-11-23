@@ -1,21 +1,7 @@
 // /robots.txt をSSRで動的に生成するページ。サイトのオリジンを環境変数かリクエストヘッダーから解決し、sitemap.xml の場所を含めて返す。
 // Page that generates /robots.txt dynamically at SSR; resolves the site origin from env vars or request headers and points to sitemap.xml.
 import type { GetServerSideProps } from "next";
-
-// Hostヘッダーの値を正規化する（配列の場合は先頭を取得）
-// Normalize the Host header value (take the first if it's an array)
-function normalizeHostHeader(header: string | string[] | undefined) {
-  if (Array.isArray(header)) return header[0] || "";
-  return header || "";
-}
-
-// X-Forwarded-Protoヘッダーを正規化する（カンマ区切りの最初の値を取得）
-// Normalize the X-Forwarded-Proto header (take the first comma-separated value)
-function normalizeProtoHeader(header: string | string[] | undefined) {
-  const raw = Array.isArray(header) ? header[0] : header;
-  if (!raw) return "";
-  return raw.split(",")[0]?.trim() || "";
-}
+import { getRequestOrigin } from "../lib/server/request_origin";
 
 // robots.txtをサーバーサイドで動的に生成して返すハンドラー
 // Handler that dynamically generates and returns robots.txt on the server side
@@ -28,10 +14,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     process.env.VERCEL_PROJECT_PRODUCTION_URL ||
     process.env.VERCEL_URL ||
     "";
-  const host = normalizeHostHeader(context.req.headers["x-forwarded-host"]) || normalizeHostHeader(context.req.headers.host);
-  const proto = normalizeProtoHeader(context.req.headers["x-forwarded-proto"])
-    || (process.env.NODE_ENV === "development" ? "http" : "https");
-  const requestOrigin = host ? `${proto}://${host}` : "";
+  const requestOrigin = getRequestOrigin(context.req);
   const origin = (configuredOrigin
     ? (/^https?:\/\//i.test(configuredOrigin) ? configuredOrigin : `https://${configuredOrigin}`)
     : requestOrigin).replace(/\/+$/, "");

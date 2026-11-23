@@ -3,14 +3,10 @@
 
 import { fetchJsonOrThrow } from "./runtime_validation";
 import { resilientFetch } from "./resilient_fetch";
-import { getRuntimeLocale } from "../../lib/i18n/config";
+import { localized } from "../../lib/i18n/config";
 
 type JsonRecord = Record<string, unknown>;
 type PasskeyAction = "authenticate" | "register";
-
-function localized(ja: string, en: string): string {
-  return getRuntimeLocale() === "en" ? en : ja;
-}
 
 export class PasskeyCancelledError extends Error {
   constructor(message: string) {

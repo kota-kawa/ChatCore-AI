@@ -2,7 +2,7 @@
 // Hook that records a view when a shared prompt's detail is opened. Used by pages/prompt_share/index.tsx.
 import { useCallback } from "react";
 
-import { recordPromptView } from "../../scripts/prompt_share/api";
+import { recordPromptView } from "../../lib/prompt_share/api";
 import { getPromptId } from "./prompt_share_page_utils";
 import type { PromptRecord } from "./prompt_card";
 

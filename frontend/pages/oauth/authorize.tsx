@@ -11,9 +11,9 @@ import {
   decideMcpOAuthConsent,
   loadMcpOAuthConsent,
   McpOAuthApiError
-} from "../../scripts/user/settings/api";
-import { MCP_OAUTH_SCOPE_DEFINITIONS, MCP_OAUTH_SCOPE_DEFINITIONS_EN } from "../../scripts/user/settings/constants";
-import type { McpOAuthConsent } from "../../scripts/user/settings/types";
+} from "../../lib/settings/api";
+import { MCP_OAUTH_SCOPE_DEFINITIONS, MCP_OAUTH_SCOPE_DEFINITIONS_EN } from "../../lib/settings/constants";
+import type { McpOAuthConsent } from "../../lib/settings/types";
 
 // MCP OAuth の認可画面。外部AIサービスに投稿権限を渡す前に、ユーザーへ接続先を明示する。
 // MCP OAuth authorization page that clearly identifies the external AI service before granting publishing access.

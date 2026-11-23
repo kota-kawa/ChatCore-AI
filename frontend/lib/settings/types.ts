@@ -1,0 +1,272 @@
+// 利用者設定画面で使うデータ型を定義する。
+// Defines data types used by user settings views.
+
+import { z } from "zod";
+
+import {
+  LikedPromptsApiResponseSchema,
+  LikedPromptApiSchema,
+  MyPromptsApiResponseSchema,
+  PromptManageMutationApiResponseSchema,
+  PromptRecordApiSchema,
+  UsageLimitsResponseSchema,
+  type LikedPromptApi,
+  type UsageLimitsResponse,
+  type PromptRecordApi
+} from "../../types/generated/api_schemas";
+
+function parseWithSchema<TSchema extends z.ZodTypeAny>(
+  schema: TSchema,
+  raw: unknown,
+  invalidMessage: string
+): z.infer<TSchema> {
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(invalidMessage);
+  }
+  return parsed.data;
+}
+
+function normalizeNullableString(value: string | null | undefined): string {
+  return value ?? "";
+}
+
+function normalizeOptionalDateTime(value: string | null | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function normalizePromptRecord(prompt: PromptRecordApi): {
+  id?: string | number;
+  title: string;
+  content: string;
+  description?: string;
+  contentFormat: string;
+  mediaType: string;
+  attributes: Record<string, string>;
+  attachments: Record<string, string>[];
+  referenceImageUrl: string;
+  skillMarkdown: string;
+  category: string;
+  inputExamples: string;
+  outputExamples: string;
+  createdAt?: string;
+} {
+  return {
+    id: prompt.id ?? undefined,
+    title: prompt.title,
+    content: prompt.content,
+    description: normalizeNullableString(prompt.description),
+    contentFormat: normalizeNullableString(prompt.content_format),
+    mediaType: normalizeNullableString(prompt.media_type) || "text",
+    attributes: prompt.attributes ?? {},
+    attachments: prompt.attachments ?? [],
+    referenceImageUrl: normalizeNullableString(prompt.reference_image_url),
+    skillMarkdown: normalizeNullableString(prompt.skill_markdown),
+    category: normalizeNullableString(prompt.category),
+    inputExamples: normalizeNullableString(prompt.input_examples),
+    outputExamples: normalizeNullableString(prompt.output_examples),
+    createdAt: normalizeOptionalDateTime(prompt.created_at)
+  };
+}
+
+export const PromptRecordSchema = PromptRecordApiSchema.transform(normalizePromptRecord);
+export type PromptRecord = z.infer<typeof PromptRecordSchema>;
+
+function normalizeLikedPrompt(entry: LikedPromptApi) {
+  const prompt = normalizePromptRecord({
+    id: entry.prompt_id,
+    title: entry.title,
+    content: entry.content,
+    description: entry.description,
+    content_format: entry.content_format,
+    media_type: entry.media_type,
+    attributes: entry.attributes,
+    attachments: entry.attachments,
+    reference_image_url: entry.reference_image_url,
+    skill_markdown: entry.skill_markdown,
+    category: entry.category,
+    input_examples: entry.input_examples,
+    output_examples: entry.output_examples,
+    created_at: entry.prompt_created_at ?? entry.created_at
+  });
+  return {
+    id: entry.id ?? undefined,
+    likeId: entry.like_id ?? entry.id ?? undefined,
+    promptId: entry.prompt_id ?? undefined,
+    prompt,
+    title: prompt.title,
+    content: prompt.content,
+    contentFormat: prompt.contentFormat,
+    mediaType: prompt.mediaType,
+    ...(prompt.description ? { description: prompt.description } : {}),
+    attributes: prompt.attributes,
+    attachments: prompt.attachments,
+    referenceImageUrl: prompt.referenceImageUrl,
+    skillMarkdown: prompt.skillMarkdown,
+    category: prompt.category,
+    inputExamples: prompt.inputExamples,
+    outputExamples: prompt.outputExamples,
+    createdAt: normalizeOptionalDateTime(entry.prompt_created_at ?? entry.created_at),
+    likedAt: normalizeOptionalDateTime(entry.liked_at)
+  };
+}
+
+export const LikedPromptSchema = LikedPromptApiSchema.transform(normalizeLikedPrompt);
+export type LikedPrompt = z.infer<typeof LikedPromptSchema>;
+
+export type PromptManageMutationResponse = z.infer<typeof PromptManageMutationApiResponseSchema>;
+
+type PromptUpdateFormValues = {
+  title: string;
+  category: string;
+  content: string;
+  description?: string;
+  contentFormat: string;
+  mediaType: string;
+  attributes: Record<string, string>;
+  inputExamples: string;
+  outputExamples: string;
+};
+
+// 編集対象の2軸と型固有属性を落とさず、更新APIのsnake_caseペイロードへ変換する。
+// Build the update API payload without losing the prompt axes or type-specific attributes.
+export function buildPromptUpdatePayload(form: PromptUpdateFormValues) {
+  const isSkill = form.contentFormat === "skill";
+  const includeExamples = !isSkill && form.mediaType === "text";
+  return {
+    title: form.title,
+    category: form.category,
+    content: isSkill ? "" : form.content,
+    description: form.description || "",
+    content_format: form.contentFormat,
+    media_type: form.mediaType,
+    attributes: isSkill
+      ? { ...form.attributes, skill_markdown: form.content }
+      : form.attributes,
+    input_examples: includeExamples ? form.inputExamples : "",
+    output_examples: includeExamples ? form.outputExamples : "",
+  };
+}
+
+export function parseMyPromptsResponse(raw: unknown): PromptRecord[] {
+  const response = parseWithSchema(
+    MyPromptsApiResponseSchema,
+    raw,
+    "プロンプト一覧レスポンスの形式が不正です。"
+  );
+  return (response.prompts ?? []).map((prompt) => normalizePromptRecord(prompt));
+}
+
+export function parseLikedPromptsResponse(raw: unknown): LikedPrompt[] {
+  const response = parseWithSchema(
+    LikedPromptsApiResponseSchema,
+    raw,
+    "いいねしたプロンプトレスポンスの形式が不正です。"
+  );
+  return (response.prompts ?? []).map((entry) => normalizeLikedPrompt(entry));
+}
+
+export function parsePromptManageMutationResponse(raw: unknown): PromptManageMutationResponse {
+  return parseWithSchema(
+    PromptManageMutationApiResponseSchema,
+    raw,
+    "操作結果レスポンスの形式が不正です。"
+  );
+}
+
+// MCP OAuth 同意画面と設定画面で使用する連携情報
+// MCP OAuth consent and connection data used by the consent and settings pages.
+const McpOAuthConsentSchema = z.object({
+  client_name: z.string().trim().min(1),
+  client_id: z.string().trim().min(1),
+  client_host: z.string().transform((value) => value.trim()),
+  redirect_host: z.string().trim().min(1),
+  scope: z.string().trim().min(1),
+  localhost_warning: z.boolean()
+});
+
+const McpOAuthConnectionsResponseSchema = z.object({
+  connections: z.array(z.object({
+    id: z.union([z.string(), z.number()]).transform(String),
+    client_name: z.string().trim().min(1),
+    client_host: z.string().transform((value) => value.trim()),
+    display_name: z.string().trim().min(1).nullable(),
+    scopes: z.array(z.string()),
+    created_at: z.string().trim().min(1),
+    last_used_at: z.string().trim().min(1).nullable()
+  }))
+});
+
+const McpOAuthClientListSchema = z.object({
+  clients: z.array(z.object({
+    client_id: z.string().trim().min(1),
+    label: z.string(),
+    redirect_uri: z.string().url(),
+    token_endpoint_auth_method: z.enum(["none", "client_secret_post"]),
+    created_at: z.string().trim().min(1)
+  })),
+  default_redirect_uri: z.string().url(),
+  mcp_server_url: z.string().url()
+});
+
+const McpOAuthClientCredentialsSchema = z.object({
+  client_id: z.string().trim().min(1),
+  client_secret: z.string().trim().min(1).nullable(),
+  label: z.string(),
+  redirect_uri: z.string().url(),
+  token_endpoint_auth_method: z.enum(["none", "client_secret_post"]),
+  mcp_server_url: z.string().url()
+});
+
+const McpOAuthConsentDecisionSchema = z.object({
+  redirect_url: z.string().url()
+});
+
+export type McpOAuthConsent = z.infer<typeof McpOAuthConsentSchema>;
+export type McpOAuthConnection = z.infer<typeof McpOAuthConnectionsResponseSchema>["connections"][number];
+export type McpOAuthClientList = z.infer<typeof McpOAuthClientListSchema>;
+export type McpOAuthClient = McpOAuthClientList["clients"][number];
+export type McpOAuthClientCredentials = z.infer<typeof McpOAuthClientCredentialsSchema>;
+
+export function parseMcpOAuthConsent(raw: unknown): McpOAuthConsent {
+  return parseWithSchema(McpOAuthConsentSchema, raw, "OAuth 同意情報の形式が不正です。");
+}
+
+export function parseMcpOAuthConnections(raw: unknown): McpOAuthConnection[] {
+  return parseWithSchema(
+    McpOAuthConnectionsResponseSchema,
+    raw,
+    "AIサービス連携一覧の形式が不正です。"
+  ).connections;
+}
+
+export function parseMcpOAuthClientList(raw: unknown): McpOAuthClientList {
+  return parseWithSchema(
+    McpOAuthClientListSchema,
+    raw,
+    "連携用認証情報一覧の形式が不正です。"
+  );
+}
+
+export function parseMcpOAuthClientCredentials(raw: unknown): McpOAuthClientCredentials {
+  return parseWithSchema(
+    McpOAuthClientCredentialsSchema,
+    raw,
+    "連携用認証情報の形式が不正です。"
+  );
+}
+
+export function parseMcpOAuthConsentDecision(raw: unknown): string {
+  return parseWithSchema(
+    McpOAuthConsentDecisionSchema,
+    raw,
+    "OAuth 同意結果の形式が不正です。"
+  ).redirect_url;
+}
+
+export type UsageLimits = UsageLimitsResponse;
+
+export function parseUsageLimits(raw: unknown): UsageLimits {
+  return parseWithSchema(UsageLimitsResponseSchema, raw, "利用状況の形式が不正です。");
+}

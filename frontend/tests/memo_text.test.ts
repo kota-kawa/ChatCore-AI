@@ -8,7 +8,7 @@ import {
   stripWebSearchArtifacts,
   stripWebSearchCitationsHtml,
   stripWebSearchSourcesHtml,
-} from "../scripts/chat/memo_text";
+} from "../lib/chat_page/message_format/memo_text";
 
 function citationChip(url: string, label: string) {
   return [

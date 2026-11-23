@@ -7,10 +7,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PromptRecord } from "../components/prompt_share/prompt_card";
 import { usePromptViewRecorder } from "../components/prompt_share/use_prompt_view_recorder";
-import { recordPromptView } from "../scripts/prompt_share/api";
+import { recordPromptView } from "../lib/prompt_share/api";
 
 
-vi.mock("../scripts/prompt_share/api", () => ({
+vi.mock("../lib/prompt_share/api", () => ({
   recordPromptView: vi.fn()
 }));
 

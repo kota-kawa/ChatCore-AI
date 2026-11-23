@@ -11,8 +11,8 @@ import {
   removePromptLike,
   savePromptAsMemo,
   savePromptLike
-} from "../../scripts/prompt_share/api";
-import { normalizePromptContentFormat } from "../../scripts/prompt_share/formatters";
+} from "../../lib/prompt_share/api";
+import { normalizePromptContentFormat } from "../../lib/prompt_share/formatters";
 import type { PromptRecord } from "./prompt_card";
 import { useTranslation } from "../../contexts/locale_context";
 
