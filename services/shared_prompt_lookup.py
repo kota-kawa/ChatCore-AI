@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from services.shared_content_service import SharedContentService
+from services.text_trim import trim_text
 
 logger = logging.getLogger(__name__)
 
@@ -90,15 +91,6 @@ def get_shared_prompt_tool_definition() -> dict[str, Any]:
     }
 
 
-# 日本語: 前後の空白を除き、limit 文字を超えたら切り詰めて「…」を付ける。
-# English: Strip whitespace and, when longer than limit characters, truncate with an ellipsis.
-def _trim(text: str, limit: int) -> str:
-    normalized = (text or "").strip()
-    if len(normalized) <= limit:
-        return normalized
-    return f"{normalized[:limit]}…"
-
-
 # 日本語: 呼び出しごとにサービスを作る。テストで差し替えやすいよう、生成をこの関数に集めている。
 # English: Create the service per call; construction is kept in this function so tests can replace it.
 def _service() -> SharedContentService:
@@ -153,7 +145,7 @@ async def search_shared_prompts(
                 if detail_description:
                     entry["description"] = detail_description
                 body = detail.content or detail.skill_markdown
-                entry["content"] = _trim(body, MAX_PROMPT_CONTENT_CHARS)
+                entry["content"] = trim_text(body, MAX_PROMPT_CONTENT_CHARS)
         prompts.append(entry)
 
     return SharedPromptResult(query=normalized_query, prompts=prompts)

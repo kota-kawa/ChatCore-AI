@@ -10,11 +10,13 @@ shared between concurrent tasks.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from typing import TypeVar
 
-from sqlalchemy.exc import DBAPIError, OperationalError
+from sqlalchemy.exc import DBAPIError, OperationalError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -22,10 +24,19 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from .api_errors import ApiServiceError
 from .env_settings import env_bool, env_float, env_int, env_text
 from .runtime_config import is_production_env
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+# 日本語: in_transaction_with_retry が一時的な DB エラーを再試行する最大回数（初回を含む）と、試行ごとに延ばす待ち時間の単位（秒）。
+# English: Maximum attempts (including the first) in_transaction_with_retry makes on retryable DB errors,
+#          and the per-attempt backoff unit in seconds.
+MAX_DB_WRITE_ATTEMPTS = 3
+DB_RETRY_BACKOFF_SECONDS = 0.05
 
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
@@ -225,3 +236,36 @@ def is_retryable_db_error(exc: BaseException) -> bool:
         current = orig if isinstance(orig, BaseException) else None
     return isinstance(exc, (OperationalError, DBAPIError)) and bool(getattr(exc, "connection_invalidated", False))
 
+
+# 日本語: session があればそのまま使い(呼び出し側のトランザクションに参加)、なければ新規セッションの
+#          トランザクションで実行して成功時に確定する。
+# English: Use the given session as is (joining the caller's transaction); otherwise run in a new session's
+#          transaction and commit on success.
+async def in_transaction(
+    session: AsyncSession | None,
+    operation: Callable[[AsyncSession], Awaitable[T]],
+) -> T:
+    if session is not None:
+        return await operation(session)
+    async with session_scope() as owned_session, owned_session.begin():
+        return await operation(owned_session)
+
+
+# 日本語: in_transaction と同じだが、新規トランザクションで一時的な DB エラーのときだけバックオフ付きで再試行する。
+# English: Like in_transaction, but a new transaction is retried with backoff only on retryable DB errors.
+async def in_transaction_with_retry(
+    session: AsyncSession | None,
+    operation: Callable[[AsyncSession], Awaitable[T]],
+) -> T:
+    if session is not None:
+        return await operation(session)
+    for attempt in range(MAX_DB_WRITE_ATTEMPTS):
+        try:
+            return await in_transaction(None, operation)
+        except ApiServiceError:
+            raise
+        except SQLAlchemyError as exc:
+            if attempt + 1 >= MAX_DB_WRITE_ATTEMPTS or not is_retryable_db_error(exc):
+                raise
+            await asyncio.sleep(DB_RETRY_BACKOFF_SECONDS * (attempt + 1))
+    raise RuntimeError("Database transaction retry loop exhausted.")

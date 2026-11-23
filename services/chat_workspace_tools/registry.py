@@ -16,7 +16,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # ツールがどの予算を使うか。検索系は tool_calls、範囲読み取りは reads、書き込みの提案は
@@ -191,3 +191,12 @@ def validation_problems(exc: ValidationError) -> tuple[str, ...]:
         message = str(error.get("msg") or "is invalid")
         problems.append(f"{location}: {message}" if location else message)
     return tuple(problems) or ("Tool arguments are invalid.",)
+
+
+# モデルが返した引数を引数モデルで検証する。不正なら、直せる問題としてモデルへ返す例外にする。
+# Validate the model's arguments with an argument model; invalid input becomes an error the model can fix.
+def validated_arguments(model: type[BaseModel], arguments: dict[str, Any]) -> Any:
+    try:
+        return model.model_validate(arguments)
+    except ValidationError as exc:
+        raise WorkspaceToolArgumentError(validation_problems(exc)) from None

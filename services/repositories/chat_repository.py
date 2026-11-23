@@ -95,10 +95,6 @@ def _jsonb_value(encoded: str | None) -> Any:
         return encoded
 
 
-def _is_unique_violation(exc: BaseException) -> bool:
-    return is_unique_violation(exc)
-
-
 # 日本語: ルームツリーの SELECT で取る列。attached_file_contents / message_parts /
 #         web_search_context は JSONB に添付ファイル本文がそのまま入るため、本文が要らない
 #         経路（リーフ判定・枝の走査）では読み出さない。
@@ -648,7 +644,7 @@ class ChatRepository:
                     return {"share_token": token, "expires_at": expires_at, "revoked_at": None, "is_reused": False}
                 return {**dict(row), "is_reused": False}
             except IntegrityError as exc:
-                if not _is_unique_violation(exc):
+                if not is_unique_violation(exc):
                     raise
                 await asyncio.sleep(DB_RETRY_BACKOFF_SECONDS)
                 await load_owned_room(self.session, room_id, user_id, ERROR_CHAT_ROOM_SHARE_FORBIDDEN)

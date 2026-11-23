@@ -101,7 +101,6 @@ from blueprints.auth_common import (
     _redirect_to_login_after_google_failure,
     _resolve_auth_limit_service,
     _resolve_llm_daily_limit_service,
-    _user_id_from_session,
 )
 from blueprints.auth_email import (
     api_send_email_code,
@@ -343,7 +342,6 @@ __all__ = [
     "_redirect_to_login_after_google_failure",
     "_resolve_auth_limit_service",
     "_resolve_llm_daily_limit_service",
-    "_user_id_from_session",
     "_validate_google_oauth_settings",
     "activate_parked_session",
     "api_current_user",

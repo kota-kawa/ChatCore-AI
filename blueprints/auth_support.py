@@ -8,11 +8,12 @@ so tests can replace behavior by patching attributes on blueprints.auth only.
 
 from __future__ import annotations
 
-import inspect
 import sys
 from typing import Any
 
 from fastapi import Request
+
+from services.async_utils import maybe_await
 
 
 # 読み込み済みの blueprints.auth モジュールを返す。未読み込みは設定ミスなので例外にする。
@@ -30,22 +31,12 @@ def dep(name: str) -> Any:
     return getattr(auth_module(), name)
 
 
-async def await_result(value: Any) -> Any:
-    """非同期の依存は await し、同期のテスト用代替はそのまま返す。
-
-    Await async dependencies while keeping unit-test doubles lightweight.
-    """
-    if inspect.isawaitable(value):
-        return await value
-    return value
-
-
 async def call_dependency(name: str, *args: Any, **kwargs: Any) -> Any:
     """認証の依存を名前で呼ぶ。DB 処理をスレッドへ逃がさず、同じイベントループで実行する。
 
     Call an auth dependency without routing database work through a thread.
     """
-    return await await_result(dep(name)(*args, **kwargs))
+    return await maybe_await(dep(name)(*args, **kwargs))
 
 
 # 試行回数制限サービスを blueprints.auth 経由で取得する。

@@ -18,7 +18,7 @@ from services.auth_limits import (
     AuthLimitService,
     consume_guest_chat_daily_limit,
     get_auth_limit_service,
-    get_seconds_until_tomorrow,
+    resolve_auth_limit_service,
 )
 from services.background_executor import submit_background_task
 from services.chat_context import build_context_messages
@@ -130,10 +130,12 @@ from services.llm_daily_limit import (
     consume_llm_daily_quota,
     get_llm_daily_limit_service,
     get_seconds_until_daily_reset,
+    resolve_llm_daily_limit_service,
 )
 from services.memory_search import search_memory_for_tool
 from services.personal_knowledge import search_personal_knowledge_for_tool
 from services.shared_prompt_lookup import search_shared_prompts_for_tool
+from services.time_windows import get_seconds_until_tomorrow
 from services.usage_limits import check_usage_limit
 from services.user_memory import load_user_memory_summary
 from services.user_skills import (
@@ -155,41 +157,12 @@ from . import (
     get_guest_room_ids,
     get_session_id,
     get_temporary_user_store_key,
+    legacy_error_response,
     register_guest_room,
     unregister_guest_room,
 )
 
 logger = logging.getLogger(__name__)
-
-# リクエストから認証制限サービスを解決するヘルパー関数
-# Helper function to resolve the AuthLimitService instance from the request.
-def _resolve_auth_limit_service(
-    request: Request,
-    service: AuthLimitService | None,
-) -> AuthLimitService:
-    """
-    リクエストまたは依存注入された値から、認証制限サービスを取得・解決します。
-    Resolves the AuthLimitService instance from the request context or dependency.
-    """
-    if isinstance(service, AuthLimitService):
-        return service
-    return get_auth_limit_service(request)
-
-
-# リクエストからLLMの1日あたり制限サービスを解決するヘルパー関数
-# Helper function to resolve the LlmDailyLimitService instance from the request.
-def _resolve_llm_daily_limit_service(
-    request: Request,
-    service: LlmDailyLimitService | None,
-) -> LlmDailyLimitService:
-    """
-    リクエストまたは依存注入された値から、LLMの1日あたり制限サービスを取得・解決します。
-    Resolves the LlmDailyLimitService instance from the request context or dependency.
-    """
-    if isinstance(service, LlmDailyLimitService):
-        return service
-    return get_llm_daily_limit_service(request)
-
 
 # リクエストからチャット生成サービスを解決するヘルパー関数
 # Helper function to resolve the ChatGenerationService instance from the request.
@@ -543,23 +516,6 @@ def _parse_before_message_id(raw_value: str | None) -> int | None:
     return parsed
 
 
-# レガシーなエラーレスポンス形式を FastAPI 互換の JSONResponse に整形するヘルパー関数
-# Format a legacy error response payload into a FastAPI-compatible response.
-def _legacy_error_response(result: Any):
-    """
-    レガシーな検証結果のタプル (payload, status_code) を、FastAPI 互換のJSONResponseに整形します。
-    Formats a legacy error response payload into a FastAPI-compatible response.
-    """
-    if not (isinstance(result, tuple) and len(result) == 2):
-        return None
-    payload, status_code = result
-    if payload is None:
-        return None
-    if isinstance(payload, dict) and isinstance(status_code, int):
-        return jsonify(payload, status_code=status_code)
-    return None
-
-
 # 認証結果からチャットルームのモード("normal" または "temporary")を判定する関数
 # Resolve room mode ("normal" or "temporary") based on ownership resolution.
 def _resolved_room_mode(owner_result: Any) -> str:
@@ -600,7 +556,7 @@ async def _resolve_authenticated_room_target(
         return "temporary", temporary_sid, None
 
     owner_result = await validate_room_owner(chat_room_id, user_id, forbidden_message)
-    legacy_response = _legacy_error_response(owner_result)
+    legacy_response = legacy_error_response(owner_result)
     if legacy_response is not None:
         return None, None, legacy_response
 
@@ -771,8 +727,8 @@ async def chat(
     新規のチャットメッセージを投稿し、AIの回答生成プロセスを起動します。
     Posts a new user message and triggers AI response generation.
     """
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
-    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
+    resolved_auth_limit_service = resolve_auth_limit_service(request, auth_limit_service)
+    resolved_llm_daily_limit_service = resolve_llm_daily_limit_service(
         request,
         llm_daily_limit_service,
     )
@@ -874,7 +830,7 @@ async def chat_regenerate(
     指定されたAI返答メッセージに対する再生成を開始します。DB保存ルームの場合、新たなメッセージブランチを作成します。
     Initiates regeneration of the assistant response for the target message.
     """
-    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(request, llm_daily_limit_service)
+    resolved_llm_daily_limit_service = resolve_llm_daily_limit_service(request, llm_daily_limit_service)
     resolved_chat_generation_service = _resolve_chat_generation_service(request, chat_generation_service)
 
     await run_blocking(cleanup_ephemeral_chats)
@@ -1031,7 +987,7 @@ async def chat_edit_and_regenerate(
     過去のユーザーメッセージを編集し、そこからの分岐（ブランチ）で新しいAI応答の生成を開始します。
     Edits a previous user message and spawns a new branch with a regenerated AI response.
     """
-    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(request, llm_daily_limit_service)
+    resolved_llm_daily_limit_service = resolve_llm_daily_limit_service(request, llm_daily_limit_service)
     resolved_chat_generation_service = _resolve_chat_generation_service(request, chat_generation_service)
 
     await run_blocking(cleanup_ephemeral_chats)

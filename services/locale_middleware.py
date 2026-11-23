@@ -7,7 +7,6 @@ It resolves from session, user preference, cookie, then Accept-Language, and set
 
 from __future__ import annotations
 
-import inspect
 import logging
 from http.cookies import CookieError, SimpleCookie
 from typing import Any
@@ -16,6 +15,7 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from services.async_utils import maybe_await
 from services.chat_service import get_user_preferred_locale
 from services.i18n import (
     LOCALE_COOKIE_NAME,
@@ -30,14 +30,6 @@ from services.i18n import (
 
 LOCALE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60
 logger = logging.getLogger(__name__)
-
-
-async def _await_result(value: Any) -> Any:
-    # 同期関数でもコルーチンでも、呼び出し側が同じ書き方で結果を受け取れるようにする。
-    # Let callers receive the result the same way whether the function is sync or a coroutine.
-    if inspect.isawaitable(value):
-        return await value
-    return value
 
 
 def _append_vary(headers: MutableHeaders, name: str) -> None:
@@ -182,7 +174,7 @@ class LocaleMiddleware:
             # Look up the stored preference only once per session; the LOADED flag records it even when none is set.
             if user_id and session.get(PREFERRED_LOCALE_LOADED_SESSION_KEY) is not True:
                 try:
-                    preferred_locale = await _await_result(
+                    preferred_locale = await maybe_await(
                         get_user_preferred_locale(int(user_id))
                     )
                 except Exception:

@@ -52,6 +52,7 @@ from services.web import (
     require_json_dict,
     validate_payload_model,
 )
+from services.web_session import authenticated_user_id
 
 from . import chat_bp
 
@@ -62,18 +63,6 @@ logger = logging.getLogger(__name__)
 TOOL_APPROVAL_DECIDE_RATE_KEY = "chat_tool_approval:decide:user"
 TOOL_APPROVAL_DECIDE_LIMIT = 30
 TOOL_APPROVAL_DECIDE_WINDOW_SECONDS = 60
-
-
-# セッションからログイン中のユーザー ID を整数で返す。未ログインや不正な値は None。
-# Return the signed-in user id from the session as an int; None when signed out or the value is invalid.
-def _authenticated_user_id(request: Request) -> int | None:
-    user_id = request.session.get("user_id")
-    if not user_id:
-        return None
-    try:
-        return int(user_id)
-    except (TypeError, ValueError):
-        return None
 
 
 # 未ログイン時の 403 応答。
@@ -142,7 +131,7 @@ async def decide_chat_tool_approval(
     request: Request,
     auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
 ):
-    user_id = _authenticated_user_id(request)
+    user_id = authenticated_user_id(request)
     if user_id is None:
         return _login_required()
     parsed_id = _parse_approval_id(approval_id)
@@ -215,7 +204,7 @@ async def decide_chat_tool_approval(
 # List the tools currently set to "always approve".
 @chat_bp.get("/api/chat/tool-auto-approvals", name="chat.list_tool_auto_approvals")
 async def get_chat_tool_auto_approvals(request: Request):
-    user_id = _authenticated_user_id(request)
+    user_id = authenticated_user_id(request)
     if user_id is None:
         return _login_required()
     try:
@@ -229,7 +218,7 @@ async def get_chat_tool_auto_approvals(request: Request):
 # Revoke "always approve" for the given tool.
 @chat_bp.delete("/api/chat/tool-auto-approvals/{tool_name}", name="chat.revoke_tool_auto_approval")
 async def delete_chat_tool_auto_approval(tool_name: str, request: Request):
-    user_id = _authenticated_user_id(request)
+    user_id = authenticated_user_id(request)
     if user_id is None:
         return _login_required()
     try:

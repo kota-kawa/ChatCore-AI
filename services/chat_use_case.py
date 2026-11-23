@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import html
-import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
@@ -23,7 +22,7 @@ from starlette.responses import Response
 
 from services.answer_trace import is_answer_trace_part, with_answer_trace_part
 from services.api_errors import ApiServiceError
-from services.async_utils import run_blocking
+from services.async_utils import maybe_await, run_blocking
 from services.attached_files import (
     AttachedFileValidationError,
     PreparedAttachedFile,
@@ -139,14 +138,6 @@ _GENERATION_ALREADY_RUNNING_MESSAGE = "このチャットルームでは回答�
 _GENERATION_CAPACITY_EXCEEDED_MESSAGE = (
     "生成の同時実行数が上限に達しています。しばらく待ってから再試行してください。"
 )
-
-
-async def _maybe_await(value: Any) -> Any:
-    """本番の依存は非同期だが、軽量な単体テストの代役は同期の値を返す。どちらも受け付ける。
-
-    Accept async production dependencies while keeping light unit doubles usable.
-    """
-    return await value if inspect.isawaitable(value) else value
 
 
 def _messages_including_reply(history: list[dict[str, Any]], reply: str) -> list[dict[str, Any]]:
@@ -464,7 +455,7 @@ class ChatPostUseCase:
 
         if turn.authenticated:
             try:
-                room_mode, sid, legacy_response = await _maybe_await(
+                room_mode, sid, legacy_response = await maybe_await(
                     deps.rooms.resolve_authenticated_room_target(
                         turn.chat_room_id,
                         turn.user_id,
@@ -557,7 +548,7 @@ class ChatPostUseCase:
         # 親の決定・LLM履歴・過去ターンの検索結果はすべて同じ1回のツリー読み出しから導ける。
         # Persisting and loading share one transaction. A new turn extends the active branch, so the
         # parent, the LLM history and the prior search evidence all come from the same tree read.
-        context = await _maybe_await(
+        context = await maybe_await(
             deps.persistence.store_user_message_and_load_turn_context(
                 turn.chat_room_id,
                 turn.formatted_user_message,
@@ -591,7 +582,7 @@ class ChatPostUseCase:
         if supersede is None or turn.user_id is None:
             return
         try:
-            await _maybe_await(supersede(turn.chat_room_id, turn.user_id))
+            await maybe_await(supersede(turn.chat_room_id, turn.user_id))
         except Exception:
             # 無効化に失敗しても発言は受け付ける。古いカードは次の発言か期限で無効になる。
             # A failed supersede does not block the message; old cards retire on the next
@@ -754,12 +745,12 @@ class ChatPostUseCase:
             try:
                 if deps.prompts.load_enabled_user_skills is not None:
                     enabled_user_skills = list(
-                        await _maybe_await(deps.prompts.load_enabled_user_skills(turn.user_id)) or []
+                        await maybe_await(deps.prompts.load_enabled_user_skills(turn.user_id)) or []
                     )
             except Exception:
                 deps.logger.warning("Failed to load enabled user skills; proceeding without them.")
             try:
-                user = await _maybe_await(deps.prompts.get_user_by_id(turn.user_id))
+                user = await maybe_await(deps.prompts.get_user_by_id(turn.user_id))
                 turn.user_profile_prompt = deps.prompts.build_user_profile_prompt(user)
             except Exception:
                 deps.logger.warning("Failed to load user profile context; proceeding without it.")
@@ -793,7 +784,7 @@ class ChatPostUseCase:
         if not turn.targets_normal_room():
             return
         try:
-            project_context = await _maybe_await(deps.persistence.load_project_context(turn.chat_room_id))
+            project_context = await maybe_await(deps.persistence.load_project_context(turn.chat_room_id))
             if project_context:
                 turn.project_instructions = str(project_context.get("instructions") or "") or None
         except Exception:
@@ -811,7 +802,7 @@ class ChatPostUseCase:
         if turn.user_id is None or not turn.uses_user_memory:
             return
         try:
-            turn.user_memory = await _maybe_await(deps.persistence.load_user_memory_summary(turn.user_id))
+            turn.user_memory = await maybe_await(deps.persistence.load_user_memory_summary(turn.user_id))
         except Exception as exc:
             # 記憶の文面が載りうる例外メッセージは出さず、種類だけ残す。
             # Log only the exception type: its message could carry memory text.
@@ -827,7 +818,7 @@ class ChatPostUseCase:
         if not turn.targets_normal_room() or turn.should_auto_title_room:
             return
         try:
-            summary_payload = await _maybe_await(deps.persistence.get_room_summary(turn.chat_room_id))
+            summary_payload = await maybe_await(deps.persistence.get_room_summary(turn.chat_room_id))
             turn.room_summary = str((summary_payload or {}).get("summary") or "")
         except Exception:
             deps.logger.warning("Failed to load room summary; proceeding without it.")
@@ -1049,7 +1040,7 @@ class ChatPostUseCase:
                 on_finished=on_finished,
                 on_error=partial(
                     _run_async_callback,
-                    lambda: _maybe_await(
+                    lambda: maybe_await(
                         deps.persistence.cleanup_unanswered_user_messages(
                             turn.chat_room_id,
                             user_id=turn.user_id,
@@ -1170,7 +1161,7 @@ class ChatPostUseCase:
                 # A reply with approval cards is saved in the same transaction that ties the
                 # approval rows to it.
                 assistant_message_id = _run_async_callback(
-                    lambda: _maybe_await(
+                    lambda: maybe_await(
                         save_with_approvals(
                             chat_room_id=chat_room_id,
                             user_id=user_id,
@@ -1184,7 +1175,7 @@ class ChatPostUseCase:
                 )
             else:
                 assistant_message_id = _run_async_callback(
-                    lambda: _maybe_await(
+                    lambda: maybe_await(
                         deps.persistence.save_message_to_db(
                             chat_room_id,
                             response,
@@ -1243,7 +1234,7 @@ class ChatPostUseCase:
                 # 要約はストリーミング完了後に一度だけ更新する。
                 # chunk 単位で更新すると未完成の応答が要約へ混ざり、DB 書き込みも増える。
                 _run_async_callback(
-                    lambda: _maybe_await(
+                    lambda: maybe_await(
                         deps.persistence.rebuild_room_summary(
                             chat_room_id,
                             updated_messages,
@@ -1494,7 +1485,7 @@ class ChatPostUseCase:
             )
             return None
 
-        turn.saved_assistant_message_id = await _maybe_await(
+        turn.saved_assistant_message_id = await maybe_await(
             deps.persistence.save_message_to_db(
                 turn.chat_room_id,
                 turn.bot_reply,
@@ -1538,7 +1529,7 @@ class ChatPostUseCase:
             # 保存済みの応答はこのターンの履歴の末尾に足したものと一致する。
             # The persisted reply is exactly this turn's history with the reply appended.
             all_messages = _messages_including_reply(turn.all_messages, turn.bot_reply)
-            await _maybe_await(
+            await maybe_await(
                 deps.persistence.rebuild_room_summary(
                     turn.chat_room_id,
                     all_messages,
@@ -1556,7 +1547,7 @@ class ChatPostUseCase:
     # ------------------------------------------------------------------
     async def _discard_unanswered_user_message(self, turn: _ChatPostTurn) -> None:
         """回答が付かなかったこのターンのユーザー発話を掃除します / Clean up this turn's unanswered user message."""
-        await _maybe_await(
+        await maybe_await(
             self.deps.persistence.cleanup_unanswered_user_messages(
                 turn.chat_room_id,
                 user_id=turn.user_id,
@@ -1586,7 +1577,7 @@ class ChatPostUseCase:
         if not title or title in allowed_current_titles:
             return None
         try:
-            updated = await _maybe_await(
+            updated = await maybe_await(
                 self.deps.persistence.rename_chat_room_if_current_title_in(
                     chat_room_id,
                     title,
@@ -1616,7 +1607,7 @@ class ChatPostUseCase:
         if user_id is None or room_mode != "normal" or assistant_message_id is None:
             return
         try:
-            if not await _maybe_await(self.deps.background.should_extract_context(user_id)):
+            if not await maybe_await(self.deps.background.should_extract_context(user_id)):
                 return
             self.deps.background.schedule_context_extraction(
                 user_id,

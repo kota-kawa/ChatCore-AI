@@ -14,17 +14,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import unicodedata
-from collections.abc import Awaitable, Callable
 from hashlib import sha256
-from typing import Any, TypeVar
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.api_errors import ApiServiceError
 from services.context_vault_embeddings import build_context_fact_embedding_text, schedule_embedding
+from services.context_vault_extraction import normalize_for_comparison
 from services.context_vault_reconcile import (
     CONTEXT_RECONCILE_MODEL,
     RECONCILE_MAX_DISTANCE,
@@ -36,7 +33,7 @@ from services.context_vault_reconcile import (
     nearby_for_candidate,
     resolve_reconcile_decisions,
 )
-from services.db import is_retryable_db_error, session_scope
+from services.db import in_transaction_with_retry
 from services.embeddings import embeddings_available, generate_embedding
 from services.llm import get_llm_json_response
 from services.repositories.context_fact_candidate_repository import ContextFactCandidateRepository
@@ -51,10 +48,6 @@ from services.request_models import (
 from services.response_models import ContextExtractionSettingsResponse
 
 logger = logging.getLogger(__name__)
-
-MAX_DB_WRITE_ATTEMPTS = 3
-DB_RETRY_BACKOFF_SECONDS = 0.05
-T = TypeVar("T")
 
 
 # LLM が返した候補 1 件の検証モデル。不正な候補は呼び出し側で捨てる（余分なキーは無視）。
@@ -82,43 +75,14 @@ def _repository(session: AsyncSession) -> ContextFactCandidateRepository:
     return ContextFactCandidateRepository(session)
 
 
-async def _transaction(
-    session: AsyncSession | None,
-    operation: Callable[[AsyncSession], Awaitable[T]],
-) -> T:
-    """記憶の自動抽出のユースケースを明示的なトランザクションで実行する。session を渡された場合は呼び出し側に任せ、
-    渡されない場合は一時的な DB エラーに限り最大 MAX_DB_WRITE_ATTEMPTS 回までバックオフ付きで再試行する。
-
-    Run one extraction use case in an explicit transaction. A caller-supplied session is used as is;
-    otherwise retryable DB errors are retried with backoff up to MAX_DB_WRITE_ATTEMPTS times.
-    """
-    if session is not None:
-        return await operation(session)
-
-    for attempt in range(MAX_DB_WRITE_ATTEMPTS):
-        try:
-            async with session_scope() as db, db.begin():
-                return await operation(db)
-        except ApiServiceError:
-            raise
-        except SQLAlchemyError as exc:
-            if attempt + 1 >= MAX_DB_WRITE_ATTEMPTS or not is_retryable_db_error(exc):
-                raise
-            await asyncio.sleep(DB_RETRY_BACKOFF_SECONDS * (attempt + 1))
-    raise RuntimeError("Context extraction transaction retry loop exhausted.")
-
-
 # 正規化（NFKC・空白圧縮・大文字小文字無視）した種別・題名・本文のハッシュ。本人が却下した候補と同じ内容を再び保存しないために使う。
 # Hash of the normalized type/title/content (NFKC, collapsed whitespace, casefolded), used to avoid saving content the owner rejected again.
 def _fingerprint(candidate: _ExtractedCandidateInput) -> str:
-    def normalized(value: str) -> str:
-        return " ".join(unicodedata.normalize("NFKC", value).split()).casefold()
-
     canonical = json.dumps(
         {
-            "content": normalized(candidate.content),
+            "content": normalize_for_comparison(candidate.content),
             "fact_type": candidate.fact_type,
-            "title": normalized(candidate.title),
+            "title": normalize_for_comparison(candidate.title),
         },
         ensure_ascii=False,
         separators=(",", ":"),
@@ -189,7 +153,7 @@ async def _classify_candidates(user_id: int, prepared: list[dict[str, Any]], mat
         }
         return unique, active
 
-    unique_indexes, active_matches = await _transaction(None, operation)
+    unique_indexes, active_matches = await in_transaction_with_retry(None, operation)
     matched_fact_ids.update(active_matches)
     return unique_indexes
 
@@ -251,7 +215,7 @@ async def _resolve_against_nearby_memory(
                 related[index] = nearby
         return related
 
-    related_by_candidate = await _transaction(None, read_nearby)
+    related_by_candidate = await in_transaction_with_retry(None, read_nearby)
     if not related_by_candidate:
         return {}
     messages = build_reconcile_messages(prepared, related_by_candidate)
@@ -349,7 +313,7 @@ async def store_extracted_facts(
             plans=plans,
         )
 
-    saved_facts = await _transaction(session, operation)
+    saved_facts = await in_transaction_with_retry(session, operation)
     if session is None:
         for fact in saved_facts:
             if fact.get("embedding_status") == "ready":
@@ -369,7 +333,7 @@ async def is_context_extraction_enabled(
     *,
     session: AsyncSession | None = None,
 ) -> bool:
-    return await _transaction(
+    return await in_transaction_with_retry(
         session,
         lambda db: _repository(db).get_extraction_settings(user_id),
     )
@@ -391,7 +355,7 @@ async def update_extraction_settings(
     *,
     session: AsyncSession | None = None,
 ) -> ContextExtractionSettingsResponse:
-    updated = await _transaction(
+    updated = await in_transaction_with_retry(
         session,
         lambda db: _repository(db).update_extraction_settings(user_id, enabled),
     )

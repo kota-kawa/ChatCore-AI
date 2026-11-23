@@ -29,6 +29,7 @@ from services.auth_limits import (
     consume_rate_limit,
     get_auth_limit_service,
     get_request_client_ip,
+    resolve_auth_limit_service,
 )
 from services.chat_service import (
     add_task as add_task_record,
@@ -65,6 +66,7 @@ from services.llm_daily_limit import (
     get_llm_daily_limit_service,
     get_seconds_until_daily_reset,
     get_seconds_until_monthly_reset,
+    resolve_llm_daily_limit_service,
 )
 from services.manual_rag import search_manual
 from services.memo_agent_actions import (
@@ -171,36 +173,6 @@ Response rules:
 - Do not use Markdown that is purely decorative.
 - When advising on screen operations or prompt writing, give concrete drafts and improvement suggestions.
 """.strip()
-
-
-# リクエストから認証制限サービスを解決するヘルパー関数
-# Helper function to resolve the AuthLimitService instance from the request.
-def _resolve_auth_limit_service(
-    request: Request,
-    service: AuthLimitService | None,
-) -> AuthLimitService:
-    """
-    リクエストオブジェクトまたはDependsによる依存注入値から、AuthLimitServiceのインスタンスを解決します。
-    Resolves the AuthLimitService instance from the request context or dependency.
-    """
-    if isinstance(service, AuthLimitService):
-        return service
-    return get_auth_limit_service(request)
-
-
-# リクエストからLLMの1日あたり制限サービスを解決するヘルパー関数
-# Helper function to resolve the LlmDailyLimitService instance from the request.
-def _resolve_llm_daily_limit_service(
-    request: Request,
-    service: LlmDailyLimitService | None,
-) -> LlmDailyLimitService:
-    """
-    リクエストオブジェクトまたはDependsによる依存注入値から、LlmDailyLimitServiceのインスタンスを解決します。
-    Resolves the LlmDailyLimitService instance from the request context or dependency.
-    """
-    if isinstance(service, LlmDailyLimitService):
-        return service
-    return get_llm_daily_limit_service(request)
 
 
 # プロンプト支援の利用制限チェックを行う関数
@@ -747,8 +719,8 @@ async def prompt_assist(
     """
     # レート制限サービスを解決
     # Resolve the AuthLimitService and LlmDailyLimitService instances
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
-    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
+    resolved_auth_limit_service = resolve_auth_limit_service(request, auth_limit_service)
+    resolved_llm_daily_limit_service = resolve_llm_daily_limit_service(
         request,
         llm_daily_limit_service,
     )
@@ -881,8 +853,8 @@ async def ai_agent(
     """
     # 制限サービスを解決
     # Resolve the AuthLimitService and LlmDailyLimitService instances
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
-    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
+    resolved_auth_limit_service = resolve_auth_limit_service(request, auth_limit_service)
+    resolved_llm_daily_limit_service = resolve_llm_daily_limit_service(
         request,
         llm_daily_limit_service,
     )

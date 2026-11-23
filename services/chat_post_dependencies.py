@@ -49,9 +49,9 @@ from services.web_search import WebSearchResult
 _ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 # 日本語: 本番の実装は async だが、単体テストは同期の代役を渡す。ユースケース側の
-#         _maybe_await が両方を受けるため、その事実をそのまま型で表す。
+#         maybe_await が両方を受けるため、その事実をそのまま型で表す。
 # English: Production implementations are async while focused unit doubles stay synchronous.
-#          The use case funnels these through _maybe_await, so the type says both are accepted.
+#          The use case funnels these through maybe_await, so the type says both are accepted.
 type MaybeAwaitable[T] = Awaitable[T] | T
 
 # 日本語: ルーム所有権の解決結果（room_mode, 一時ストアキー, 早期返却レスポンス）。

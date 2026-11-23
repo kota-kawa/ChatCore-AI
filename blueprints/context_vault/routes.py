@@ -46,7 +46,6 @@ from services.error_messages import (
     ERROR_CONTEXT_VAULT_PORTABILITY_FAILED,
     ERROR_LOGIN_REQUIRED,
 )
-from services.repositories.memo_helpers import user_id_from_session
 from services.request_models import (
     ContextExtractionSettingsUpdateRequest,
     ContextFactCreateRequest,
@@ -64,6 +63,7 @@ from services.web import (
     require_json_dict,
     validate_payload_model,
 )
+from services.web_session import user_id_from_session
 
 from .constants import (
     CONTEXT_FACT_CREATE_ERROR,

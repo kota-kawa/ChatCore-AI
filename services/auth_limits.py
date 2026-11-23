@@ -15,7 +15,6 @@ import math
 import os
 import time
 from collections.abc import Callable
-from datetime import datetime, timedelta
 from functools import partial
 from threading import Lock
 from typing import Any
@@ -24,6 +23,7 @@ from fastapi import Request
 
 from services.cache import get_redis_client
 from services.env_settings import env_int_in_range
+from services.time_windows import get_seconds_until_tomorrow
 
 logger = logging.getLogger(__name__)
 
@@ -189,21 +189,6 @@ def get_request_client_ip(request: Request) -> str:
 # Hash an identifier (IP, email, etc.) with SHA-256 for privacy protection
 def _hash_identifier(raw_value: str) -> str:
     return hashlib.sha256(raw_value.encode("utf-8")).hexdigest()
-
-
-# 本日の残り秒数（翌日の0:00AMまで）を計算する
-# Calculate remaining seconds of today until midnight (tomorrow 0:00AM)
-def _seconds_until_tomorrow() -> int:
-    now = datetime.now()
-    tomorrow = datetime.combine(now.date() + timedelta(days=1), datetime.min.time())
-    seconds = int((tomorrow - now).total_seconds())
-    return max(seconds, 1)
-
-
-# 翌日までの残り秒数を取得する外部用ラッパー
-# Wrapper function to get remaining seconds until tomorrow
-def get_seconds_until_tomorrow() -> int:
-    return _seconds_until_tomorrow()
 
 
 # ユーザー認証やチャットに関するレート制限を処理するサービス
@@ -377,7 +362,7 @@ return {1, current, key_ttl}
             "guest_chat:daily:ip",
             client_ip,
             limit=daily_limit,
-            window_seconds=_seconds_until_tomorrow(),
+            window_seconds=get_seconds_until_tomorrow(),
         )
         if allowed:
             return True, None
@@ -654,6 +639,14 @@ def get_auth_limit_service(request: Request = None) -> AuthLimitService:
         if isinstance(service, AuthLimitService):
             return service
     return _default_auth_limit_service
+
+
+# 渡されたサービスが AuthLimitService ならそれを使い、そうでなければリクエストから取得する
+# Use the given service when it is an AuthLimitService; otherwise resolve it from the request.
+def resolve_auth_limit_service(request: Request, service: AuthLimitService | None) -> AuthLimitService:
+    if isinstance(service, AuthLimitService):
+        return service
+    return get_auth_limit_service(request)
 
 
 # メモリ上のレートリミット状態をクリアする

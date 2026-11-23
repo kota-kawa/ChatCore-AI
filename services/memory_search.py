@@ -21,6 +21,7 @@ from typing import Any
 from services.context_vault_service import search_facts_ranked
 from services.memory_search_ranking import MEMORY_SEARCH_RESULT_LIMIT
 from services.selected_reference_context import safe_json
+from services.text_trim import trim_text
 from services.user_memory import last_mentioned_date
 
 logger = logging.getLogger(__name__)
@@ -70,20 +71,13 @@ def get_memory_search_tool_definition() -> dict[str, Any]:
     }
 
 
-def _trim(text: str, limit: int) -> str:
-    normalized = (text or "").strip()
-    if len(normalized) <= limit:
-        return normalized
-    return f"{normalized[:limit]}…"
-
-
 def _memory_entry(fact: Mapping[str, Any]) -> dict[str, Any]:
     # モデルへ渡す 1 件。確認済みかと出所は、本人が確かめた記憶と食い違うときの根拠の強さを判断する材料になる（ADR 0016）。
     # One memory as the model sees it. Confirmation and source tell it how strong the evidence is when memories disagree (ADR 0016).
     return {
         "type": fact.get("fact_type"),
         "title": fact.get("title"),
-        "content": _trim(str(fact.get("content") or ""), MAX_MEMORY_CONTENT_CHARS),
+        "content": trim_text(str(fact.get("content") or ""), MAX_MEMORY_CONTENT_CHARS),
         "importance": fact.get("importance"),
         "last_mentioned": last_mentioned_date(fact.get("last_mentioned_at")),
         "source_kind": fact.get("source_kind"),

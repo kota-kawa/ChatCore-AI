@@ -23,7 +23,7 @@ from services.auth_limits import (
     AuthLimitService,
     consume_guest_chat_daily_limit,
     get_auth_limit_service,
-    get_seconds_until_tomorrow,
+    resolve_auth_limit_service,
 )
 from services.chat_service import (
     create_chat_room_in_db,
@@ -60,6 +60,7 @@ from services.request_models import (
     ShareChatRoomRequest,
 )
 from services.share_common import build_public_share_url
+from services.time_windows import get_seconds_until_tomorrow
 from services.web import (
     jsonify,
     jsonify_rate_limited,
@@ -75,6 +76,7 @@ from . import (
     ephemeral_store,
     get_session_id,
     get_temporary_user_store_key,
+    legacy_error_response,
     register_guest_room,
     unregister_guest_room,
 )
@@ -128,21 +130,6 @@ CHAT_ROOMS_DEFAULT_PAGE_SIZE = 20
 # チャットルーム一覧の最大許容表示件数
 # Maximum allowed page size for chat room lists to prevent over-fetching.
 CHAT_ROOMS_MAX_PAGE_SIZE = 100
-
-
-# リクエストから認証制限サービスを解決するヘルパー関数
-# Helper function to resolve the AuthLimitService instance from the request.
-def _resolve_auth_limit_service(
-    request: Request,
-    service: AuthLimitService | None,
-) -> AuthLimitService:
-    """
-    引数で渡された制限サービス、あるいはRequestインスタンスからAuthLimitServiceのインスタンスを解決します。
-    Resolves the AuthLimitService instance from the provided parameter or Request.
-    """
-    if isinstance(service, AuthLimitService):
-        return service
-    return get_auth_limit_service(request)
 
 
 # クエリ値から正の整数をパースし、デフォルト値の設定および上限クランプを行う関数
@@ -279,7 +266,7 @@ async def _resolve_authenticated_room_mode(
     # DB内のルームの場合、所有者が正しいか検証
     # If room is in DB, validate that the current user owns it
     owner_result = await validate_room_owner(room_id, user_id, forbidden_message)
-    legacy_response = _legacy_error_response(owner_result)
+    legacy_response = legacy_error_response(owner_result)
     if legacy_response is not None:
         # 所有権のないエラーレスポンスがある場合は返却
         # Return error response if validation fails
@@ -307,23 +294,6 @@ async def _delete_rooms_for_user(room_ids: list[str], user_id: int) -> dict[str,
     return await delete_chat_rooms_for_user(room_ids, user_id)
 
 
-# レガシーなエラーレスポンス形式を FastAPI 互換の JSONResponse に整形するヘルパー関数
-# Format a legacy error response payload into a FastAPI-compatible response.
-def _legacy_error_response(result: Any):
-    """
-    検証サービスが返したタプル (payload, status_code) 形式のエラーオブジェクトを、FastAPIのJSONResponseに整形します。
-    Formats a legacy error tuple (payload, status_code) into a FastAPI JSON response.
-    """
-    if not (isinstance(result, tuple) and len(result) == 2):
-        return None
-    payload, status_code = result
-    if payload is None:
-        return None
-    if isinstance(payload, dict) and isinstance(status_code, int):
-        return jsonify(payload, status_code=status_code)
-    return None
-
-
 # 新しいチャットルーム（通常または一時ルーム）を作成するAPIエンドポイント
 # API endpoint to create a new chat room (normal/persisted or temporary/ephemeral).
 @chat_bp.post("/api/new_chat_room", name="chat.new_chat_room")
@@ -337,7 +307,7 @@ async def new_chat_room(
     """
     # 制限サービスを解決
     # Resolve the AuthLimitService instance
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    resolved_auth_limit_service = resolve_auth_limit_service(request, auth_limit_service)
 
     # 期限切れのエフェメラルチャットルームを自動クリーンアップ
     # Automatically clean up expired guest/temporary rooms
@@ -921,7 +891,7 @@ async def fork_shared_chat_room(
     Copies a shared conversation into a chat room owned by the viewer so they can continue it.
     The shared source room stays read-only and is never modified.
     """
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    resolved_auth_limit_service = resolve_auth_limit_service(request, auth_limit_service)
     await run_blocking(cleanup_ephemeral_chats)
 
     data, error_response = await require_json_dict(request)

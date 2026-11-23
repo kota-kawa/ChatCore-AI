@@ -133,7 +133,7 @@ class ContextVaultCandidateServiceTestCase(unittest.IsolatedAsyncioTestCase):
         saved = [_fact(id=31, revision=1), _fact(id=32, title="Second", content="Other", revision=1)]
         candidates = [{"fact_type": "project", "title": "T", "content": "C"}]
         with patch(
-            "services.context_vault_candidate_service._transaction",
+            "services.context_vault_candidate_service.in_transaction_with_retry",
             new=AsyncMock(return_value=saved),
         ), patch("services.context_vault_candidate_service.schedule_embedding") as schedule, patch(
             "services.context_vault_candidate_service._plan_reconciliation", new=AsyncMock(return_value={})
@@ -270,7 +270,7 @@ class _ReconcileHarness:
         return [
             patch(f"{_MODULE}._repository", return_value=self.repo),
             patch(f"{_MODULE}.ContextFactRepository", return_value=self.facts),
-            patch(f"{_MODULE}._transaction", new=self._transaction),
+            patch(f"{_MODULE}.in_transaction_with_retry", new=self._transaction),
             patch(f"{_MODULE}.embeddings_available", return_value=embeddings_available),
             patch(f"{_MODULE}.generate_embedding", side_effect=self._generate_embedding),
             patch(f"{_MODULE}.get_llm_json_response", side_effect=self._llm),

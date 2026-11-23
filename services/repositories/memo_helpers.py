@@ -1,13 +1,12 @@
-"""メモ機能で共通して使う小さな純粋関数(タイトルの補完、メモ本文のパース、日付フィルターの変換、セッションからのユーザー ID 取得)。
+"""メモ機能で共通して使う小さな純粋関数(タイトルの補完、メモ本文のパース、日付フィルターの変換)。
 
-Small pure helpers shared by the memo feature: title resolution, memo text parsing, date-filter conversion and session user-id extraction.
+Small pure helpers shared by the memo feature: title resolution, memo text parsing, and date-filter conversion.
 """
 
 from __future__ import annotations
 
 import json
 from datetime import date, datetime, time
-from typing import Any
 
 
 def ensure_title(ai_response: str, provided_title: str) -> str:
@@ -41,26 +40,6 @@ def ensure_title(ai_response: str, provided_title: str) -> str:
     # 代替のデフォルトタイトル
     # Fallback default title.
     return "新しいメモ"
-
-
-def user_id_from_session(session: dict[str, Any]) -> int | None:
-    """
-    セッションからユーザーIDを安全に取得する関数
-    Safely extract and validate the user ID from the session.
-
-    Args:
-        session (dict[str, Any]): セッション辞書 / The session dictionary.
-
-    Returns:
-        int | None: 有効なユーザーID。無効または未設定の場合は None / Valid user ID or None if invalid or not set.
-    """
-    user_id = session.get("user_id")
-
-    # user_id が整数型である場合のみ有効として返却
-    # Return user_id only if it is of type int.
-    if isinstance(user_id, int):
-        return user_id
-    return None
 
 
 def parse_memo_text(raw: str | None) -> str:

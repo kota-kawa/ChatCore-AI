@@ -24,7 +24,7 @@ from pydantic import AnyHttpUrl, BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api_errors import ApiServiceError
-from services.db import session_scope
+from services.db import in_transaction, session_scope
 from services.error_messages import (
     ERROR_SHARED_SKILL_CONTENT_MISSING,
     ERROR_SHARED_SKILL_INVALID_TYPE,
@@ -151,19 +151,6 @@ class SharedContentService:
         if session is not None:
             return await operation(session)
         async with session_scope() as owned_session:
-            return await operation(owned_session)
-
-    # 日本語: 書き込みを実行する。セッションが渡されなければ自前でトランザクションを開き、成功時に確定する。
-    # 渡された場合は呼び出し側が確定する。
-    # English: Run a write. Without a given session it opens its own transaction and commits on success; with one, the caller commits.
-    @staticmethod
-    async def _write(
-        session: AsyncSession | None,
-        operation: Callable[[AsyncSession], Awaitable[T]],
-    ) -> T:
-        if session is not None:
-            return await operation(session)
-        async with session_scope() as owned_session, owned_session.begin():
             return await operation(owned_session)
 
     # 日本語: 公開投稿を新しい順に 1 ページ返す。検索条件を指紋にしてカーソルへ埋め込み、条件が違うカーソルは拒否する。
@@ -450,15 +437,15 @@ class SharedContentService:
             ),
         )
 
-    # 日本語: 閲覧数・表示回数の記録は書き込みなので _write を通す。
-    # English: Recording views and impressions is a write, so it goes through _write.
+    # 日本語: 閲覧数・表示回数の記録は書き込みなので in_transaction を通す。
+    # English: Recording views and impressions is a write, so it goes through in_transaction.
     async def record_public_view(
         self,
         prompt_id: int,
         *,
         session: AsyncSession | None = None,
     ) -> int | None:
-        return await self._write(
+        return await in_transaction(
             session,
             lambda active: self._view_repository.increment_public_view(active, prompt_id),
         )
@@ -469,7 +456,7 @@ class SharedContentService:
         *,
         session: AsyncSession | None = None,
     ) -> int:
-        return await self._write(
+        return await in_transaction(
             session,
             lambda active: self._impression_repository.increment_public_impressions(active, prompt_ids),
         )
@@ -513,7 +500,7 @@ class SharedContentService:
             await self._resource_repository.insert_many(active, prompt_id, resources)
             return prompt_id
 
-        return await self._write(session, operation)
+        return await in_transaction(session, operation)
 
     # 日本語: 自分の投稿を更新する。resources が None なら資源は変えない。更新できたときだけ埋め込みの再計算を予約する。
     # English: Update the user's own post. resources=None leaves resources unchanged; embedding recomputation is scheduled only when an
@@ -554,7 +541,7 @@ class SharedContentService:
                 await self._resource_repository.replace_for_prompt(active, prompt_id, resources)
             return updated
 
-        updated = await self._write(session, operation)
+        updated = await in_transaction(session, operation)
         if updated:
             schedule_prompt_embedding(prompt_id)
         return updated
@@ -582,7 +569,7 @@ class SharedContentService:
             )
             return attachments, deleted
 
-        return await self._write(session, operation)
+        return await in_transaction(session, operation)
 
     async def get_active_prompt_attachments(
         self,
@@ -649,7 +636,7 @@ class SharedContentService:
                 prompt_template=prompt_template,
             )
 
-        return await self._write(session, operation)
+        return await in_transaction(session, operation)
 
     async def import_prompt_as_skill(
         self,
@@ -698,7 +685,7 @@ class SharedContentService:
                 "added_to_skills": True,
             }, 201 if created else 200
 
-        return await self._write(session, operation)
+        return await in_transaction(session, operation)
 
     # 日本語: ここから report_comment までは、いいね・コメント・通報の操作をリポジトリへ渡す委譲。判定や重複抑止はリポジトリ側にある。
     # English: From here to report_comment, methods hand like/comment/report operations to the repository, which owns the checks and
@@ -710,7 +697,7 @@ class SharedContentService:
         prompt_id: int,
         session: AsyncSession | None = None,
     ) -> tuple[dict[str, Any], int]:
-        return await self._write(
+        return await in_transaction(
             session,
             lambda active: self._repository.remove_prompt_as_task(
                 active,
@@ -726,7 +713,7 @@ class SharedContentService:
         prompt_id: int,
         session: AsyncSession | None = None,
     ) -> tuple[dict[str, Any], int]:
-        return await self._write(
+        return await in_transaction(
             session,
             lambda active: self._repository.add_like(
                 active,
@@ -742,7 +729,7 @@ class SharedContentService:
         prompt_id: int,
         session: AsyncSession | None = None,
     ) -> int:
-        return await self._write(
+        return await in_transaction(
             session,
             lambda active: self._repository.remove_like(
                 active,
@@ -780,7 +767,7 @@ class SharedContentService:
         duplicate_window_seconds: int,
         session: AsyncSession | None = None,
     ) -> tuple[dict[str, Any], int]:
-        return await self._write(
+        return await in_transaction(
             session,
             lambda active: self._repository.add_comment(
                 active,
@@ -800,7 +787,7 @@ class SharedContentService:
         actor_is_admin: bool,
         session: AsyncSession | None = None,
     ) -> tuple[dict[str, Any], int]:
-        return await self._write(
+        return await in_transaction(
             session,
             lambda active: self._repository.delete_comment(
                 active,
@@ -820,7 +807,7 @@ class SharedContentService:
         auto_hide_threshold: int,
         session: AsyncSession | None = None,
     ) -> tuple[dict[str, Any], int]:
-        return await self._write(
+        return await in_transaction(
             session,
             lambda active: self._repository.report_comment(
                 active,

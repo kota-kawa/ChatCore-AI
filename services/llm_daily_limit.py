@@ -9,7 +9,7 @@ Counts atomically in Redis through a Lua script, falling back to in-process memo
 import hashlib
 import logging
 from collections.abc import Callable
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from threading import Lock
 from typing import Any
 
@@ -17,6 +17,7 @@ from fastapi import Request
 
 from services.cache import get_redis_client
 from services.env_settings import env_int_in_range
+from services.time_windows import get_seconds_until_tomorrow
 
 DEFAULT_LLM_DAILY_API_LIMIT = 300
 LLM_DAILY_API_LIMIT_ENV = "LLM_DAILY_API_LIMIT"
@@ -43,17 +44,6 @@ def _get_limit(env_name: str, default_limit: int) -> int:
     # 異常値はデフォルトへフォールバックし、警告ログを残します。
     # Fall back to the default on invalid values, logging a warning.
     return env_int_in_range(env_name, default_limit, minimum=0, warn_on_invalid=True)
-
-
-# 現在時刻から翌日の深夜0時までの残り時間を秒単位で計算します。
-# Calculate the remaining seconds from now until midnight of the next day.
-def _seconds_until_tomorrow() -> int:
-    # 日次クォータのキー期限を「次の0時」までに合わせます。
-    # Compute TTL that expires at the next midnight.
-    now = datetime.now()
-    tomorrow = datetime.combine(now.date() + timedelta(days=1), datetime.min.time())
-    seconds = int((tomorrow - now).total_seconds())
-    return max(seconds, 1)
 
 
 # 現在時刻から翌月1日の0時までの残り時間を秒単位で計算します。
@@ -86,7 +76,7 @@ def _build_quota_key(key_prefix: str, period: str, user_key: str | None) -> str:
 # 日次リセット（翌日の深夜0時）までの残り秒数を取得します。
 # Retrieve the remaining seconds until the daily reset (midnight of the next day).
 def get_seconds_until_daily_reset() -> int:
-    return _seconds_until_tomorrow()
+    return get_seconds_until_tomorrow()
 
 
 # 月次リセット（翌月1日の0時）までの残り秒数を取得します。
@@ -228,7 +218,7 @@ return {1, current}
                 redis_client,
                 quota_key,
                 daily_limit,
-                _seconds_until_tomorrow(),
+                get_seconds_until_tomorrow(),
             )
             if redis_result is not None:
                 allowed, remaining = redis_result
@@ -369,6 +359,14 @@ def get_llm_daily_limit_service(request: Request = None) -> LlmDailyLimitService
         if isinstance(service, LlmDailyLimitService):
             return service
     return _default_llm_daily_limit_service
+
+
+# 渡されたサービスが LlmDailyLimitService ならそれを使い、そうでなければリクエストから取得する
+# Use the given service when it is a LlmDailyLimitService; otherwise resolve it from the request.
+def resolve_llm_daily_limit_service(request: Request, service: LlmDailyLimitService | None) -> LlmDailyLimitService:
+    if isinstance(service, LlmDailyLimitService):
+        return service
+    return get_llm_daily_limit_service(request)
 
 
 # オンメモリの利用制限状態をリセットします。

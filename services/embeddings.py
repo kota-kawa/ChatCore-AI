@@ -83,10 +83,7 @@ def reset_embedding_failure_state() -> None:
 # 日本語: 成功したらラッチを解除する。
 # English: A success clears the latch.
 def _record_success() -> None:
-    global _consecutive_failures, _disabled_until
-    with _state_lock:
-        _consecutive_failures = 0
-        _disabled_until = 0.0
+    reset_embedding_failure_state()
 
 
 # 日本語: 失敗を数え、連続失敗が閾値に達したらクールダウンを開始してエラーログを 1 回出す。
