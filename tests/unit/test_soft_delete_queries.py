@@ -8,11 +8,12 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from blueprints.chat.tasks import _delete_task_for_user
-from blueprints.prompt_share.prompt_manage_api import _delete_prompt_for_user
+from blueprints.prompt_share.prompt_manage_api import delete_prompt
+from tests.helpers.request_helpers import build_request
 
 
-# 削除用の内部関数が非同期サービスへ委譲することを検証するテストクラス。
-# Test class verifying that the internal delete helpers delegate to the async services.
+# 削除用の内部関数とルートが非同期サービスへ委譲することを検証するテストクラス。
+# Test class verifying that the internal delete helper and the route delegate to the async services.
 class SoftDeleteQueryTestCase(unittest.TestCase):
     def test_delete_task_marks_row_deleted_through_async_service(self):
         with patch("blueprints.chat.tasks.delete_task_record", new=AsyncMock()) as delete_task:
@@ -24,10 +25,12 @@ class SoftDeleteQueryTestCase(unittest.TestCase):
         service = MagicMock()
         service.delete_prompt = AsyncMock(return_value=([], 1))
 
-        with patch("blueprints.prompt_share.prompt_manage_api._service", return_value=service):
-            deleted = asyncio.run(_delete_prompt_for_user(8, 77))
+        request = build_request(method="DELETE", path="/prompts/77", session={"user_id": 8})
 
-        self.assertEqual(deleted, 1)
+        with patch("blueprints.prompt_share.prompt_manage_api._service", return_value=service):
+            response = asyncio.run(delete_prompt(77, request))
+
+        self.assertEqual(response.status_code, 200)
         service.delete_prompt.assert_awaited_once_with(user_id=8, prompt_id=77)
 
 

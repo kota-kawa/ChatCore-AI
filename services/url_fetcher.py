@@ -784,15 +784,6 @@ def fetch_image_content(url: str) -> FetchedImageContent | None:
     return _run_bounded_fetch(_fetch_image_content_impl, url, slots=_image_fetch_slots, executor=_image_fetch_executor)
 
 
-def fetch_url_content(url: str) -> str | None:
-    """単一URLの本文だけを返す、既存呼び出し向けの互換ラッパー。
-
-    Compatibility wrapper returning only the readable text for one URL.
-    """
-    document = fetch_url_document(url)
-    return document.text if document is not None else None
-
-
 def fetch_urls_documents(urls: list[str]) -> dict[str, FetchedUrlDocument]:
     """各URLの文書を取得し、本文を得られたものだけを {url: document} で返す。
 
@@ -825,10 +816,3 @@ def fetch_urls_documents(urls: list[str]) -> dict[str, FetchedUrlDocument]:
         executor.shutdown(wait=False, cancel_futures=True)
     return {url: result[url] for url in unique_urls if url in result}
 
-
-def fetch_urls_content(urls: list[str]) -> dict[str, str]:
-    """各URLの内容を取得し、成功した結果のみを {url: text} の形式で返す。
-
-    Fetch content for each URL; return {url: text} for successful fetches only.
-    """
-    return {url: document.text for url, document in fetch_urls_documents(urls).items()}

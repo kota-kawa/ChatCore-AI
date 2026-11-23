@@ -144,15 +144,6 @@ async def _update_prompt_for_user(
     return int(updated)
 
 
-async def _delete_prompt_for_user(user_id: int, prompt_id: int) -> int:
-    """プロンプトを削除し、削除件数だけを返す（添付ファイル情報は捨てる）。
-
-    Delete a prompt and return only the deleted count, discarding the attachment info.
-    """
-    _, deleted = await _service().delete_prompt(user_id=user_id, prompt_id=prompt_id)
-    return deleted
-
-
 def _delete_prompt_attachment_files(attachments: list[dict[str, Any]]) -> int:
     """プロンプトの添付ファイルをストレージから削除し、削除できた数を返す（同期処理のため呼び出し側でスレッドに逃がす）。
 
