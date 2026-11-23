@@ -101,7 +101,13 @@ class JsonLogFormatter(logging.Formatter):
 # 環境変数から正の整数値を安全にパースします。無効な場合はデフォルト値にフォールバックします。
 # Safely parse a positive integer from environment variables, falling back to a default value if invalid.
 def _parse_positive_int_env(env_name: str, default_value: int) -> int:
-    return env_int(env_name, default_value, minimum=1, warn_on_invalid=True)
+    # 日本語: env_int は下限未満を黙って既定値へ戻すため、0 以下の設定ミスもここで警告に残します。
+    # English: env_int silently falls back below the minimum, so warn here about zero or negative values too.
+    value = env_int(env_name, default_value, minimum=None, warn_on_invalid=True)
+    if value > 0:
+        return value
+    logger.warning("Invalid %s value '%s'. Falling back to %s.", env_name, value, default_value)
+    return default_value
 
 
 # 指定された名前を持つ既存のログハンドラをルートロガーから削除してクローズします。
