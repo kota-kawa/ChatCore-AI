@@ -141,8 +141,8 @@ jobs:
           set -euo pipefail
           python -m ruff check app.py blueprints services scripts tests --select E9,F63,F7,F82
 
-  # Ruff の全ルールに加え、マイグレーションの安全性・環境変数ドキュメント・文書内パスの整合を検証する。
-  # Full Ruff run plus migration safety, environment-variable documentation and doc path checks.
+  # Ruff の全ルールに加え、マイグレーションの安全性・環境変数ドキュメント・文書内パスの整合と、技術的負債が基準値より増えていないことを検証する。
+  # Full Ruff run plus migration safety, environment-variable documentation, doc path checks and the debt ratchet.
   lint_full:
     name: Ruff Lint (Full)
     runs-on: ubuntu-latest
@@ -184,6 +184,11 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/check_doc_paths.py
+
+      - name: Verify technical debt does not grow past the baseline
+        run: |
+          set -euo pipefail
+          python scripts/check_debt_ratchet.py
 
   # 型チェックを強制する対象範囲に対して mypy を実行する。
   # Runs mypy on the enforced typing surface.
@@ -459,12 +464,12 @@ jobs:
           name: coverage-xml
           path: coverage.xml
 
-  # フロントエンドの import 解決・lint・型チェック・テストを実行する。
-  # Runs frontend import resolution, lint, typecheck and tests.
+  # フロントエンドの import 解決・lint・型チェック・テストと、生成した API スキーマがバックエンドのモデルと一致することを検証する。
+  # Runs frontend import resolution, lint, typecheck and tests, and verifies the generated API schemas match the backend models.
   frontend_checks:
     name: Frontend Static Checks
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v6
@@ -478,6 +483,29 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements.lock
+            requirements-build.txt
+
+      - name: Install schema generator dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements-build.txt
+          python -m pip install -r requirements.txt -c requirements.lock
+
+      # 日本語: Pydantic モデルから再生成し、コミット済みの生成物と差分があれば失敗します。
+      # English: Regenerate from the Pydantic models and fail when the committed output differs.
+      - name: Verify generated API schemas are up to date
+        run: |
+          set -euo pipefail
+          python scripts/generate_frontend_zod_schemas.py
+          git diff --exit-code -- frontend/types/generated/api_schemas.ts
 
       - name: Verify frontend import resolution
         working-directory: frontend
