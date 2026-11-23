@@ -1688,7 +1688,7 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
   flex-shrink: 0;
   font-size: 1rem;
   cursor: pointer;
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  background: linear-gradient(135deg, var(--danger-color) 0%, var(--danger-hover) 100%);
   color: #ffffff;
   transition:
     background 0.18s ease,
@@ -1700,7 +1700,7 @@ body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-but
 }
 
 .global-ai-agent-modal .mini-chat-stop-btn:hover {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  background: linear-gradient(135deg, #ef4444 0%, var(--danger-color) 100%);
   transform: translateY(-1px);
 }
 
