@@ -55,8 +55,9 @@ def _log_invalid_value(name: str, raw: str, default: object, *, warn_on_invalid:
         logger.debug("Invalid %s value %r. Falling back to %s.", name, raw, default)
 
 
-# 日本語: 環境変数を整数として取得します。解析できない値や minimum 未満の値は既定値へ戻します。
-# English: Read an environment variable as an integer, falling back to the default when unparsable or below minimum.
+# 日本語: 環境変数を整数として取得します。解析できない値や minimum 未満の値は既定値へ戻し、warn_on_invalid なら minimum 未満も警告します。
+# English: Read an environment variable as an integer, falling back to the default when unparsable or below minimum;
+# with warn_on_invalid, values below minimum are warned about too.
 def env_int(name: str, default: int, *, minimum: int | None = 1, warn_on_invalid: bool = False) -> int:
     raw = env_text(name)
     if raw is None:
@@ -67,6 +68,8 @@ def env_int(name: str, default: int, *, minimum: int | None = 1, warn_on_invalid
         _log_invalid_value(name, raw, default, warn_on_invalid=warn_on_invalid)
         return default
     if minimum is not None and value < minimum:
+        if warn_on_invalid:
+            _log_invalid_value(name, raw, default, warn_on_invalid=True)
         return default
     return value
 

@@ -87,6 +87,16 @@ class EnvIntTestCase(unittest.TestCase):
         with patch.dict(os.environ, {"SIZE": " 12 "}, clear=True):
             self.assertEqual(env_settings.env_int("SIZE", 7), 12)
 
+    def test_warns_below_minimum_only_when_requested(self) -> None:
+        with patch.dict(os.environ, {"SIZE": "0"}, clear=True):
+            with self.assertLogs(env_settings.logger, level="WARNING") as captured:
+                self.assertEqual(env_settings.env_int("SIZE", 7, warn_on_invalid=True), 7)
+            self.assertIn("Invalid SIZE value '0'", captured.output[0])
+
+        with patch.dict(os.environ, {"SIZE": "0"}, clear=True):
+            with self.assertNoLogs(env_settings.logger, level="DEBUG"):
+                self.assertEqual(env_settings.env_int("SIZE", 7), 7)
+
     def test_warns_only_when_requested(self) -> None:
         with patch.dict(os.environ, {"SIZE": "abc"}, clear=True):
             with self.assertLogs(env_settings.logger, level="WARNING") as captured:
