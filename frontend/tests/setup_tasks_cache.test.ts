@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { STORAGE_KEYS } from "../scripts/core/constants";
-import { readCachedTasks, writeCachedTasks } from "../scripts/setup/setup_tasks_cache";
+import { readCachedTasks, writeCachedTasks } from "../lib/chat_page/setup/setup_tasks_cache";
 
 function installLocalStorage(seed: Record<string, string> = {}) {
   const store = new Map<string, string>(Object.entries(seed));

@@ -1,6 +1,6 @@
 // 生成UI（Artifact）を sandbox iframe の中で実行して表示するコンポーネント。CSP の組み立て、iframe 内で動く監視スクリプト、実行結果の判定と失敗表示を担う。
 // Component that runs and displays a generated UI (artifact) inside a sandboxed iframe: builds the CSP, the in-frame monitoring script, and judges and reports the runtime outcome.
-import React, { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 import type { GenerativeUiArtifactV1, SandboxArtifactRuntimeState } from "../../lib/chat_page/types";
 import { useTranslation } from "../../contexts/locale_context";

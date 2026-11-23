@@ -10,8 +10,9 @@ import {
   type ToolApprovalDecisionRequest,
 } from "../../types/generated/api_schemas";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
-import { extractApiErrorMessage, fetchJson, isRecord } from "../../scripts/core/runtime_validation";
+import { extractApiErrorMessage, fetchJson } from "../../scripts/core/runtime_validation";
 import { normalizeLocale, type Locale } from "../i18n/config";
+import { isRecord } from "../utils";
 import { normalizeToolApproval } from "./api_contract";
 
 // fetch の差し替え口。既定は resilientFetch で、テストでは別の実装を渡せる。

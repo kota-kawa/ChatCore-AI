@@ -1,7 +1,7 @@
 // 設定画面のナビゲーション（サイドバー）。セクション一覧と戻るボタンを持つ。呼び出し元は pages/settings.tsx。
 // Navigation (sidebar) of the settings page, with the section list and a back button. Used by pages/settings.tsx.
-import { SETTINGS_NAV_ITEMS } from "../../scripts/user/settings/constants";
-import type { SettingsSection } from "../../scripts/user/settings/page_types";
+import { SETTINGS_NAV_ITEMS } from "../../lib/settings/constants";
+import type { SettingsSection } from "../../lib/settings/page_types";
 import { useTranslation } from "../../contexts/locale_context";
 
 // 設定画面のナビゲーション。デスクトップでは左の縦リスト、768px 以下では上部の折り返すタブ列になる。

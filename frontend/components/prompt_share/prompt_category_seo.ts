@@ -3,7 +3,7 @@
 
 import type { Locale } from "../../lib/i18n/config";
 import { localizePublicPath } from "../../lib/seo";
-import { PROMPT_CATEGORY_KEYS } from "../../scripts/prompt_share/prompt_category_registry";
+import { PROMPT_CATEGORY_KEYS } from "../../lib/prompt_share/prompt_category_registry";
 
 // カテゴリ別の公開ページに掲載する、検索意図に対応した説明文。
 // Search-intent focused copy used by each public category page.

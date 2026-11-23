@@ -7,8 +7,8 @@ import test from "node:test";
 import {
   getPromptReferenceImageUrl,
   normalizePromptData
-} from "../scripts/prompt_share/formatters";
-import type { PromptData } from "../scripts/prompt_share/types";
+} from "../lib/prompt_share/formatters";
+import type { PromptData } from "../lib/prompt_share/types";
 
 function promptData(overrides: Partial<PromptData> = {}): PromptData {
   return {

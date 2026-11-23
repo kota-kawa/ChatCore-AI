@@ -19,9 +19,9 @@ import {
   getCategoryLabel,
   PROMPT_CATEGORY_KEYS,
   PROMPT_CATEGORY_REGISTRY
-} from "../../scripts/prompt_share/prompt_category_registry";
-import { getPromptPreviewSource, normalizePromptData } from "../../scripts/prompt_share/formatters";
-import type { PromptData } from "../../scripts/prompt_share/types";
+} from "../../lib/prompt_share/prompt_category_registry";
+import { getPromptPreviewSource, normalizePromptData } from "../../lib/prompt_share/formatters";
+import type { PromptData } from "../../lib/prompt_share/types";
 import {
   getPromptCategoryPath,
   type PromptCategorySeoCopy

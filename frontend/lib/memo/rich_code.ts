@@ -11,7 +11,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { Node as DocumentNode } from "@tiptap/pm/model";
 import hljs from "highlight.js";
 
-import { renderSanitizedHTML } from "../../scripts/chat/message_utils";
+import { renderSanitizedHTML } from "../chat_page/message_format/message_utils";
 
 // ハイライト済みのコードブロック 1 つ分。同じ言語と本文なら前回の結果を使い回すために保持する。
 // One highlighted code block, kept so the previous result can be reused for the same language and text.

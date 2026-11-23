@@ -29,7 +29,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/router", () => ({ useRouter: () => mocks.router }));
 vi.mock("../components/SeoHead", () => ({ SeoHead: () => null }));
-vi.mock("../scripts/user/settings/api", () => ({
+vi.mock("../lib/settings/api", () => ({
   issueMcpOAuthClient: vi.fn(),
   loadLocalePreference: mocks.loadLocalePreference,
   loadMcpOAuthClients: mocks.loadMcpOAuthClients,

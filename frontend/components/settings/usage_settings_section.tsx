@@ -5,9 +5,9 @@ import { useCallback, useEffect, useState } from "react";
 import { InlineLoading } from "../ui/inline_loading";
 import { SettingsSectionHeader } from "./settings_sections";
 import { useTranslation } from "../../contexts/locale_context";
-import { loadUsageLimits } from "../../scripts/user/settings/api";
-import type { UsageLimits } from "../../scripts/user/settings/types";
-import { formatUsageExpiryDate, formatUsageResetTime, usagePercent } from "../../scripts/user/settings/usage";
+import { loadUsageLimits } from "../../lib/settings/api";
+import type { UsageLimits } from "../../lib/settings/types";
+import { formatUsageExpiryDate, formatUsageResetTime, usagePercent } from "../../lib/settings/usage";
 
 type UsageWindow = { used_ratio: number };
 

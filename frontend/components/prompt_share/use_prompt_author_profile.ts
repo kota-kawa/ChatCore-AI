@@ -2,8 +2,8 @@
 // Hook that manages the state of the author profile modal (profile, post list, paging, loading, and errors); used by pages/prompt_share/index.tsx.
 import { useCallback, useRef, useState } from "react";
 
-import { fetchPromptAuthorProfile, fetchPromptList } from "../../scripts/prompt_share/api";
-import type { PromptAuthorProfile, PromptData, PromptPagination } from "../../scripts/prompt_share/types";
+import { fetchPromptAuthorProfile, fetchPromptList } from "../../lib/prompt_share/api";
+import type { PromptAuthorProfile, PromptData, PromptPagination } from "../../lib/prompt_share/types";
 import { AUTHOR_PROFILE_PROMPTS_PAGE_SIZE } from "./prompt_share_page_constants";
 import type { PromptRecord } from "./prompt_card";
 import { useTranslation } from "../../contexts/locale_context";

@@ -10,7 +10,7 @@ import {
   type PromptCategoryPageViewProps
 } from "../components/prompt_share/prompt_category_page";
 import { getPromptCategorySeoCopy } from "../components/prompt_share/prompt_category_seo";
-import { PROMPT_CATEGORY_KEYS } from "../scripts/prompt_share/prompt_category_registry";
+import { PROMPT_CATEGORY_KEYS } from "../lib/prompt_share/prompt_category_registry";
 
 function renderPage(locale: "ja" | "en", overrides: Partial<PromptCategoryPageViewProps> = {}) {
   const copy = getPromptCategorySeoCopy("coding", locale);

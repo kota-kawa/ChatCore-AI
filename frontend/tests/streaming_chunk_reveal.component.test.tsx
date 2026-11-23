@@ -3,8 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { formatLLMOutput } from "../scripts/chat/chat_ui";
-import { patchSanitizedHTML } from "../scripts/chat/message_utils";
+import { formatLLMOutput } from "../lib/chat_page/message_format/chat_ui";
+import { patchSanitizedHTML } from "../lib/chat_page/message_format/message_utils";
 import {
   advanceStreamPace,
   clampToCodePointBoundary,

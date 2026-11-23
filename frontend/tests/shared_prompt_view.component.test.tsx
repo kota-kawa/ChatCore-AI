@@ -6,10 +6,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LocaleProvider } from "../contexts/locale_context";
 import SharedPromptPage from "../pages/shared/prompt/[id]/[[...slug]]";
-import { recordPromptView } from "../scripts/prompt_share/api";
+import { recordPromptView } from "../lib/prompt_share/api";
 
 
-vi.mock("../scripts/prompt_share/api", () => ({
+vi.mock("../lib/prompt_share/api", () => ({
   recordPromptView: vi.fn()
 }));
 vi.mock("../scripts/components/popup_menu", () => ({}));

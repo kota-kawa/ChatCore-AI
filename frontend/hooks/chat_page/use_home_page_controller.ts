@@ -62,11 +62,11 @@ import {
   readJsonBodySafe,
 } from "../../scripts/core/runtime_validation";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
-import { initPromptAssist } from "../../scripts/components/prompt_assist";
+import { initPromptAssist } from "../../lib/prompt_assist";
 import {
   invalidateTasksCache,
-} from "../../scripts/setup/setup_tasks_cache";
-import { bindSetupViewportFit, scheduleSetupViewportFit } from "../../scripts/setup/setup_viewport";
+} from "../../lib/chat_page/setup/setup_tasks_cache";
+import { bindSetupViewportFit, scheduleSetupViewportFit } from "../../lib/chat_page/setup/setup_viewport";
 import { useTranslation } from "../../contexts/locale_context";
 
 const CHAT_SIDEBAR_OVERLAY_QUERY = "(max-width: 992px)";

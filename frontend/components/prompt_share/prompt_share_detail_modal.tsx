@@ -1,14 +1,14 @@
 // 公開投稿の詳細と本文・添付・操作をモーダルで表示する。
 // Displays public post details, content, attachments and actions in a modal.
 
-import React, { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
 import MarkdownContent from "../MarkdownContent";
 import { copyTextToClipboard } from "../../scripts/core/clipboard";
 import { showToast } from "../../scripts/core/toast";
-import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";
-import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
-import { DEFAULT_CONTENT_FORMAT, DEFAULT_MEDIA_TYPE } from "../../scripts/prompt_share/prompt_type_registry";
+import { DEFAULT_AUTHOR_AVATAR_URL } from "../../lib/prompt_share/constants";
+import { getCategoryLabelOrFallback } from "../../lib/prompt_share/prompt_category_registry";
+import { DEFAULT_CONTENT_FORMAT, DEFAULT_MEDIA_TYPE } from "../../lib/prompt_share/prompt_type_registry";
 import {
   formatPromptDate,
   getPromptFormatIconClass,
@@ -17,12 +17,12 @@ import {
   getPromptMediaLabel,
   normalizePromptContentFormat,
   normalizePromptMediaType
-} from "../../scripts/prompt_share/formatters";
-import type { PromptCommentData } from "../../scripts/prompt_share/types";
+} from "../../lib/prompt_share/formatters";
+import type { PromptCommentData } from "../../lib/prompt_share/types";
 import {
   getSkillResourceRoleLabel,
   normalizeSkillResources
-} from "../../scripts/prompt_share/skill_resources";
+} from "../../lib/prompt_share/skill_resources";
 import type { PromptRecord } from "./prompt_card";
 import { PromptShareDetailImage } from "./prompt_share_detail_image";
 import { CopyButton } from "../ui/copy_button";
