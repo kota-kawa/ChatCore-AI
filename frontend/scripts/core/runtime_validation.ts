@@ -28,11 +28,6 @@ function parseJsonText(raw: string): unknown {
   return JSON.parse(raw);
 }
 
-async function readJsonBody(response: Response): Promise<unknown> {
-  const payload: unknown = await response.json();
-  return payload;
-}
-
 async function readJsonBodySafe(response: Response, fallback: unknown = {}): Promise<unknown> {
   try {
     return await response.json();
@@ -118,6 +113,5 @@ export {
   fetchJsonOrThrow,
   isRecord,
   parseJsonText,
-  readJsonBody,
   readJsonBodySafe
 };

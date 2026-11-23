@@ -2,19 +2,10 @@
 // Provides shared chat message helpers.
 // --------------------------------------------------
 import DOMPurify from "dompurify";
-import { getSharedDomRefs } from "../core/dom";
 import { sanitizeClassAttributeValue } from "../core/html";
-import { resilientFetch } from "../core/resilient_fetch";
-import { extractApiErrorMessage, readJsonBodySafe } from "../core/runtime_validation";
-import { MemoSaveResponseSchema } from "../../types/generated/api_schemas";
 import { patchElementChildren } from "../../lib/chat_page/streaming_dom_patch";
 
-/**
- * HTML をサニタイズして挿入する
- * @param element   挿入先
- * @param dirtyHtml サニタイズ前 HTML
- * @param allowed   許可タグ（省略時はデフォルト）
- */
+// 回答 HTML の余分な空行・空段落・連続した <br> を詰める。
 function compactBotMessageHtml(html: string) {
   return html
     .replace(/[\u200B-\u200D\u2060\uFEFF]/g, "")
@@ -145,6 +136,12 @@ function sanitizeMessageHtml(dirtyHtml: string, options: SanitizeMessageHtmlOpti
   return clean;
 }
 
+/**
+ * HTML をサニタイズして挿入する
+ * @param element   挿入先
+ * @param dirtyHtml サニタイズ前 HTML
+ * @param allowed   許可タグ（省略時はデフォルト）
+ */
 function renderSanitizedHTML(
   element: HTMLElement,
   dirtyHtml: string,
@@ -180,138 +177,4 @@ function patchSanitizedHTML(
   );
 }
 
-/**
- * テキストを \n→<br> に変換しつつ安全に挿入
- * @param element
- * @param text
- */
-function setTextWithLineBreaks(element: HTMLElement, text: string) {
-  element.textContent = "";
-  text.split("\n").forEach((line, idx, arr) => {
-    element.appendChild(document.createTextNode(line));
-    if (idx < arr.length - 1) element.appendChild(document.createElement("br"));
-  });
-}
-
-const CHAT_SCROLL_BOTTOM_THRESHOLD_PX = 72;
-
-function isChatViewportNearBottom(thresholdPx = CHAT_SCROLL_BOTTOM_THRESHOLD_PX) {
-  const container = getSharedDomRefs().chatMessages;
-  if (!container) return true;
-  const distanceToBottom = container.scrollHeight - (container.scrollTop + container.clientHeight);
-  return distanceToBottom <= thresholdPx;
-}
-
-// 新しいメッセージを表示領域の末尾へ追従
-function scrollMessageToBottom() {
-  const chatMessages = getSharedDomRefs().chatMessages;
-  if (!chatMessages) return;
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-function setActionButtonIcon(btn: HTMLButtonElement, iconClass: string) {
-  btn.innerHTML = `<i class="bi ${iconClass}"></i>`;
-}
-
-function createMemoSaveBtn(getText: () => string) {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "memo-save-btn";
-  btn.setAttribute("aria-label", "メモに保存");
-  btn.setAttribute("data-tooltip", "この回答をメモに保存");
-  btn.setAttribute("data-tooltip-placement", "top");
-  setActionButtonIcon(btn, "bi-bookmark-plus");
-
-  let resetTimerId: number | null = null;
-
-  const resetVisualState = () => {
-    if (resetTimerId !== null) {
-      window.clearTimeout(resetTimerId);
-      resetTimerId = null;
-    }
-    setActionButtonIcon(btn, "bi-bookmark-plus");
-    btn.classList.remove("memo-save-btn--success", "memo-save-btn--error", "memo-save-btn--loading");
-    btn.setAttribute("data-tooltip", "この回答をメモに保存");
-  };
-
-  const scheduleReset = () => {
-    if (resetTimerId !== null) {
-      window.clearTimeout(resetTimerId);
-    }
-    resetTimerId = window.setTimeout(() => {
-      resetVisualState();
-    }, 2000);
-  };
-
-  btn.addEventListener("click", async () => {
-    if (btn.classList.contains("memo-save-btn--loading")) return;
-    resetVisualState();
-
-    const aiResponse = getText().trim();
-    if (!aiResponse) {
-      setActionButtonIcon(btn, "bi-x-lg");
-      btn.classList.add("memo-save-btn--error");
-      btn.setAttribute("data-tooltip", "保存失敗: 空のメッセージです");
-      scheduleReset();
-      return;
-    }
-
-    btn.disabled = true;
-    btn.classList.add("memo-save-btn--loading");
-    setActionButtonIcon(btn, "bi-hourglass-split");
-
-    try {
-      const response = await resilientFetch("/memo/api", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        credentials: "same-origin",
-        body: JSON.stringify({
-          ai_response: aiResponse,
-          title: "",
-        })
-      });
-
-      const rawPayload = await readJsonBodySafe(response);
-      const parsed = MemoSaveResponseSchema.safeParse(rawPayload);
-      const status = parsed.success ? parsed.data.status : null;
-
-      if (!response.ok || status === "fail") {
-        throw new Error(extractApiErrorMessage(rawPayload, "メモの保存に失敗しました。", response.status));
-      }
-
-      setActionButtonIcon(btn, "bi-check-lg");
-      btn.classList.add("memo-save-btn--success");
-      btn.classList.remove("memo-save-btn--error");
-      btn.setAttribute("data-tooltip", "メモに保存しました");
-    } catch (error) {
-      console.error("Failed to save chat message to memo.", error);
-      setActionButtonIcon(btn, "bi-x-lg");
-      btn.classList.add("memo-save-btn--error");
-      btn.classList.remove("memo-save-btn--success");
-      btn.setAttribute("data-tooltip", error instanceof Error ? `保存失敗: ${error.message}` : "保存に失敗しました");
-    } finally {
-      btn.disabled = false;
-      btn.classList.remove("memo-save-btn--loading");
-      scheduleReset();
-    }
-  });
-
-  return btn;
-}
-
-function scrollMessageToTop(_element?: HTMLElement) {
-  scrollMessageToBottom();
-}
-
-export {
-  sanitizeMessageHtml,
-  renderSanitizedHTML,
-  patchSanitizedHTML,
-  setTextWithLineBreaks,
-  isChatViewportNearBottom,
-  scrollMessageToBottom,
-  scrollMessageToTop,
-  createMemoSaveBtn
-};
+export { sanitizeMessageHtml, renderSanitizedHTML, patchSanitizedHTML };

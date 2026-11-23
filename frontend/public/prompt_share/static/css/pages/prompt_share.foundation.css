@@ -371,9 +371,7 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
 
 .prompt-share-page .prompt-action-btn:focus-visible,
 
-.prompt-share-page .meatball-menu:focus-visible,
-
-.prompt-share-page .new-prompt-btn:focus-visible {
+.prompt-share-page .meatball-menu:focus-visible {
   outline: 3px solid rgba(26, 115, 232, 0.35);
   outline-offset: 2px;
 }
@@ -416,15 +414,6 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
   justify-content: flex-start;
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .section-kicker {
-  margin: 0;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--ps-text-muted);
-}
-
 :where(body.prompt-share-page, .prompt-share-page) .categories h2,
 :where(body.prompt-share-page, .prompt-share-page) .prompts-list h2 {
   margin: 0;
@@ -432,12 +421,6 @@ body.prompt-share-page.ps-modal-open .modal-base.is-open {
   line-height: 1.3;
   font-size: clamp(1.08rem, 0.9vw + 0.94rem, 1.38rem);
   letter-spacing: 0.02em;
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .section-description {
-  margin: 0;
-  color: var(--ps-text-muted);
-  font-size: 0.88rem;
 }
 
 /* カテゴリカードのグリッド。高さは変数に持たせ、カード側の height / min-height と行の高さをそろえる。
