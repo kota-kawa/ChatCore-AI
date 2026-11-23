@@ -341,8 +341,8 @@ async def healthz():
 # Endpoint for checking the readiness status of the application.
 @app.get("/readyz")
 async def readyz():
-    # 接続先DBや各種サービスのステータスを含む準備状態をJSONで返却
-    # Return the readiness check results and corresponding HTTP status code
+    # 準備状態の確認結果を、対応する HTTP ステータスコードとともに JSON で返却
+    # Return the readiness check results as JSON with the corresponding HTTP status code
     payload, status_code = await get_readiness_status()
     return jsonify(payload, status_code=status_code)
 

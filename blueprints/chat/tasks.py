@@ -513,12 +513,8 @@ async def get_tasks(request: Request):
 
         except Exception:
             logger.exception("Database error while loading tasks.")
-            # ログインユーザーの場合、DBエラーはそのままエラーとして扱う（または空リスト？）
-            # For logged-in users, surface DB failures as server errors.
-            # ここでは安全のためエラーをログに出しつつ、
-            # We log the exception and keep fallback path for guests only.
-            # もし未ログインならデフォルトタスクを返すようにフローを継続する
-            # Continue to guest fallback flow when not authenticated.
+            # DBエラーはログに残す。ログインユーザーには下で再送出し、未ログインならデフォルトタスクの代替処理へ進む。
+            # Log the DB error; it is re-raised for logged-in users below, while guests continue to the default-task fallback.
             if user_id:
                 # ユーザーがいるのにDBエラーなら500にする（frontendでハンドリングされる）
                 # Raise for authenticated users so frontend receives 500.

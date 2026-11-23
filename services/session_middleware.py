@@ -108,8 +108,6 @@ class PermanentSessionMiddleware:
 # 日本語: Cookie の復元、Redis からの読み込み、レスポンス直前の保存までを担当する本体。
 # English: The core middleware: restores the cookie, loads from Redis, and saves right before the response.
 class HybridSessionMiddleware:
-    # Redisベースのセッション管理を行うハイブリッドミドルウェアクラス
-    # Hybrid middleware class that performs Redis-based session management
     def __init__(
         self,
         app: ASGIApp,

@@ -206,8 +206,6 @@ def _resolve_chat_generation_service(
     return get_chat_generation_service(request)
 
 
-# ゲストユーザー用のチャットルームアクセス権を検証する非同期関数
-# Asynchronously validate the guest session's access privileges to the specified room.
 # 編集して送り直す発話へ、元の発話の添付（文書の本文と画像）を引き継ぐための引数。
 # Keyword arguments that carry the original message's attachments (document text and images)
 # over to the edited message.

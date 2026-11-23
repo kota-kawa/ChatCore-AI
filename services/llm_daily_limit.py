@@ -120,8 +120,6 @@ class LlmDailyLimitService:
     # オンメモリのカウント状態をすべてクリアします。
     # Clear all in-memory counts.
     def reset_in_memory_state(self) -> None:
-        # コンテキストマネージャを使用して、必要なリソースの確保とクリーンアップを制御します。
-        # Secure and clean up the required resource using a context manager.
         with self._in_memory_lock:
             self._in_memory_daily_counts.clear()
             self._in_memory_monthly_counts.clear()
@@ -184,8 +182,6 @@ return {1, current}
     ) -> tuple[bool, int]:
         # Redis 不可時のフォールバック。期間が変わったキーを都度掃除します。
         # Fallback path when Redis is unavailable; prune stale period keys on each call.
-        # コンテキストマネージャを使用して、必要なリソースの確保とクリーンアップを制御します。
-        # Secure and clean up the required resource using a context manager.
         with self._in_memory_lock:
             period_suffix = f":{current_period}"
             stale_keys = [

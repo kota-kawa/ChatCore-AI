@@ -52,8 +52,6 @@ TRUSTED_PROXY_IPS_ENV = "TRUSTED_PROXY_IPS"
 DEFAULT_TRUSTED_PROXY_IPS = ("127.0.0.1", "::1")
 
 
-# 環境変数から正の整数値を取得するヘルパー関数
-# Helper function to get a positive integer from environment variables
 # 日本語: レート制限値は 0 を「無効」として扱うため負値は 0 へ丸め、解析できない値は警告してから既定値へ戻します。
 # English: Rate limits treat 0 as "disabled", so negatives clamp to 0 while unparsable values warn and fall back to the default.
 _limit_from_env = partial(env_int_in_range, minimum=0, warn_on_invalid=True)
