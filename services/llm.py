@@ -3,7 +3,6 @@
 
 import json
 import logging
-import os
 import re
 from collections.abc import Iterator
 from typing import Any, Literal
@@ -53,7 +52,7 @@ except ImportError:  # pragma: no cover - depends on SDK version
     RateLimitError = _UnavailableOpenAIError  # type: ignore[assignment]
 
 from services.chat_images import IMAGE_INPUTS_KEY, build_openai_image_parts, model_accepts_image_input
-from services.env_settings import env_int
+from services.env_settings import env_int, env_text
 from services.llm_model_limits import get_model_max_output_tokens
 from services.llm_tool_schema import prepare_provider_tools, relax_tool_parameters_schema
 from services.llm_usage import (
@@ -187,9 +186,9 @@ VALID_OPENAI_MODELS = {
     GPT_6_LUNA_MODEL,
 }
 
-groq_api_key = os.environ.get("GROQ_API_KEY", "")
-anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+groq_api_key = env_text("GROQ_API_KEY") or ""
+anthropic_api_key = env_text("ANTHROPIC_API_KEY") or ""
+openai_api_key = env_text("OPENAI_API_KEY") or ""
 
 # APIキーがある場合のみクライアントを構築し、未設定時は None を保持する
 # Initialize provider clients only when corresponding API keys are present.

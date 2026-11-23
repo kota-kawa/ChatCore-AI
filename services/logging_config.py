@@ -16,6 +16,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, ClassVar
 
+from services.env_settings import env_int, env_text
 from services.request_context import RequestContextFilter
 
 DEFAULT_LOG_LEVEL = "INFO"
@@ -100,27 +101,7 @@ class JsonLogFormatter(logging.Formatter):
 # 環境変数から正の整数値を安全にパースします。無効な場合はデフォルト値にフォールバックします。
 # Safely parse a positive integer from environment variables, falling back to a default value if invalid.
 def _parse_positive_int_env(env_name: str, default_value: int) -> int:
-    raw_value = os.getenv(env_name, str(default_value))
-    try:
-        parsed_value = int(raw_value)
-    except (TypeError, ValueError):
-        logger.warning(
-            "Invalid %s value '%s'. Falling back to %s.",
-            env_name,
-            raw_value,
-            default_value,
-        )
-        return default_value
-
-    if parsed_value <= 0:
-        logger.warning(
-            "Invalid %s value '%s'. Falling back to %s.",
-            env_name,
-            raw_value,
-            default_value,
-        )
-        return default_value
-    return parsed_value
+    return env_int(env_name, default_value, minimum=1, warn_on_invalid=True)
 
 
 # 指定された名前を持つ既存のログハンドラをルートロガーから削除してクローズします。
@@ -192,9 +173,9 @@ def _build_console_handler(
 # 環境変数やデフォルト値に基づいて、アプリケーション全体のロギング設定を適用します。
 # Configure and apply the application-wide logging settings based on environment variables and defaults.
 def configure_logging() -> None:
-    log_level_name = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
+    log_level_name = (env_text("LOG_LEVEL") or DEFAULT_LOG_LEVEL).upper()
     resolved_log_level = getattr(logging, log_level_name, logging.INFO)
-    log_output = os.getenv("LOG_OUTPUT", DEFAULT_LOG_OUTPUT).lower()
+    log_output = (env_text("LOG_OUTPUT") or DEFAULT_LOG_OUTPUT).lower()
 
     root_logger = logging.getLogger()
     root_logger.setLevel(resolved_log_level)

@@ -8,11 +8,11 @@ Handles removing boundary overlap, detecting and splicing restarted continuation
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from .env_settings import env_int_in_range
 from .llm import (
     LlmInputLimitError,
     LlmOutputLimitError,
@@ -85,14 +85,11 @@ class _ContinuationPass:
 # 続きの生成回数の上限。環境変数 LLM_FINAL_ANSWER_MAX_CONTINUATIONS（既定 3、0 以上）
 # Continuation limit from LLM_FINAL_ANSWER_MAX_CONTINUATIONS (default 3, minimum 0)
 def get_final_answer_max_continuations() -> int:
-    raw = os.environ.get("LLM_FINAL_ANSWER_MAX_CONTINUATIONS")
-    if raw is None:
-        return DEFAULT_FINAL_ANSWER_MAX_CONTINUATIONS
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return DEFAULT_FINAL_ANSWER_MAX_CONTINUATIONS
-    return max(value, 0)
+    return env_int_in_range(
+        "LLM_FINAL_ANSWER_MAX_CONTINUATIONS",
+        DEFAULT_FINAL_ANSWER_MAX_CONTINUATIONS,
+        minimum=0,
+    )
 
 
 def strip_continuation_overlap(existing: str, continuation: str) -> str:

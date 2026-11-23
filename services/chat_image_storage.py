@@ -22,6 +22,7 @@ import time
 from collections.abc import Iterable
 from uuid import uuid4
 
+from services.env_settings import env_text
 from services.runtime_config import get_session_secret_key
 from services.web_constants import BASE_DIR
 
@@ -42,7 +43,7 @@ def get_chat_image_upload_root() -> str:
 
     Return the configured absolute storage directory for chat images.
     """
-    configured = str(os.getenv(CHAT_IMAGE_UPLOAD_ROOT_ENV, "") or "").strip()
+    configured = (env_text(CHAT_IMAGE_UPLOAD_ROOT_ENV) or "").strip()
     if not configured:
         return os.path.abspath(_DEFAULT_CHAT_IMAGE_UPLOAD_ROOT)
     if not os.path.isabs(configured):
