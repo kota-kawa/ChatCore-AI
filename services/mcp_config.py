@@ -6,10 +6,9 @@ read from environment variables.
 
 from __future__ import annotations
 
-import os
 from urllib.parse import urlparse
 
-from services.env_settings import env_bool, env_int
+from services.env_settings import env_bool, env_int, env_text
 from services.runtime_config import is_production_env
 from services.web_urls import frontend_base_url
 
@@ -34,7 +33,7 @@ def get_mcp_public_base_url() -> str:
     # MCP の公開ベース URL を返す。パスやクエリ、認証情報を含む値と、本番での非 HTTPS は設定ミスとして拒否する。
     # Return the public base URL for MCP; a path, query or credentials, and non-HTTPS in production,
     # are rejected as misconfiguration.
-    value = (os.getenv("MCP_PUBLIC_BASE_URL") or frontend_base_url()).strip().rstrip("/")
+    value = (env_text("MCP_PUBLIC_BASE_URL") or frontend_base_url()).strip().rstrip("/")
     parsed = urlparse(value)
     if (
         parsed.scheme not in {"http", "https"}
@@ -61,7 +60,7 @@ def get_mcp_encryption_keys() -> list[str]:
     # OAuth の保存データ暗号化に使う Fernet 鍵をカンマ区切りで読む（MultiFernet のため先頭の鍵で暗号化し、残りは復号用）。
     # Read the comma-separated Fernet keys for stored OAuth data (MultiFernet: the first encrypts,
     # the rest only decrypt); at least one is required.
-    raw = os.getenv("MCP_OAUTH_ENCRYPTION_KEYS", "")
+    raw = env_text("MCP_OAUTH_ENCRYPTION_KEYS") or ""
     keys = [value.strip() for value in raw.split(",") if value.strip()]
     if not keys:
         raise ValueError("MCP_OAUTH_ENCRYPTION_KEYS must contain at least one Fernet key.")
@@ -71,7 +70,7 @@ def get_mcp_encryption_keys() -> list[str]:
 def get_mcp_allowed_origins() -> list[str]:
     # 許可する Origin。未設定なら公開ベース URL だけを許可する。
     # Allowed Origins; when unset, only the public base URL is allowed.
-    raw = os.getenv("MCP_ALLOWED_ORIGINS", "")
+    raw = env_text("MCP_ALLOWED_ORIGINS") or ""
     configured = [value.strip() for value in raw.split(",") if value.strip()]
     if configured:
         return configured
@@ -90,7 +89,7 @@ def get_mcp_allowed_hosts() -> list[str]:
     configured with either form works — matching the nginx ``server_name`` that
     serves both. Override with ``MCP_ALLOWED_HOSTS`` (comma separated).
     """
-    raw = os.getenv("MCP_ALLOWED_HOSTS", "")
+    raw = env_text("MCP_ALLOWED_HOSTS") or ""
     configured = [value.strip() for value in raw.split(",") if value.strip()]
     if configured:
         return configured

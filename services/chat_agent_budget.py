@@ -10,6 +10,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from services.env_settings import env_int, env_int_in_range
+
 # 1ターンで許すモデル判断（LLM呼び出し）の上限。最後の1回は必ずツールなしの回答へ
 # 予約するため、実際に調査へ使えるのは max_llm_turns - 1 回になる。
 # Upper bound on model decisions (LLM calls) per turn. The last one is always reserved for a
@@ -28,17 +30,12 @@ READ_MESSAGE_MIN_CHARS = 512
 DEFAULT_MAX_WRITE_PROPOSALS = 3
 
 
-# 環境変数を 1 以上 maximum 以下の整数として読む。未設定や整数でない値は既定値を返す
-# Read an environment variable as an integer clamped to 1..maximum; unset or non-integer values give the default
-def _get_clamped_int_env(name: str, default: int, *, maximum: int) -> int:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return default
-    return min(max(value, 1), maximum)
+# 専用の変数が設定されているかを返す。空文字も「設定された」とみなす: docker-compose は未設定の変数を空文字で渡すため、
+# env_text のように空文字を未設定扱いにすると、空文字を明示しても旧合算予算へ進んでしまう。
+# Whether the dedicated variable is set. An empty string counts as set so that an explicit empty value yields the
+# default instead of falling through to the legacy combined budget, which env_text's empty-as-unset would do.
+def _is_set(name: str) -> bool:
+    return name in os.environ
 
 
 def _legacy_total_steps() -> int | None:
@@ -46,24 +43,18 @@ def _legacy_total_steps() -> int | None:
 
     Read the superseded combined budget so existing deployments keep their intent.
     """
-    raw = os.environ.get("CHAT_AGENT_MAX_STEPS")
-    if raw is None:
-        return None
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return None
-    return value if value > 0 else None
+    total = env_int("CHAT_AGENT_MAX_STEPS", 0, minimum=1)
+    return total if total > 0 else None
 
 
 # ツール実行の上限。専用の環境変数を優先し、無ければ旧合算予算の半分（切り捨て）を使う
 # Tool-call limit: the dedicated variable wins, else half (rounded down) of the legacy combined budget
 def get_max_tool_calls() -> int:
-    explicit = os.environ.get("CHAT_AGENT_MAX_TOOL_CALLS")
-    if explicit is not None:
-        return _get_clamped_int_env(
+    if _is_set("CHAT_AGENT_MAX_TOOL_CALLS"):
+        return env_int_in_range(
             "CHAT_AGENT_MAX_TOOL_CALLS",
             DEFAULT_MAX_TOOL_CALLS,
+            minimum=1,
             maximum=MAX_TOOL_CALLS_LIMIT,
         )
     legacy_total = _legacy_total_steps()
@@ -75,11 +66,11 @@ def get_max_tool_calls() -> int:
 # 推論ターンの上限。専用の環境変数を優先し、無ければ旧合算予算からツール分を引いた残りを使う
 # LLM-turn limit: the dedicated variable wins, else the legacy combined budget minus the tool share
 def get_max_llm_turns() -> int:
-    explicit = os.environ.get("CHAT_AGENT_MAX_LLM_TURNS")
-    if explicit is not None:
-        return _get_clamped_int_env(
+    if _is_set("CHAT_AGENT_MAX_LLM_TURNS"):
+        return env_int_in_range(
             "CHAT_AGENT_MAX_LLM_TURNS",
             DEFAULT_MAX_LLM_TURNS,
+            minimum=1,
             maximum=MAX_LLM_TURNS_LIMIT,
         )
     legacy_total = _legacy_total_steps()

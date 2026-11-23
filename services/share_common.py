@@ -15,7 +15,6 @@ revocable token.
 
 from __future__ import annotations
 
-import os
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -24,6 +23,7 @@ from enum import Enum
 from typing import Any
 
 from services.datetime_serialization import serialize_datetime_iso
+from services.env_settings import env_text
 from services.web_constants import DEFAULT_FRONTEND_URL
 from services.web_urls import build_frontend_url, frontend_base_url
 
@@ -109,7 +109,7 @@ def resolve_share_base_url() -> str:
     frontend = frontend_base_url().strip()
     if frontend and frontend.rstrip("/") != DEFAULT_FRONTEND_URL:
         return frontend
-    mcp_public = (os.getenv("MCP_PUBLIC_BASE_URL") or "").strip()
+    mcp_public = (env_text("MCP_PUBLIC_BASE_URL") or "").strip()
     return mcp_public or frontend or DEFAULT_FRONTEND_URL
 
 

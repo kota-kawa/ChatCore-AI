@@ -6,13 +6,13 @@ The phase that reads the LLM stream, retrying transient failures and recovering 
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Iterator
 from typing import Any
 
 from .chat_generation_job_base import ChatGenerationJobBase
 from .chat_tool_calls import _parse_tool_calls_chunk
 from .chat_turn_state import build_tool_rejection_messages
+from .env_settings import env_int_in_range
 from .llm import (
     LlmInputLimitError,
     LlmOutputLimitError,
@@ -45,14 +45,7 @@ LLM_STREAM_RETRY_MAX_WAIT_SECONDS = 8.0
 # 環境変数からLLMストリーミング接続の最大再試行回数を取得する
 # Retrieve the maximum retry limit for the LLM stream from environment variables
 def _get_llm_stream_max_retries() -> int:
-    raw = os.environ.get("LLM_STREAM_MAX_RETRIES")
-    if raw is None:
-        return DEFAULT_LLM_STREAM_MAX_RETRIES
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return DEFAULT_LLM_STREAM_MAX_RETRIES
-    return max(value, 0)
+    return env_int_in_range("LLM_STREAM_MAX_RETRIES", DEFAULT_LLM_STREAM_MAX_RETRIES, minimum=0)
 
 
 # LLMストリーミング再試行時の遅延時間を計算する（指数バックオフ）

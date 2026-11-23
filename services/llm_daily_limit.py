@@ -8,7 +8,6 @@ Counts atomically in Redis through a Lua script, falling back to in-process memo
 
 import hashlib
 import logging
-import os
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from threading import Lock
@@ -17,6 +16,7 @@ from typing import Any
 from fastapi import Request
 
 from services.cache import get_redis_client
+from services.env_settings import env_int_in_range
 
 DEFAULT_LLM_DAILY_API_LIMIT = 300
 LLM_DAILY_API_LIMIT_ENV = "LLM_DAILY_API_LIMIT"
@@ -40,20 +40,9 @@ logger = logging.getLogger(__name__)
 # 環境変数から上限値を読み込みます。無効な値の場合はデフォルト値にフォールバックします。
 # Retrieve limit value from environment variables, falling back to default on invalid values.
 def _get_limit(env_name: str, default_limit: int) -> int:
-    # 環境変数値を整数化し、異常値はデフォルトへフォールバックします。
-    # Parse limit from env and fallback to default on invalid values.
-    raw_limit = os.environ.get(env_name, str(default_limit))
-    try:
-        limit = int(raw_limit)
-    except (TypeError, ValueError):
-        logger.warning(
-            "Invalid %s value '%s'. Falling back to %s.",
-            env_name,
-            raw_limit,
-            default_limit,
-        )
-        return default_limit
-    return max(limit, 0)
+    # 異常値はデフォルトへフォールバックし、警告ログを残します。
+    # Fall back to the default on invalid values, logging a warning.
+    return env_int_in_range(env_name, default_limit, minimum=0, warn_on_invalid=True)
 
 
 # 現在時刻から翌日の深夜0時までの残り時間を秒単位で計算します。
