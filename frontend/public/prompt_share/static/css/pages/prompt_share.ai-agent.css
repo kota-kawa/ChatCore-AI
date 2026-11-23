@@ -77,13 +77,7 @@
   .prompt-share-page .prompt-card,
   .prompt-share-page .prompt-action-btn,
   .prompt-share-page .meatball-menu,
-  .prompt-share-page .prompt-actions-dropdown,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn::before,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn::after,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn.launching,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn i,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn i.rotating {
+  .prompt-share-page .prompt-actions-dropdown {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
@@ -93,9 +87,7 @@
   .prompt-share-page .prompt-action-btn:hover,
   .prompt-share-page .meatball-menu:hover,
   .prompt-share-page .prompt-action-btn:active,
-  .prompt-share-page .meatball-menu:active,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn:hover,
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn:active {
+  .prompt-share-page .meatball-menu:active {
     transform: none;
     filter: none;
     box-shadow: var(--ps-fab-blue-shadow);
@@ -105,9 +97,5 @@
   .prompt-share-page .prompt-actions-dropdown,
   .prompt-share-page .prompt-actions-dropdown.is-open {
     transform: none;
-  }
-
-  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn i.rotating {
-    animation: none;
   }
 }

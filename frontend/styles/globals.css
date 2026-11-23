@@ -473,19 +473,6 @@ a.cc-texture-btn {
   --cc-button-shadow-color: rgba(220, 38, 38, 0.28);
 }
 
-.cc-texture-btn--light {
-  --cc-button-base: rgba(255, 255, 255, 0.98);
-  --cc-button-accent: rgba(241, 245, 249, 0.98);
-  --cc-button-shadow-color: rgba(15, 23, 42, 0.12);
-  color: #475569;
-  border-color: rgba(148, 163, 184, 0.3);
-}
-
-.cc-texture-btn--light-indigo {
-  color: #4f46e5;
-  border-color: rgba(129, 140, 248, 0.34);
-}
-
 /* すべてのボタン系コントロールから影とフィルターを消す（ホバー・フォーカス・押下時も含む）。!important で他のスタイルより優先させる */
 /* Remove shadows from all button controls */
 button,
