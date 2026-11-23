@@ -4,7 +4,8 @@
 import hljs from "highlight.js";
 import { Marked } from "marked";
 
-import { isRecord } from "../core/runtime_validation";
+import { escapeHtml } from "../core/html";
+import { isRecord } from "../../lib/utils";
 import { parseCopyBlockInfo, renderCopyBlockHtml } from "./copy_block_markdown";
 import { formatMathExpressionForDisplay, looksLikeLooseMathLine } from "./math_display";
 import { stripWebSearchArtifacts } from "./memo_text";
@@ -59,15 +60,6 @@ function readMarkedCodeToken(token: unknown) {
 
 function stripInvisibleCharacters(value: string) {
   return value.replace(/[\u200B-\u200D\u2060\uFEFF]/g, "");
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function protectSelectedReferenceMarkers(text: string) {

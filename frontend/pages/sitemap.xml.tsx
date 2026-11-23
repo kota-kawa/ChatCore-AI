@@ -3,23 +3,9 @@
 import type { GetServerSideProps } from "next";
 import { buildPromptPath } from "../lib/promptSlug";
 import { localizePublicPath } from "../lib/seo";
+import { getRequestOrigin } from "../lib/server/request_origin";
 import { resilientFetch } from "../scripts/core/resilient_fetch";
 import { PROMPT_CATEGORY_KEYS } from "../scripts/prompt_share/prompt_category_registry";
-
-// Hostヘッダーの値を正規化する（配列の場合は先頭を取得）
-// Normalize the Host header value (take the first if it's an array)
-function normalizeHostHeader(header: string | string[] | undefined) {
-  if (Array.isArray(header)) return header[0] || "";
-  return header || "";
-}
-
-// X-Forwarded-Protoヘッダーを正規化する（カンマ区切りの最初の値を取得）
-// Normalize the X-Forwarded-Proto header (take the first comma-separated value)
-function normalizeProtoHeader(header: string | string[] | undefined) {
-  const raw = Array.isArray(header) ? header[0] : header;
-  if (!raw) return "";
-  return raw.split(",")[0]?.trim() || "";
-}
 
 // XML属性・コンテンツをエスケープしてXXE/XMLインジェクションを防ぐ
 // Escape XML attributes and content to prevent XXE/XML injection
@@ -142,10 +128,7 @@ function resolveOrigin(context: Parameters<GetServerSideProps>[0]) {
     return withProtocol.replace(/\/+$/, "");
   }
 
-  const host = normalizeHostHeader(context.req.headers["x-forwarded-host"]) || normalizeHostHeader(context.req.headers.host);
-  const proto = normalizeProtoHeader(context.req.headers["x-forwarded-proto"])
-    || (process.env.NODE_ENV === "development" ? "http" : "https");
-  return host ? `${proto}://${host}` : "";
+  return getRequestOrigin(context.req);
 }
 
 // オリジンと最終更新日時からsitemap.xmlのXML文字列を組み立てる

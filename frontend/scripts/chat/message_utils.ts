@@ -2,7 +2,7 @@
 // Provides shared chat message helpers.
 // --------------------------------------------------
 import DOMPurify from "dompurify";
-import { sanitizeClassAttributeValue } from "../core/html";
+import { escapeHtml, sanitizeClassAttributeValue } from "../core/html";
 import { patchElementChildren } from "../../lib/chat_page/streaming_dom_patch";
 
 // 回答 HTML の余分な空行・空段落・連続した <br> を詰める。
@@ -97,15 +97,6 @@ function normalizeSanitizedHtml(html: string) {
   });
 
   return template.innerHTML;
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function sanitizeMessageHtml(dirtyHtml: string, options: SanitizeMessageHtmlOptions = {}) {

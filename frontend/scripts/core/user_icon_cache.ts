@@ -3,13 +3,11 @@
 // Display cache for the top-right user icon, used to paint the avatar before the auth
 // check returns. It must be cleared whenever the user changes.
 
+import { normalizeText } from "../../lib/utils";
+
 export const DEFAULT_AVATAR_URL = "/static/user-icon.png";
 const AVATAR_CACHE_KEY = "chatcore.userIcon.avatarUrl";
 const USERNAME_CACHE_KEY = "chatcore.userIcon.username";
-
-function normalizeText(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
 
 export function readCachedUserIconProfile() {
   try {

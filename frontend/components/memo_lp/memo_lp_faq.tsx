@@ -2,6 +2,7 @@
 // Defines memo landing FAQ content and structured data.
 
 import { useTranslation } from "../../contexts/locale_context";
+import { LpFaqSection } from "../lp/lp_faq_section";
 
 // メモ紹介ページのFAQ。JSON-LDと表示の両方でこのデータを使う
 // FAQ for the memo landing page; this data feeds both JSON-LD and the visible UI
@@ -70,29 +71,20 @@ export function MemoLpFaq() {
   const isEn = locale === "en";
   const items = isEn ? MEMO_LP_FAQ_ITEMS_EN : MEMO_LP_FAQ_ITEMS;
   return (
-    <section id="faq" className="lp-section lp-faq" aria-labelledby="mslp-faq-heading">
-      <div className="lp-container">
-        <p className="lp-eyebrow">{isEn ? "FREQUENTLY ASKED QUESTIONS" : "よくある質問"}</p>
-        <h2 id="mslp-faq-heading" className="lp-heading">
-          {isEn ? (
-            <>Questions people ask before they trust it.</>
-          ) : (
-            <>
-              預ける前に、
-              <br className="lp-br-sp" />
-              よく聞かれること。
-            </>
-          )}
-        </h2>
-        <dl className="lp-faq__list">
-          {items.map((item) => (
-            <div key={item.question} className="lp-faq__item">
-              <dt className="lp-faq__question">{item.question}</dt>
-              <dd className="lp-faq__answer">{item.answer}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-    </section>
+    <LpFaqSection
+      headingId="mslp-faq-heading"
+      items={items}
+      heading={
+        isEn ? (
+          <>Questions people ask before they trust it.</>
+        ) : (
+          <>
+            預ける前に、
+            <br className="lp-br-sp" />
+            よく聞かれること。
+          </>
+        )
+      }
+    />
   );
 }
