@@ -118,6 +118,7 @@ export type StreamHostRecorder = {
   messages: () => UiChatMessage[];
   errors: () => string[];
   roomTitles: () => unknown[];
+  deferredRoomTitleCandidates: () => string[][];
   persistedAnswers: () => StoredHistoryEntry[];
   unansweredFailures: () => string[];
   generationStateClears: () => number;
@@ -150,6 +151,7 @@ export function createStreamHostRecorder(options: StreamHostOptions): StreamHost
 
   const errors: string[] = [];
   const roomTitles: unknown[] = [];
+  const deferredRoomTitleCandidates: string[][] = [];
   const persistedAnswers: StoredHistoryEntry[] = [];
   const unansweredFailures: string[] = [];
 
@@ -182,6 +184,9 @@ export function createStreamHostRecorder(options: StreamHostOptions): StreamHost
         roomTitles.push(title);
       },
     },
+    startDeferredRoomTitlePolling: (candidates) => {
+      deferredRoomTitleCandidates.push([...candidates]);
+    },
     storage: {
       readGenerationState: () => storedGeneration,
       updateGenerationState: (updates) => {
@@ -213,6 +218,7 @@ export function createStreamHostRecorder(options: StreamHostOptions): StreamHost
     messages: () => messages,
     errors: () => errors,
     roomTitles: () => roomTitles,
+    deferredRoomTitleCandidates: () => deferredRoomTitleCandidates,
     persistedAnswers: () => persistedAnswers,
     unansweredFailures: () => unansweredFailures,
     generationStateClears: () => generationStateClears,

@@ -250,19 +250,6 @@ async def rename_chat_room_in_db(
     await _write(lambda repo: repo.rename_room(room_id, new_title), session)
 
 
-async def rename_chat_room_if_current_title_in(
-    room_id: str,
-    new_title: str,
-    allowed_current_titles: list[str],
-    *,
-    session: AsyncSession | None = None,
-) -> bool:
-    return await _write(
-        lambda repo: repo.rename_room_if_current_title_in(room_id, new_title, allowed_current_titles),
-        session,
-    )
-
-
 async def get_chat_room_messages(
     chat_room_id: str,
     *,

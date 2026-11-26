@@ -59,7 +59,7 @@ from services.chat_post_dependencies import (
     ChatPostUseCaseDependencies,
     ChatPostWebDependencies,
 )
-from services.chat_title import build_initial_title_candidates, generate_chat_room_title
+from services.chat_title import build_initial_title_candidates, generate_and_rename_room, generate_chat_room_title
 from services.chat_url_context import (
     PastedUrlPage,
     collect_earlier_pasted_urls,
@@ -1134,6 +1134,7 @@ class ChatPostUseCase:
         user_message = turn.user_message
         saved_user_message_id = turn.saved_user_message_id
         should_auto_title_room = turn.should_auto_title_room
+        supports_deferred_title = turn.request.headers.get("X-ChatCore-Deferred-Title") == "1"
         # 要約入力はこのターンの履歴＋保存できた応答で決まる。DBを読み直さない。
         # The summary input is this turn's history plus the reply that was persisted; no re-read.
         history_before_reply = list(turn.all_messages)
@@ -1153,14 +1154,9 @@ class ChatPostUseCase:
             web_search_context: list[dict[str, Any]] | None = None,
             tool_approval_ids: list[str] | None = None,
         ) -> dict[str, Any] | None:
-            """生成ジョブから呼ばれ、回答を保存する。承認カードがある回答は承認行との結び付けと同じトランザクションで保存す
-            る。保存できたら記憶の抽出を予約し、初回なら自動でタイトルを付ける（{"room_title": ...} を返す）。
-            保存できなかったときは None を返す。
+            """回答と承認カードを保存し、完了イベントで配信するメタデータを返す。
 
-            Called by the generation job to persist the reply. A reply with approval cards is saved in the same
-            transaction that ties the approval rows to it.
-            After a successful save it defers context extraction and, for the first reply, auto-titles the room
-            (returning {"room_title": ...}); None when nothing was persisted.
+            Save the answer and its approval cards, then return metadata for the terminal event.
             """
             if tool_approval_ids and save_with_approvals is not None and user_id is not None:
                 # 承認カードのある回答は、承認行への回答 ID の結び付けと同じトランザクションで保存する。
@@ -1212,16 +1208,33 @@ class ChatPostUseCase:
             )
             # 初回応答を保存できた後にだけタイトルを自動生成する。
             # ユーザーが先に改名していた場合は conditional rename が更新を拒否する。
-            if not should_auto_title_room:
+            if not should_auto_title_room or user_id is None:
                 return {"assistant_message_id": assistant_message_id}
-            generated_title = _run_async_callback(
-                lambda: self._generate_and_rename_room(
-                    chat_room_id=chat_room_id,
-                    user_message=user_message,
-                    assistant_response=response,
-                    allowed_current_titles=title_candidates,
-                )
+
+            generate_title = partial(
+                generate_and_rename_room,
+                chat_room_id=chat_room_id,
+                user_message=user_message,
+                assistant_response=response,
+                allowed_current_titles=title_candidates,
+                user_id=user_id,
+                assistant_message_id=assistant_message_id,
+                locale=self.locale,
+                generate_title=generate_chat_room_title,
+                rename_room=deps.persistence.rename_chat_room_if_current_title_in,
             )
+
+            if supports_deferred_title:
+                try:
+                    deps.background.submit_background_task(_run_async_callback, generate_title)
+                except Exception:
+                    deps.logger.warning("Failed to defer chat room title generation.", exc_info=True)
+                else:
+                    return {
+                        "assistant_message_id": assistant_message_id,
+                        "room_title_initial_candidates": title_candidates,
+                    }
+            generated_title = _run_async_callback(generate_title)
             if generated_title:
                 return {"room_title": generated_title, "assistant_message_id": assistant_message_id}
             return {"assistant_message_id": assistant_message_id}
@@ -1512,17 +1525,22 @@ class ChatPostUseCase:
             user_message=turn.user_message,
             assistant_response=turn.bot_reply,
         )
-        if not turn.should_auto_title_room:
+        if not turn.should_auto_title_room or turn.user_id is None or turn.saved_assistant_message_id is None:
             return None
         title_candidates = build_initial_title_candidates(
             turn.user_message,
             task_launch_request=turn.active_task_request,
         )
-        return await self._generate_and_rename_room(
+        return await generate_and_rename_room(
             chat_room_id=turn.chat_room_id,
             user_message=turn.user_message,
             assistant_response=turn.bot_reply,
             allowed_current_titles=title_candidates,
+            user_id=turn.user_id,
+            assistant_message_id=turn.saved_assistant_message_id,
+            locale=self.locale,
+            generate_title=generate_chat_room_title,
+            rename_room=deps.persistence.rename_chat_room_if_current_title_in,
         )
 
     async def _rebuild_room_summary_after_reply(self, turn: _ChatPostTurn) -> None:
@@ -1560,40 +1578,6 @@ class ChatPostUseCase:
                 sid=turn.sid,
             )
         )
-
-    async def _generate_and_rename_room(
-        self,
-        *,
-        chat_room_id: str,
-        user_message: str,
-        assistant_response: str,
-        allowed_current_titles: list[str],
-    ) -> str | None:
-        """タイトルをイベントループの外（別スレッド）で生成し、現在のタイトルが改名前の候補のままのときだけ AsyncSession で
-        更新する。更新できたらそのタイトルを返す。
-
-        Generate a title off-loop, then conditionally persist it through AsyncSession.
-        """
-        title = await asyncio.to_thread(
-            generate_chat_room_title,
-            user_message,
-            assistant_response,
-            locale=self.locale,
-        )
-        if not title or title in allowed_current_titles:
-            return None
-        try:
-            updated = await maybe_await(
-                self.deps.persistence.rename_chat_room_if_current_title_in(
-                    chat_room_id,
-                    title,
-                    allowed_current_titles,
-                )
-            )
-        except Exception:
-            self.deps.logger.exception("Failed to update generated chat room title.")
-            return None
-        return title if updated else None
 
     async def _maybe_schedule_context_extraction(
         self,

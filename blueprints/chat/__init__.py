@@ -113,6 +113,7 @@ from . import (  # noqa: F401, E402
     preferences,
     profile,
     projects,
+    room_title,
     rooms,
     skills,
     tasks,

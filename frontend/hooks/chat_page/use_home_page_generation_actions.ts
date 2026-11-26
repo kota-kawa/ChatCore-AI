@@ -74,6 +74,7 @@ import {
   type StructuredUiMetricRecord,
 } from "../../lib/chat_page/structured_ui_metrics";
 import { createStructuredUiMetricsScope } from "../../lib/chat_page/structured_ui_scope";
+import { useDeferredRoomTitlePolling } from "./use_deferred_room_title_polling";
 
 // サーバーが「該当ルームが見つかりません」を返したことを表すエラーコード。
 // Error code the server returns when the chat room no longer exists.
@@ -189,6 +190,7 @@ export function useHomePageGenerationActions({
     setCurrentRoomId,
     setCurrentRoomMode,
   } = roomSelection;
+  const { applyRoomTitleUpdate, startDeferredRoomTitlePolling } = useDeferredRoomTitlePolling(setChatRooms);
   const {
     historyHasMore,
     historyNextBeforeId,
@@ -405,23 +407,6 @@ export function useHomePageGenerationActions({
     notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, normalized, roomMode));
   }, [notifyStoredHistoryWriteIssue]);
 
-  const applyRoomTitleUpdate = useCallback((roomId: string, title: unknown) => {
-    if (typeof title !== "string") return;
-    const normalizedTitle = title.trim();
-    if (!normalizedTitle) return;
-
-    setChatRooms((previous) =>
-      previous.map((room) =>
-        room.id === roomId
-          ? {
-              ...room,
-              title: normalizedTitle,
-            }
-          : room,
-      ),
-    );
-  }, [setChatRooms]);
-
   // ルームをサイドバー一覧の先頭へ移す
   // Move the room to the top of the sidebar list
   const markChatRoomActive = useCallback((roomId: string) => {
@@ -545,6 +530,7 @@ export function useHomePageGenerationActions({
           appendErrorMessage: (message) => appendAssistantErrorMessage(roomId, message),
           applyRoomTitle: (title) => applyRoomTitleUpdate(roomId, title),
         },
+        startDeferredRoomTitlePolling: (candidates) => startDeferredRoomTitlePolling(roomId, candidates),
         storage: {
           readGenerationState: () => readStoredGenerationState(roomId),
           updateGenerationState: (updates) => {
@@ -573,6 +559,7 @@ export function useHomePageGenerationActions({
       isGenerationActive,
       notifyStoredHistoryWriteIssue,
       openGenerationStreamRequest,
+      startDeferredRoomTitlePolling,
     ],
   );
 
@@ -1114,7 +1101,7 @@ export function useHomePageGenerationActions({
         "/api/chat",
         {
           method: "POST",
-          headers: withChatCoreUiVersionHeader({ "Content-Type": "application/json" }),
+          headers: withChatCoreUiVersionHeader({ "Content-Type": "application/json", "X-ChatCore-Deferred-Title": "1" }),
           credentials: "same-origin",
           body: JSON.stringify({
             message: payload.message,

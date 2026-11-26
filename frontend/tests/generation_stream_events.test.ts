@@ -74,6 +74,17 @@ test("a done event finalizes with the payload response", () => {
   });
 });
 
+test("a done event normalizes deferred room-title candidates", () => {
+  const action = interpret("done", {
+    response: "回答",
+    room_title_initial_candidates: [" 初期名 ", "初期名", "", 7],
+  });
+
+  assert.equal(action.kind, "done");
+  if (action.kind !== "done") return;
+  assert.deepEqual(action.roomTitleInitialCandidates, ["初期名"]);
+});
+
 test("terminal stream events carry the saved assistant message id", () => {
   const done = interpret("done", { response: "answer", assistant_message_id: 51 });
   const incomplete = interpret("incomplete", { response: "partial", assistant_message_id: 52 });
@@ -196,6 +207,26 @@ test("an incomplete event keeps the partial text and the server message", () => 
     parts: undefined,
     message: "途中までの回答を保存しました。",
   });
+});
+
+test("incomplete and aborted events preserve deferred room-title candidates", () => {
+  const incomplete = interpret("incomplete", {
+    response: "途中の回答",
+    room_title_initial_candidates: [" 初期名 "],
+  });
+  const aborted = interpret("aborted", {
+    response: "停止時の回答",
+    room_title_initial_candidates: [" 初期名 "],
+  });
+
+  assert.equal(incomplete.kind, "incomplete");
+  if (incomplete.kind === "incomplete") {
+    assert.deepEqual(incomplete.roomTitleInitialCandidates, ["初期名"]);
+  }
+  assert.equal(aborted.kind, "aborted");
+  if (aborted.kind === "aborted") {
+    assert.deepEqual(aborted.roomTitleInitialCandidates, ["初期名"]);
+  }
 });
 
 test("an incomplete event without a message uses the localized fallback", () => {

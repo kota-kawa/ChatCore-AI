@@ -7,19 +7,25 @@ and an LLM-generated short title that is cleaned up (used by services/chat_use_c
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
 from collections.abc import Callable
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .async_utils import maybe_await
+from .chat_post_dependencies import RenameChatRoomIfCurrentTitleIn
+from .db import in_transaction_with_retry, session_scope
 from .i18n import build_response_language_policy
 from .llm import LIGHTWEIGHT_TASK_MODEL, LlmServiceError, get_llm_response
+from .repositories.chat_room_access import DEFAULT_CHAT_ROOM_TITLE, get_owned_room_title, rename_room_if_current_title_in
 
 logger = logging.getLogger(__name__)
 
 CHAT_ROOM_TITLE_MAX_CHARS = 48
 CHAT_ROOM_TITLE_LLM_INPUT_CHARS = 1800
-DEFAULT_CHAT_ROOM_TITLE = "新規チャット"
 
 _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
@@ -142,4 +148,53 @@ def generate_chat_room_title(
         return ""
 
     return _sanitize_title(raw_title)
+
+
+async def generate_and_rename_room(
+    *,
+    chat_room_id: str,
+    user_message: str,
+    assistant_response: str,
+    allowed_current_titles: list[str],
+    user_id: int,
+    assistant_message_id: int,
+    locale: str,
+    generate_title: Callable[..., str],
+    rename_room: RenameChatRoomIfCurrentTitleIn,
+) -> str | None:
+    """新しいタイトルを生成し、保存できた場合だけ返す。Generate a title and return it only if it was persisted."""
+    title = await asyncio.to_thread(generate_title, user_message, assistant_response, locale=locale)
+    if not title or title in allowed_current_titles:
+        return None
+    try:
+        updated = await maybe_await(
+            rename_room(
+                chat_room_id, title, allowed_current_titles, user_id=user_id, assistant_message_id=assistant_message_id,
+            )
+        )
+    except Exception:
+        logger.exception("Failed to update generated chat room title.")
+        return None
+    return title if updated else None
+
+
+async def get_owned_chat_room_title(room_id: str, user_id: int) -> str | None:
+    async with session_scope() as session:
+        return await get_owned_room_title(session, room_id, user_id)
+
+
+async def rename_chat_room_if_current_title_in(
+    room_id: str,
+    new_title: str,
+    allowed_current_titles: list[str],
+    *,
+    user_id: int,
+    assistant_message_id: int,
+) -> bool:
+    async def rename(session: AsyncSession) -> bool:
+        return await rename_room_if_current_title_in(
+            session, room_id, new_title, allowed_current_titles, user_id=user_id, assistant_message_id=assistant_message_id,
+        )
+
+    return await in_transaction_with_retry(None, rename)
 

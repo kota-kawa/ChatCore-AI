@@ -92,7 +92,6 @@ from services.chat_service import (
     get_task_prompt_data,
     get_user_by_id,
     list_enabled_user_skills,
-    rename_chat_room_if_current_title_in,
     save_message_to_db,
     store_user_message_and_load_turn_context,
     switch_chat_branch,
@@ -103,6 +102,7 @@ from services.chat_state import (
     get_room_summary,
     rebuild_room_summary,
 )
+from services.chat_title import rename_chat_room_if_current_title_in
 from services.chat_tool_approval_service import (
     save_assistant_message_with_approvals,
     supersede_pending_approvals,

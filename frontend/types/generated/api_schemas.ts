@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 05b2248c8c6a0d900e9a506cc01839864a249f4cb5c9f182ad36f8cbbadf2e1a
+// Schema fingerprint: d85c63c561732cb5e27746f3c2d2842c32188d23fad838c505a170d39fda99b7
 
 import { z } from "zod";
 
@@ -169,6 +169,9 @@ export type DemoAccessCodeRevokeResponse = z.infer<typeof DemoAccessCodeRevokeRe
 
 export const ChatJsonResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "code": z.union([z.string(), z.null()]).default(null), "params": z.union([z.record(z.string(), z.any()), z.null()]).default(null), "assistant_message_id": z.union([z.number().int(), z.null()]).default(null), "response": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type ChatJsonResponse = z.infer<typeof ChatJsonResponseSchema>;
+
+export const ChatRoomTitleResponseSchema = z.object({ "title": z.string() }).catchall(z.any());
+export type ChatRoomTitleResponse = z.infer<typeof ChatRoomTitleResponseSchema>;
 
 export const ChatGenerationStatusResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "code": z.union([z.string(), z.null()]).default(null), "params": z.union([z.record(z.string(), z.any()), z.null()]).default(null), "is_generating": z.union([z.boolean(), z.null()]).default(null), "has_replayable_job": z.union([z.boolean(), z.null()]).default(null), "generation_id": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type ChatGenerationStatusResponse = z.infer<typeof ChatGenerationStatusResponseSchema>;

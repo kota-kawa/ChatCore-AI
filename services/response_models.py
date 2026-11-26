@@ -125,6 +125,10 @@ class ChatGenerationStatusResponse(ApiErrorPayload):
     generation_id: str | None = None
 
 
+class ChatRoomTitleResponse(ResponsePayloadModel):
+    title: str
+
+
 # 日本語: チャット履歴における個々のメッセージデータを表現するモデル。
 # English: Model representing an individual message in chat history.
 class ChatHistoryMessage(ResponsePayloadModel):

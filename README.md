@@ -152,8 +152,16 @@ sequenceDiagram
     end
     alt Normal completion
         Job->>DB: Save the finalized reply once
+        opt First reply and deferred title support
+            Job->>Job: Queue room title generation
+        end
         Job-->>API: done
         API-->>Browser: done
+        opt Room title generation was queued
+            Browser->>API: Check current room title
+            API->>DB: Read title for the room owner
+            API-->>Browser: Current title
+        end
     else User stops generation
         Browser->>API: POST /api/chat_stop
         API->>API: Revalidate room access
@@ -425,8 +433,16 @@ sequenceDiagram
     end
     alt 正常完了
         Job->>DB: 確定した回答を一度だけ保存
+        opt 初回回答とタイトル後反映への対応
+            Job->>Job: タイトル生成を予約
+        end
         Job-->>API: done
         API-->>Browser: done
+        opt タイトル生成を予約した場合
+            Browser->>API: 現在のルーム名を確認
+            API->>DB: 所有者のルーム名を読み出す
+            API-->>Browser: 現在のルーム名
+        end
     else 利用者が途中停止
         Browser->>API: POST /api/chat_stop
         API->>API: 部屋へのアクセス権を再確認

@@ -114,7 +114,7 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
 
     # 日本語: 1 リクエスト分のユースケースを実行し、生成ジョブの起動引数のうち key で指定した値を返します。
     # English: Run one request through the use case and return the named keyword argument given to the generation job.
-    def _run(self, deps, *, body_extra, session, key="personal_knowledge_search"):
+    def _run(self, deps, *, body_extra, session, key="personal_knowledge_search", headers=None):
         use_case = ChatPostUseCase(deps, default_model="test-model")
         request = build_request(
             method="POST",
@@ -126,6 +126,7 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
                 **body_extra,
             },
             session=session,
+            headers=headers,
         )
         with (
             patch("services.chat_use_case.generate_chat_room_title", return_value=None),
@@ -139,6 +140,46 @@ class ChatUseCaseLookupFlagsTestCase(unittest.TestCase):
                 )
             )
         return deps.start_generation_job.call_args.kwargs[key]
+
+    def test_compatible_stream_defers_first_title_until_after_answer_save(self):
+        deps = self._build_deps(Mock())
+        persist_response = self._run(
+            deps, body_extra={}, session={"user_id": 42}, key="persist_response",
+            headers=[(b"x-chatcore-deferred-title", b"1")],
+        )
+        deps.rename_chat_room_if_current_title_in.return_value = True
+        with patch("services.chat_use_case.generate_chat_room_title", return_value="沖縄旅行の予算") as generate:
+            metadata = persist_response("旅行予算の回答")
+            generate.assert_not_called()
+            deps.save_message_to_db.assert_called_once()
+            candidates = metadata["room_title_initial_candidates"]
+            self.assertEqual(metadata["assistant_message_id"], 1)
+            self.assertIn("去年の沖縄旅行の予算は？", candidates)
+            run_callback, generate_callback = deps.submit_background_task.call_args.args
+            self.assertEqual(run_callback(generate_callback), "沖縄旅行の予算")
+            generate.assert_called_once_with("去年の沖縄旅行の予算は？", "旅行予算の回答", locale="ja")
+
+        deps.rename_chat_room_if_current_title_in.assert_called_once_with(
+            "room-1", "沖縄旅行の予算", candidates, user_id=42, assistant_message_id=1,
+        )
+
+    def test_legacy_stream_still_includes_generated_title_in_terminal_metadata(self):
+        deps = self._build_deps(Mock())
+        persist_response = self._run(deps, body_extra={}, session={"user_id": 42}, key="persist_response")
+        deps.rename_chat_room_if_current_title_in.return_value = True
+        with patch("services.chat_use_case.generate_chat_room_title", return_value="沖縄旅行の予算"):
+            metadata = persist_response("旅行予算の回答")
+        self.assertEqual(metadata, {"assistant_message_id": 1, "room_title": "沖縄旅行の予算"})
+
+    def test_unsaved_answer_does_not_start_deferred_title_generation(self):
+        deps = self._build_deps(Mock())
+        deps.save_message_to_db.return_value = None
+        persist_response = self._run(
+            deps, body_extra={}, session={"user_id": 42}, key="persist_response",
+            headers=[(b"x-chatcore-deferred-title", b"1")],
+        )
+        self.assertIsNone(persist_response("旅行予算の回答"))
+        deps.submit_background_task.assert_not_called()
 
     # 日本語: 有効時は生成前に必ず検索し、追加検索用の関数もユーザーIDに束ねてジョブへ渡します。
     # English: When enabled, lookup runs before generation and the job also receives a user-bound retry.

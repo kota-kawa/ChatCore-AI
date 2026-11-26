@@ -3,14 +3,18 @@
 Tests chat room title generation and initial title candidates in services.chat_title.
 """
 
+import json
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
+from blueprints.chat.room_title import chat_room_title
 from services.chat_title import (
     build_initial_title_candidates,
     generate_chat_room_title,
 )
 from services.llm import LIGHTWEIGHT_TASK_MODEL
+from services.repositories.chat_room_access import get_owned_room_title, rename_room_if_current_title_in
+from tests.helpers.request_helpers import build_request
 
 
 # 日本語: チャットルームタイトルの自動生成ロジックをテストするクラス。
@@ -64,6 +68,51 @@ class ChatTitleTestCase(unittest.TestCase):
         self.assertIn("新規チャット", candidates)
         self.assertIn("採用面接の日程調整", candidates)
         self.assertIn("メール返信", candidates)
+
+
+class ChatRoomTitleLookupTestCase(unittest.IsolatedAsyncioTestCase):
+    async def test_title_lookup_requires_room_id_and_never_queries_for_guests(self):
+        with patch("blueprints.chat.room_title.get_owned_chat_room_title", new_callable=AsyncMock) as load_title:
+            self.assertEqual((await chat_room_title(build_request())).status_code, 400)
+            guest = build_request(query_string=b"room_id=room-1")
+            self.assertEqual((await chat_room_title(guest)).status_code, 404)
+            load_title.assert_not_awaited()
+
+    async def test_title_lookup_calls_owned_read_and_disables_caching(self):
+        request = build_request(query_string=b"room_id=room-1", session={"user_id": 42})
+        with patch("blueprints.chat.room_title.get_owned_chat_room_title", new_callable=AsyncMock) as load_title:
+            load_title.side_effect = [None, "会話タイトル"]
+            self.assertEqual((await chat_room_title(request)).status_code, 404)
+            response = await chat_room_title(request)
+        self.assertEqual(load_title.await_args.args, ("room-1", 42))
+        self.assertEqual(json.loads(response.body), {"title": "会話タイトル"})
+        self.assertEqual(response.headers["cache-control"], "no-store")
+
+    async def test_deferred_rename_checks_owner_existing_title_and_saved_answer(self):
+        session = MagicMock()
+        session.execute = AsyncMock(return_value=MagicMock(rowcount=0))
+        renamed = await rename_room_if_current_title_in(
+            session, "room-1", "新しい名前", ["仮の名前"], user_id=42, assistant_message_id=8,
+        )
+        self.assertFalse(renamed)
+        statement = session.execute.await_args.args[0].compile()
+        sql = str(statement)
+        self.assertIn("chat_rooms.user_id =", sql)
+        self.assertIn("chat_rooms.title IN", sql)
+        self.assertIn("EXISTS", sql)
+        self.assertIn("chat_history.id =", sql)
+        self.assertIn("chat_history.chat_room_id =", sql)
+        self.assertIn(8, statement.params.values())
+
+    async def test_title_query_matches_owner_and_normal_room(self):
+        session = MagicMock()
+        session.scalar = AsyncMock(return_value="会話タイトル")
+        self.assertEqual(await get_owned_room_title(session, "room-1", 42), "会話タイトル")
+        statement = session.scalar.await_args.args[0].compile()
+        self.assertIn("chat_rooms.user_id =", str(statement))
+        self.assertIn("chat_rooms.mode =", str(statement))
+        self.assertCountEqual(statement.params.values(), ["room-1", 42, "normal"])
+
 
 if __name__ == "__main__":
     unittest.main()
