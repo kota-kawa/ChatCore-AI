@@ -6,13 +6,44 @@ import { useTranslation } from "../../contexts/locale_context";
 
 type ClipboardContent = { files: File[]; text: string; unsupported?: boolean };
 
+// クリップボード読み取り権限の状態を安全に確認する（未対応ブラウザでは "unsupported" を返す）。
+// Safely check the clipboard-read permission state (returns "unsupported" when unavailable).
+async function getClipboardPermissionState(): Promise<PermissionState | "unsupported"> {
+  try {
+    if (!navigator.permissions?.query) return "unsupported";
+    const status = await navigator.permissions.query({ name: "clipboard-read" as PermissionName });
+    return status.state;
+  } catch {
+    return "unsupported";
+  }
+}
+
+function isNotAllowedError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "NotAllowedError";
+}
+
+function isFocusLossError(error: unknown): boolean {
+  return error instanceof Error && /not focused/i.test(error.message);
+}
+
+// 1フレーム待機する（権限ダイアログ直後のフォーカス復帰を待つために使う）。
+// Wait one animation frame so focus can settle after a permission prompt closes.
+function waitForNextFrame(): Promise<void> {
+  if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
 // 同じ項目の画像と文章を両方貼ると、画像の代替テキストやURLも重複して入ってしまう。
 // Prefer images over their alternate text/URL representations.
 // クリップボードの中身を読む。画像があれば画像だけを返し、無ければ text/plain を結合して返す。対応する形式が無いときは unsupported を立てる
 // Read the clipboard: return images only when present, otherwise the joined text/plain; flag unsupported when nothing usable is found
-async function readClipboardContent(): Promise<ClipboardContent> {
+async function readClipboardContent(textOnlyFallback = false): Promise<ClipboardContent> {
   const clipboard = navigator.clipboard;
-  if (!clipboard?.read) {
+  if (textOnlyFallback || !clipboard?.read) {
     if (clipboard?.readText) return { files: [], text: await clipboard.readText() };
     throw new Error("Clipboard reading is unavailable");
   }
@@ -33,6 +64,43 @@ async function readClipboardContent(): Promise<ClipboardContent> {
     }
   }
   return { files, text: files.length ? "" : texts.join("\n"), unsupported: items.length > 0 && !files.length && !texts.length };
+}
+
+// 初回の読み取りが権限ダイアログ直後のフォーカス喪失や read() 非対応で失敗した場合に、安全な条件だけ再試行する。
+// Retry once when the first read fails due to focus loss right after a permission grant or when read() is unsupported.
+async function readClipboardWithRetry(input: HTMLTextAreaElement, isCurrent: () => boolean): Promise<ClipboardContent> {
+  try {
+    return await readClipboardContent();
+  } catch (error) {
+    if (!isCurrent()) throw error;
+
+    if (isNotAllowedError(error)) {
+      const permissionState = await getClipboardPermissionState();
+      const canRetry = permissionState === "granted" || (permissionState !== "denied" && isFocusLossError(error));
+      if (!canRetry || !isCurrent()) throw error;
+
+      if (typeof document !== "undefined" && !document.hasFocus()) {
+        window.focus?.();
+        input.focus();
+        await waitForNextFrame();
+        if (!isCurrent()) throw error;
+      }
+
+      try {
+        return await readClipboardContent();
+      } catch (retryError) {
+        if (!isCurrent() || isNotAllowedError(retryError) || typeof navigator.clipboard?.readText !== "function") {
+          throw retryError;
+        }
+        return await readClipboardContent(true);
+      }
+    }
+
+    if (typeof navigator.clipboard?.read === "function" && typeof navigator.clipboard?.readText === "function") {
+      return await readClipboardContent(true);
+    }
+    throw error;
+  }
 }
 
 type ChatClipboardPasteOptions = {
@@ -98,7 +166,7 @@ export function useChatClipboardPaste(options: ChatClipboardPasteOptions) {
     try {
       // ユーザーのタップと同じ呼び出し内で読み取りを始める。
       // Start the read in the user's tap handler, before any other async work.
-      const content = await readClipboardContent();
+      const content = await readClipboardWithRetry(input, isCurrent);
       if (!isCurrent()) return;
       if (content.files.length) {
         await latestOptions.current.attachSelectedFiles(content.files, isCurrent);

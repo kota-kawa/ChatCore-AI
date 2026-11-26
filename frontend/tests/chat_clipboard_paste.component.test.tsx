@@ -17,13 +17,23 @@ vi.mock("../lib/chat_page/chat_images", async (importOriginal) => ({
 
 const notifyError = vi.fn();
 const originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+const originalPermissions = Object.getOwnPropertyDescriptor(navigator, "permissions");
 afterEach(() => {
   if (originalClipboard) Object.defineProperty(navigator, "clipboard", originalClipboard);
   else Reflect.deleteProperty(navigator, "clipboard");
+  if (originalPermissions) Object.defineProperty(navigator, "permissions", originalPermissions);
+  else Reflect.deleteProperty(navigator, "permissions");
 });
 
 function setClipboard(value: object | undefined) {
   Object.defineProperty(navigator, "clipboard", { configurable: true, value });
+}
+
+function setPermissions(query: ReturnType<typeof vi.fn> | undefined) {
+  Object.defineProperty(navigator, "permissions", {
+    configurable: true,
+    value: query ? { query } : undefined,
+  });
 }
 
 function textItem(text: string) {
@@ -227,5 +237,55 @@ describe("composer clipboard paste", () => {
     else view.rerender(<Harness allowImages={false} />);
     await act(async () => { finish({ dataBase64: "aW1hZ2U=", mediaType: "image/webp", size: 5 }); });
     expect(screen.getByLabelText("files")).toHaveTextContent("[]");
+  });
+
+  it("retries automatically on the first click when permission is granted after an initial NotAllowedError", async () => {
+    const read = vi.fn()
+      .mockRejectedValueOnce(new DOMException("Document is not focused.", "NotAllowedError"))
+      .mockResolvedValueOnce([textItem("初回成功")]);
+    setClipboard({ read });
+    setPermissions(vi.fn(async () => ({ state: "granted" })));
+    vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    vi.spyOn(window, "focus").mockImplementation(() => {});
+    render(<Harness />);
+    input().setSelectionRange(2, 2);
+    paste();
+    await waitFor(() => expect(input()).toHaveValue("前後初回成功"));
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(notifyError).not.toHaveBeenCalled();
+  });
+
+  it("does not retry when clipboard permission is denied even with a focus-loss message", async () => {
+    const read = vi.fn().mockRejectedValueOnce(new DOMException("Document is not focused.", "NotAllowedError"));
+    setClipboard({ read });
+    setPermissions(vi.fn(async () => ({ state: "denied" })));
+    render(<Harness />);
+    paste();
+    await waitFor(() => expect(notifyError).toHaveBeenCalledWith(expect.stringContaining("長押し")));
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fall back to readText when the retry also throws NotAllowedError", async () => {
+    const read = vi.fn().mockRejectedValue(new DOMException("Document is not focused.", "NotAllowedError"));
+    const readText = vi.fn(async () => "should not run");
+    setClipboard({ read, readText });
+    setPermissions(vi.fn(async () => ({ state: "granted" })));
+    render(<Harness />);
+    paste();
+    await waitFor(() => expect(notifyError).toHaveBeenCalledWith(expect.stringContaining("長押し")));
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(readText).not.toHaveBeenCalled();
+  });
+
+  it("falls back to readText when clipboard.read throws a non-permission error", async () => {
+    const read = vi.fn().mockRejectedValueOnce(new DOMException("unsupported", "NotSupportedError"));
+    const readText = vi.fn(async () => "フォールバック");
+    setClipboard({ read, readText });
+    render(<Harness />);
+    input().setSelectionRange(2, 2);
+    paste();
+    await waitFor(() => expect(input()).toHaveValue("前後フォールバック"));
+    expect(readText).toHaveBeenCalledTimes(1);
+    expect(notifyError).not.toHaveBeenCalled();
   });
 });
