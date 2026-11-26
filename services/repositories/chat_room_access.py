@@ -15,13 +15,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api_errors import ForbiddenOperationError, ResourceNotFoundError
 from services.datetime_serialization import serialize_datetime_iso
 from services.error_messages import ERROR_CHAT_ROOM_FORBIDDEN, ERROR_CHAT_ROOM_NOT_FOUND
-from services.models import ChatRoom
+from services.models import ChatHistory, ChatRoom
 
 __all__ = [
     "DEFAULT_CHAT_ROOM_TITLE",
@@ -68,6 +68,39 @@ async def load_owned_room(
             return None
         raise ForbiddenOperationError(forbidden_message)
     return room
+
+
+async def get_owned_room_title(session: AsyncSession, room_id: str, user_id: int) -> str | None:
+    return await session.scalar(
+        select(ChatRoom.title).where(
+            ChatRoom.id == room_id, ChatRoom.user_id == user_id, ChatRoom.mode == "normal",
+        )
+    )
+
+
+async def rename_room_if_current_title_in(
+    session: AsyncSession,
+    room_id: str,
+    new_title: str,
+    allowed_current_titles: list[str],
+    *,
+    user_id: int,
+    assistant_message_id: int,
+) -> bool:
+    titles = [title for title in dict.fromkeys(allowed_current_titles) if title]
+    if not titles:
+        return False
+    # 同じ ID の部屋が作り直された場合に、古い回答のタイトルを適用しない。
+    # Do not title a recreated room from a reply saved in its previous incarnation.
+    saved_reply = select(ChatHistory.id).where(
+        ChatHistory.id == assistant_message_id, ChatHistory.chat_room_id == room_id
+    ).exists()
+    result = await session.execute(
+        update(ChatRoom)
+        .where(ChatRoom.id == room_id, ChatRoom.user_id == user_id, ChatRoom.title.in_(titles), saved_reply)
+        .values(title=new_title)
+    )
+    return bool(result.rowcount)
 
 
 def serialize_room(room: ChatRoom, *, project_room: bool = False) -> dict[str, Any]:

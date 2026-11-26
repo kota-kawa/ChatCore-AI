@@ -7,6 +7,7 @@ import asyncio
 import dataclasses
 import json
 import unittest
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -73,11 +74,23 @@ class ChatSkillSelectionIntegrationTests(unittest.TestCase):
         deps = helper._build_deps(Mock())
         object.__setattr__(deps.generation, "select_chat_skills", select_chat_skills)
         object.__setattr__(deps.prompts, "build_context_messages", build_context_messages)
+        selecting = Event()
+        observed_selection = []
+
+        def fetch(_message):
+            observed_selection.append(selecting.wait(timeout=2))
+            return (), "EXTERNAL-SELECT-MEMO"
+
+        def decide(*_args, **_kwargs):
+            selecting.set()
+            return self._decision([])
+
         with (
-            patch("services.chat_use_case.fetch_pasted_url_context", return_value=((), "EXTERNAL-SELECT-MEMO")),
-            patch("services.chat_skill_selection.get_llm_json_response", return_value=self._decision([])) as decision,
+            patch("services.chat_use_case.fetch_pasted_url_context", side_effect=fetch),
+            patch("services.chat_skill_selection.get_llm_json_response", side_effect=decide) as decision,
         ):
             helper._run(deps, body_extra={}, session={"user_id": 42})
+        self.assertEqual(observed_selection, [True])
         self.assertNotIn("EXTERNAL-SELECT-MEMO", str(decision.call_args))
         self.assertIn("EXTERNAL-SELECT-MEMO", str(deps.start_generation_job.call_args.kwargs["conversation_messages"]))
 
@@ -144,17 +157,27 @@ class ChatSkillSelectionIntegrationTests(unittest.TestCase):
     def test_regeneration_reselects_and_filters_external_reference_text(self):
         pipeline_input = self._regeneration_input()
         captured = []
+        selecting = Event()
+        observed_selection = []
+
+        def fetch(_message):
+            observed_selection.append(selecting.wait(timeout=2))
+            return (), "EXTERNAL-INSTRUCTION"
+
         def decide(messages, _model, **_kwargs):
+            selecting.set()
             captured.append(messages)
             return self._decision([-1])
+
         with (
-            patch("services.chat_regeneration_pipeline.fetch_pasted_url_context", return_value=((), "EXTERNAL-INSTRUCTION")),
+            patch("services.chat_regeneration_pipeline.fetch_pasted_url_context", side_effect=fetch),
             patch("services.chat_regeneration_pipeline.has_active_generation", return_value=False),
             patch("services.chat_regeneration_pipeline.start_generation_job", return_value=Mock()) as start,
             patch("services.chat_skill_selection.get_llm_json_response", side_effect=decide),
         ):
             result = asyncio.run(run_chat_regeneration(pipeline_input))
         self.assertIsInstance(result, ChatRegenerationStreamStarted)
+        self.assertEqual(observed_selection, [True])
         self.assertEqual(len(captured), 1)
         self.assertNotIn("EXTERNAL-INSTRUCTION", str(captured))
         self.assertIn("Project guidance", str(captured))
@@ -167,12 +190,13 @@ class ChatSkillSelectionIntegrationTests(unittest.TestCase):
         pipeline_input = self._regeneration_input()
         pipeline_input.dependencies.consume_llm_daily_quota.return_value = (False, 1, 1)
         with (
-            patch("services.chat_regeneration_pipeline.fetch_pasted_url_context", return_value=((), "")),
+            patch("services.chat_regeneration_pipeline.fetch_pasted_url_context") as fetch,
             patch("services.chat_regeneration_pipeline.has_active_generation", return_value=False),
             patch("services.chat_skill_selection.get_llm_json_response") as decision,
         ):
             asyncio.run(run_chat_regeneration(pipeline_input))
         decision.assert_not_called()
+        fetch.assert_not_called()
 
     def test_regeneration_fallback_still_excludes_ineligible_memo_tools(self):
         for room_mode in ("normal", "temporary"):

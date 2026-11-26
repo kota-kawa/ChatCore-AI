@@ -92,6 +92,7 @@ describe("generation identity", () => {
     expect(requestInit?.headers).toEqual({
       "Content-Type": "application/json",
       "X-ChatCore-UI-Version": "1",
+      "X-ChatCore-Deferred-Title": "1",
     });
     expect(JSON.parse(String(requestInit?.body)).ui_metrics).toEqual([
       { block_id: "budget-ui", render_ms: 9, action_count: 2, action_error_count: 1, compose_count: 1 },
@@ -153,6 +154,41 @@ describe("generation identity", () => {
     });
     expect(result.current.state.messages.filter((message) => message.sender === "assistant").map((message) => message.text))
       .toEqual(["今回の回答"]);
+  });
+
+  it("finishes a streamed answer while its deferred title lookup remains pending", async () => {
+    let titleRequestCount = 0;
+    let resolveTitle!: (response: Response) => void;
+    const pendingTitle = new Promise<Response>((resolve) => { resolveTitle = resolve; });
+    resilientFetchMock.mockImplementation(async (url, init) => {
+      if (String(url) === "/api/chat") {
+        const generationId = JSON.parse(String(init?.body)).generation_id;
+        return createStreamResponse([
+          `id: 1\nevent: done\ndata: ${JSON.stringify({
+            response: "回答は完了しています",
+            room_title_initial_candidates: ["初期名"],
+          })}\n\n`,
+        ], generationId);
+      }
+      if (String(url).startsWith("/api/chat_room_title?")) {
+        titleRequestCount += 1;
+        return pendingTitle;
+      }
+      return createJsonResponse(500, { error: "unrelated request" });
+    });
+
+    const { result, unmount } = renderHook(() => useGenerationHarness());
+    let answered = false;
+    await act(async () => {
+      answered = await result.current.actions.generateResponse("質問", "model", "room-1");
+    });
+
+    expect(answered).toBe(true);
+    expect(result.current.state.messages.some((message) => message.text === "回答は完了しています")).toBe(true);
+    await waitFor(() => expect(titleRequestCount).toBe(1));
+    await act(async () => { resolveTitle(createJsonResponse(404, {})); });
+    expect(result.current.state.messages.some((message) => message.error)).toBe(false);
+    unmount();
   });
 
   it("creates distinct request ids for successive turns", async () => {
@@ -503,6 +539,7 @@ describe("failed chat turns", () => {
 
     const request = resilientFetchMock.mock.calls.find((call) => String(call[0]).includes("chat_regenerate"))?.[1];
     expect(JSON.parse(String(request?.body))).toMatchObject({ theme_preference: "dark" });
+    expect(request?.headers).not.toHaveProperty("X-ChatCore-Deferred-Title");
   });
 
   it("treats an empty streamed answer as a failure instead of rendering a blank bubble", async () => {
@@ -837,5 +874,7 @@ describe("regenerate double click", () => {
       "edited-answer",
     ]);
     expect(requestedUrls().filter((url) => url.includes("chat_edit_and_regenerate"))).toHaveLength(1);
+    const editRequest = resilientFetchMock.mock.calls.find(([url]) => String(url).includes("chat_edit_and_regenerate"))?.[1];
+    expect(editRequest?.headers).not.toHaveProperty("X-ChatCore-Deferred-Title");
   });
 });

@@ -152,6 +152,9 @@ class RenameChatRoomIfCurrentTitleIn(Protocol):
         room_id: str,
         new_title: str,
         allowed_current_titles: list[str],
+        *,
+        user_id: int,
+        assistant_message_id: int,
     ) -> MaybeAwaitable[bool]: ...
 
 

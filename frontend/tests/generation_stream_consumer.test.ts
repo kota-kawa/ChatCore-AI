@@ -166,6 +166,34 @@ test("a normal streaming sequence renders, finalizes and persists the answer", a
   assert.ok(recorder.generationStateClears() >= 1);
 });
 
+test("saved done, incomplete and aborted events start deferred title polling only when candidates exist", async () => {
+  const terminalPayloads = [
+    { event: "done", payload: { response: "回答" } },
+    { event: "incomplete", payload: { response: "途中の回答", message: "途中まで保存しました" } },
+    { event: "aborted", payload: { response: "停止時の回答" } },
+  ];
+
+  for (const terminal of terminalPayloads) {
+    const clock = createFakeClock();
+    const recorder = createStreamHostRecorder({ clock });
+    const stream = createScriptedStream([
+      sseBlock(1, terminal.event, {
+        ...terminal.payload,
+        room_title_initial_candidates: ["初期名"],
+      }),
+    ]);
+
+    await settleStream(consumeGenerationStream(stream.response, recorder.host), clock);
+    assert.deepEqual(recorder.deferredRoomTitleCandidates(), [["初期名"]]);
+  }
+
+  const clock = createFakeClock();
+  const recorder = createStreamHostRecorder({ clock });
+  const stream = createScriptedStream([sseBlock(1, "done", { response: "通常の回答" })]);
+  await settleStream(consumeGenerationStream(stream.response, recorder.host), clock);
+  assert.deepEqual(recorder.deferredRoomTitleCandidates(), []);
+});
+
 test("a completed stream attaches its persisted answer id to both the message and local history", async () => {
   const clock = createFakeClock();
   const recorder = createStreamHostRecorder({ clock });

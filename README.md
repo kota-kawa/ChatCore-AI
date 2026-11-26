@@ -125,7 +125,12 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     Browser->>API: POST /api/chat, generation_id
-    API->>API: Validate access, limits, context
+    API->>API: Validate access and limits
+    par Skill selection
+        API->>API: Select Skills and generated UI mode
+    and Pasted URLs
+        API->>API: Load linked reference material
+    end
     API->>Redis: Acquire room generation lock
     API->>Job: Start background generation
     API-->>Browser: SSE + generation ID header
@@ -147,8 +152,16 @@ sequenceDiagram
     end
     alt Normal completion
         Job->>DB: Save the finalized reply once
+        opt First reply and deferred title support
+            Job->>Job: Queue room title generation
+        end
         Job-->>API: done
         API-->>Browser: done
+        opt Room title generation was queued
+            Browser->>API: Check current room title
+            API->>DB: Read title for the room owner
+            API-->>Browser: Current title
+        end
     else User stops generation
         Browser->>API: POST /api/chat_stop
         API->>API: Revalidate room access
@@ -393,7 +406,12 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     Browser->>API: POST /api/chat と generation_id
-    API->>API: 権限・上限・文脈を確認
+    API->>API: 権限と上限を確認
+    par Skill 選択
+        API->>API: Skill と生成 UI 形式を選択
+    and 貼り付け URL
+        API->>API: リンク先の参照資料を取得
+    end
     API->>Redis: 部屋の生成ロックを取得
     API->>Job: 専用スレッドプールで開始
     API-->>Browser: SSE 応答と生成 ID ヘッダー
@@ -415,8 +433,16 @@ sequenceDiagram
     end
     alt 正常完了
         Job->>DB: 確定した回答を一度だけ保存
+        opt 初回回答とタイトル後反映への対応
+            Job->>Job: タイトル生成を予約
+        end
         Job-->>API: done
         API-->>Browser: done
+        opt タイトル生成を予約した場合
+            Browser->>API: 現在のルーム名を確認
+            API->>DB: 所有者のルーム名を読み出す
+            API-->>Browser: 現在のルーム名
+        end
     else 利用者が途中停止
         Browser->>API: POST /api/chat_stop
         API->>API: 部屋へのアクセス権を再確認

@@ -18,13 +18,11 @@ import {
 import {
   interpretGenerationStreamEvent,
   type GenerationStreamAction,
-  type StreamLocalize,
 } from "./generation_stream_events";
 import {
   BROWSER_RECONNECT_RUNTIME,
   isUnrecoverableStreamStatus,
   waitForGenerationStreamReconnect,
-  type GenerationStreamReconnectRuntime,
 } from "./generation_stream_reconnect";
 import { removeThinkingMessages } from "./home_page_controller_utils";
 import { rememberStreamEventId } from "./message_window";
@@ -45,13 +43,18 @@ import {
   clampToWordBoundary,
 } from "./streaming_word_reveal";
 import type {
+  GenerationStreamHost,
+  GenerationStreamStoragePort,
+  GenerationStreamTimers,
+} from "./generation_stream_contract";
+import type {
   AnswerTraceV1,
   ChatGenerationPhase,
   ChatMessagePart,
   StoredGenerationState,
-  StoredHistoryEntry,
   UiChatMessage,
 } from "./types";
+export type { GenerationStreamHost, GenerationStreamTimers } from "./generation_stream_contract";
 
 // ストリーム進行状態（復元用）を localStorage へ書き込む最短間隔。
 // チャンク毎に全文を同期書き込みすると応答が伸びるほどメインスレッドを
@@ -90,62 +93,12 @@ const STREAM_REVEAL_SETTLE_MS = WORD_REVEAL_MAX_LAG_MS + WORD_REVEAL_DURATION_MS
 // count ran out.
 const MAX_GENERATION_STREAM_RECONNECT_ATTEMPTS = 12;
 
-export type GenerationStreamTimers = {
-  now: () => number;
-  setTimeout: (handler: () => void, ms: number) => number;
-  clearTimeout: (timerId: number) => void;
-  requestAnimationFrame: (handler: () => void) => number;
-  cancelAnimationFrame: (handle: number) => void;
-};
-
 export const BROWSER_STREAM_TIMERS: GenerationStreamTimers = {
   now: () => performance.now(),
   setTimeout: (handler, ms) => window.setTimeout(handler, ms),
   clearTimeout: (timerId) => window.clearTimeout(timerId),
   requestAnimationFrame: (handler) => window.requestAnimationFrame(handler),
   cancelAnimationFrame: (handle) => window.cancelAnimationFrame(handle),
-};
-
-export type GenerationStreamMessagesPort = {
-  // 対象ルーム・対象生成が現役の間だけメッセージ配列へ反映する。
-  // Apply to the message list only while the room and generation are current.
-  updateActiveMessages: (updater: (previous: UiChatMessage[]) => UiChatMessage[]) => void;
-  createMessageId: (prefix: string) => string;
-  // エラー吹き出しの追加（ルーム一致だけを条件とし、末尾へ送る）。
-  // Append an error bubble (guarded on the room only) and scroll to it.
-  appendErrorMessage: (message: string) => void;
-  applyRoomTitle: (title: unknown) => void;
-};
-
-export type GenerationStreamStoragePort = {
-  readGenerationState: () => StoredGenerationState | null;
-  updateGenerationState: (
-    updates: Partial<Pick<StoredGenerationState, "lastEventId" | "streamedText" | "generationId" | "answerTrace">>,
-  ) => void;
-  clearGenerationState: () => void;
-  persistAssistantAnswer: (entry: StoredHistoryEntry) => void;
-};
-
-export type GenerationStreamHost = {
-  roomId: string;
-  abortSignal: AbortSignal;
-  // この生成がまだ現役か（別の生成に置き換わっていないか）。
-  // Whether this generation is still the active one.
-  isActive: () => boolean;
-  lastEventIdByRoom: Map<string, number>;
-  localize: StreamLocalize;
-  messages: GenerationStreamMessagesPort;
-  storage: GenerationStreamStoragePort;
-  timers?: GenerationStreamTimers;
-  reconnectRuntime?: GenerationStreamReconnectRuntime;
-  // Last-Event-ID 付きでストリームを開き直す。ネットワーク失敗は例外で伝える。
-  // Reopen the stream with Last-Event-ID; network failures surface as throws.
-  openStream: (lastEventId: number, generationId?: string) => Promise<Response>;
-  generationId?: string;
-  onGenerationId?: (generationId: string) => void;
-  // 1文字も返らなかったターンの後始末を呼び出し側へ委譲する。
-  // Delegate cleanup of a turn that produced no answer at all to the caller.
-  onUnansweredFailure?: (message: string) => void;
 };
 
 type PendingFinalization = {
@@ -811,6 +764,10 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
 
   // 解釈済みのイベント（action）を、画面更新・保存・完了や失敗の状態（progress）へ反映する。
   // Applies an interpreted event (action) to the screen, to storage, and to the completion/failure state (progress).
+  const startDeferredRoomTitlePolling = (candidates: string[] | undefined) => {
+    if (candidates?.length) host.startDeferredRoomTitlePolling?.(candidates);
+  };
+
   const applyStreamAction = (action: GenerationStreamAction, progress: StreamProgressState) => {
     switch (action.kind) {
       case "ignored":
@@ -892,6 +849,7 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         clearStreamDraft(state);
         state.messageHeldByDraft = false;
         host.messages.applyRoomTitle(action.roomTitle);
+        startDeferredRoomTitlePolling(action.roomTitleInitialCandidates);
         renderer.ensureStreamingMessage();
         // 文字送りは UI の代替テキストを除いた本文で行う。保存する text は旧クライアント向けの全文のまま渡す。
         // Pace the reveal with the text that excludes the UI fallback text; the saved text stays the legacy full text.
@@ -915,6 +873,7 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
         progress.completed = true;
         renderer.discardDraft();
         host.messages.applyRoomTitle(action.roomTitle);
+        startDeferredRoomTitlePolling(action.roomTitleInitialCandidates);
         renderer.finalizeStreamingMessage(
           action.finalText,
           Boolean(action.assistantMessageId),
@@ -929,6 +888,7 @@ export function consumeGenerationStream(response: Response, host: GenerationStre
       case "aborted":
         progress.completed = true;
         renderer.discardDraft();
+        startDeferredRoomTitlePolling(action.roomTitleInitialCandidates);
         renderer.finalizeStreamingMessage(
           action.finalText,
           Boolean(action.assistantMessageId),

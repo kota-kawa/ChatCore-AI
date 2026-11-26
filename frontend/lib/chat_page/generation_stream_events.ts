@@ -41,16 +41,38 @@ export type GenerationStreamAction =
   | { kind: "thinking_status"; text: string; phase: ChatGenerationPhase }
   // responseText は旧クライアント向けの全文（保存する text）。displayText は UI の代替テキストを除いた、文字送りの表示用。
   // responseText is the legacy full text (the saved text); displayText is the reveal text without the UI fallback text.
-  | { kind: "done"; roomTitle: unknown; responseText: string; displayText: string; parts?: ChatMessagePart[]; assistantMessageId?: number }
+  | {
+      kind: "done";
+      roomTitle: unknown;
+      roomTitleInitialCandidates?: string[];
+      responseText: string;
+      displayText: string;
+      parts?: ChatMessagePart[];
+      assistantMessageId?: number;
+    }
   // 完了したが本文もパーツも無い = 回答なし。空の吹き出しではなくエラーにする。
   // Completed with neither body nor answer parts: no answer at all, so this
   // becomes an error instead of a blank bubble.
   | { kind: "empty_answer"; roomTitle: unknown; message: string }
-  | { kind: "incomplete"; roomTitle: unknown; finalText: string; parts?: ChatMessagePart[]; message: string; assistantMessageId?: number }
-  | { kind: "aborted"; finalText: string; parts?: ChatMessagePart[]; assistantMessageId?: number }
+  | {
+      kind: "incomplete";
+      roomTitle: unknown;
+      roomTitleInitialCandidates?: string[];
+      finalText: string;
+      parts?: ChatMessagePart[];
+      message: string;
+      assistantMessageId?: number;
+    }
+  | { kind: "aborted"; roomTitleInitialCandidates?: string[]; finalText: string; parts?: ChatMessagePart[]; assistantMessageId?: number }
   | { kind: "error"; message: string };
 
 const IGNORED: GenerationStreamAction = { kind: "ignored" };
+
+function readRoomTitleInitialCandidates(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const candidates = [...new Set(value.map((candidate) => (typeof candidate === "string" ? candidate.trim() : "")).filter(Boolean))];
+  return candidates.length ? candidates : undefined;
+}
 
 function thinkingStatus(text: string, phase: ChatGenerationPhase): GenerationStreamAction {
   return { kind: "thinking_status", text, phase };
@@ -301,6 +323,7 @@ function interpretDoneEvent(
   const donePayload = normalizeChatResponsePayload(data);
   const responseText = getStreamingGenerativeUiDisplayText(donePayload.response ?? context.streamedText);
   const parts = sanitizeTextPartsForStreaming(donePayload.parts);
+  const roomTitleInitialCandidates = readRoomTitleInitialCandidates(data.room_title_initial_candidates);
   // 検索画像と実行記録（回答までのステップ）だけのパーツは回答ではない。サーバー側の空判定と同じ規則で扱う。
   // Web-search images and the execution record (steps to the answer) alone are not an answer; mirror the server-side rule.
   const hasAnswerParts = parts?.some(
@@ -324,6 +347,7 @@ function interpretDoneEvent(
   return {
     kind: "done",
     roomTitle: data.room_title,
+    ...(roomTitleInitialCandidates ? { roomTitleInitialCandidates } : {}),
     responseText,
     displayText: readStreamDisplayText(responseText, parts),
     parts,
@@ -338,9 +362,11 @@ function interpretIncompleteEvent(
   context: GenerationStreamEventContext,
 ): GenerationStreamAction {
   const incompletePayload = normalizeChatResponsePayload(data);
+  const roomTitleInitialCandidates = readRoomTitleInitialCandidates(data.room_title_initial_candidates);
   return {
     kind: "incomplete",
     roomTitle: data.room_title,
+    ...(roomTitleInitialCandidates ? { roomTitleInitialCandidates } : {}),
     finalText: getStreamingGenerativeUiDisplayText(incompletePayload.response ?? context.streamedText),
     parts: sanitizeTextPartsForStreaming(incompletePayload.parts),
     ...(incompletePayload.assistantMessageId ? { assistantMessageId: incompletePayload.assistantMessageId } : {}),
@@ -413,8 +439,10 @@ export function interpretGenerationStreamEvent(
     // 停止時にサーバーが保存した生成途中のテキストを優先して表示する。
     // Prefer the partial text the server persisted on stop so it is not lost.
     const abortedPayload = normalizeChatResponsePayload(data);
+    const roomTitleInitialCandidates = readRoomTitleInitialCandidates(data.room_title_initial_candidates);
     return {
       kind: "aborted",
+      ...(roomTitleInitialCandidates ? { roomTitleInitialCandidates } : {}),
       finalText: getStreamingGenerativeUiDisplayText(abortedPayload.response ?? context.streamedText),
       parts: sanitizeTextPartsForStreaming(abortedPayload.parts),
       ...(abortedPayload.assistantMessageId ? { assistantMessageId: abortedPayload.assistantMessageId } : {}),

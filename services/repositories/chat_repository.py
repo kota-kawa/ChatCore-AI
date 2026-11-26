@@ -484,17 +484,6 @@ class ChatRepository:
     async def rename_room(self, room_id: str, new_title: str) -> None:
         await self.session.execute(update(ChatRoom).where(ChatRoom.id == room_id).values(title=new_title))
 
-    async def rename_room_if_current_title_in(
-        self, room_id: str, new_title: str, allowed_current_titles: list[str]
-    ) -> bool:
-        titles = [title for title in dict.fromkeys(allowed_current_titles) if title]
-        if not titles:
-            return False
-        result = await self.session.execute(
-            update(ChatRoom).where(ChatRoom.id == room_id, ChatRoom.title.in_(titles)).values(title=new_title)
-        )
-        return bool(result.rowcount)
-
     async def list_referenced_chat_image_ids(self) -> set[str]:
         # 非表示の分岐も参照中として集計し、切り替え可能な会話の画像を掃除で消さないようにする。
         """Return every chat image id still referenced by a stored message, on any branch."""
