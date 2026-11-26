@@ -12,6 +12,7 @@ resolution, history truncation or message editing) and hands a ChatRegenerationI
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -334,12 +335,12 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     再生成・編集再生成の両エンドポイントで共通の処理を実行します。
     Runs the pipeline shared by the regenerate and edit-and-regenerate endpoints.
 
-    流れ: 履歴の正規化と画像・添付・URL の前置 → タスク・プロフィール・要約・記憶・Skill・参照資料の読み込み → 生成中の
-    重複と利用上限の確認 → Skill の選択とプロンプト構築。
+    履歴と設定を読み、生成中の重複と利用上限を確認します。その後、貼り付け URL を取得しながら Skill を
+    選び、参照資料を含むプロンプトを構築します。
     その後、ストリーミングモデルならバックグラウンドの生成ジョブを開始して ChatRegenerationStreamStarted を返し、
     そうでなければ同期で生成して保存し ChatRegenerationCompleted を返す。
-    Flow: normalize the history and prepend images, attachments and URLs; load the task, profile, summary, memory,
-    Skills and references; check for a running generation and the usage limits; select Skills and build the prompt.
+    Load history and settings and check for active generation and usage limits. Fetch pasted URLs while
+    selecting Skills, then build the prompt with the reference material.
     Then a streaming model starts a background generation job (ChatRegenerationStreamStarted), while any other model
     generates synchronously, saves the reply and returns ChatRegenerationCompleted.
     """
@@ -376,18 +377,6 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
     normalized_all_messages = prepend_attached_files_to_user_messages(
         normalized_all_messages
     )
-    # 再生成でも、発話に貼られた URL を送信時と同じ条件で読み直す。取得せずに再生成すると、
-    # モデルはリンク先へ到達する手段を持たないまま URL 文字列だけを見て答えることになる。
-    # Regeneration re-reads pasted URLs on the same terms as the original send. Without this the
-    # model has no way to reach the linked page and would answer from the bare URL text.
-    pasted_url_pages: tuple[PastedUrlPage, ...] = ()
-    if latest_user_message_text:
-        pasted_url_pages, url_reference_block = await run_blocking(
-            fetch_pasted_url_context, latest_user_message_text
-        )
-        normalized_all_messages = prepend_reference_block_to_latest_user_message(
-            normalized_all_messages, url_reference_block
-        )
     prompt_data = None
     if active_task_request is not None:
         task_id = active_task_request.get("task_id")
@@ -482,7 +471,7 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
             retry_after=get_seconds_until_daily_reset(),
         )
 
-    selection = await run_blocking(
+    select_skills = run_blocking(
         select_chat_skills,
         skills_context,
         skill_selection_history,
@@ -491,6 +480,18 @@ async def run_chat_regeneration(pipeline_input: ChatRegenerationInput) -> ChatRe
         task_prompt=task_prompt,
         generative_ui_forbidden=is_explicit_generative_ui_opt_out(latest_user_message_text),
     )
+    pasted_url_pages: tuple[PastedUrlPage, ...] = ()
+    if latest_user_message_text:
+        # 選択器は外部本文を加える前の履歴だけを見るため、URL 取得と並行できる。
+        # Selection uses the history captured before fetched URL text is added.
+        selection, (pasted_url_pages, url_reference_block) = await asyncio.gather(
+            select_skills, run_blocking(fetch_pasted_url_context, latest_user_message_text)
+        )
+        normalized_all_messages = prepend_reference_block_to_latest_user_message(
+            normalized_all_messages, url_reference_block
+        )
+    else:
+        selection = await select_skills
     skills_context = selection.context
     ui_mode = selection.ui_mode
     conversation_messages = build_context_messages(

@@ -125,7 +125,12 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     Browser->>API: POST /api/chat, generation_id
-    API->>API: Validate access, limits, context
+    API->>API: Validate access and limits
+    par Skill selection
+        API->>API: Select Skills and generated UI mode
+    and Pasted URLs
+        API->>API: Load linked reference material
+    end
     API->>Redis: Acquire room generation lock
     API->>Job: Start background generation
     API-->>Browser: SSE + generation ID header
@@ -393,7 +398,12 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     Browser->>API: POST /api/chat と generation_id
-    API->>API: 権限・上限・文脈を確認
+    API->>API: 権限と上限を確認
+    par Skill 選択
+        API->>API: Skill と生成 UI 形式を選択
+    and 貼り付け URL
+        API->>API: リンク先の参照資料を取得
+    end
     API->>Redis: 部屋の生成ロックを取得
     API->>Job: 専用スレッドプールで開始
     API-->>Browser: SSE 応答と生成 ID ヘッダー

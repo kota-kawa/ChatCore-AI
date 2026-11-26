@@ -331,7 +331,7 @@ class ChatPostUseCase:
 
         if turn.authenticated and turn.room_mode == "normal" and turn.ui_metrics:
             self.deps.logger.info("Client native UI observations", extra={"event": "structured_ui_metrics", "ui_metrics": turn.ui_metrics})
-        await self._build_llm_history(turn)
+        self._build_llm_history(turn)
         await self._load_prompt_context(turn)
         await self._load_prior_web_search_results(turn)
 
@@ -340,7 +340,12 @@ class ChatPostUseCase:
             if early_response is not None:
                 return early_response
 
-        await self._select_skills_for_turn(turn)
+        # Skill の判定には、URL 本文を加える前に控えた履歴を使う。
+        # Skill selection uses the history captured before fetched URL text is added.
+        await asyncio.gather(
+            self._select_skills_for_turn(turn),
+            self._prepend_reference_blocks(turn),
+        )
         self._build_conversation_messages(turn)
         await self._augment_with_selected_references(turn)
         self._apply_generative_ui_mode(turn)
@@ -611,10 +616,10 @@ class ChatPostUseCase:
     # ------------------------------------------------------------------
     # フェーズ4: LLM向け履歴の組み立て / Phase 4: building the LLM history
     # ------------------------------------------------------------------
-    async def _build_llm_history(self, turn: _ChatPostTurn) -> None:
+    def _build_llm_history(self, turn: _ChatPostTurn) -> None:
         """
-        履歴を正規化し、添付とURL本文を参照資料として差し込みます
-        Normalize history and inject attachments and URL bodies as reference material.
+        履歴を正規化し、過去の添付を差し込みます
+        Normalize history and reattach earlier uploads.
         """
         # メッセージ履歴を LLM 向けに正規化
         # Normalize message history for LLM compatibility
@@ -634,7 +639,6 @@ class ChatPostUseCase:
         )
         turn.normalized_all_messages = apply_attached_images_for_model(turn.normalized_all_messages, turn.model)
         self._reattach_prior_uploads(turn)
-        await self._prepend_reference_blocks(turn)
 
     def _reattach_prior_uploads(self, turn: _ChatPostTurn) -> None:
         """過去ターンの添付を、その発話に紐づく参照資料として戻します / Re-attach earlier uploads to the message they belong to."""
@@ -712,11 +716,15 @@ class ChatPostUseCase:
     # ------------------------------------------------------------------
     async def _load_prompt_context(self, turn: _ChatPostTurn) -> None:
         """タスク・スキル・プロジェクト・記憶・要約をまとめて読み込みます / Load task, skills, project context, memory and room summary."""
-        await self._load_task_prompt(turn)
-        await self._load_user_skills_and_profile(turn)
-        await self._load_project_instructions(turn)
+        await asyncio.gather(
+            self._load_task_prompt(turn),
+            self._load_user_skills_and_profile(turn),
+            self._load_project_instructions(turn),
+            self._load_room_summary(turn),
+        )
+        # 記憶を読むかどうかはプロフィールの設定で決まる。
+        # The profile determines whether this turn may load memory.
         await self._load_user_memory(turn)
-        await self._load_room_summary(turn)
 
     async def _load_task_prompt(self, turn: _ChatPostTurn) -> None:
         """最新のタスク起動リクエストと定義プロンプトの読み込み / Load the latest task launch request and corresponding task definitions."""

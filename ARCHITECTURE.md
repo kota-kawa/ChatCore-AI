@@ -161,7 +161,7 @@ Redis 障害時の扱いは用途ごとに異なります。一般キャッシ�
 
 `services/chat_generation.py` が持つのはサービスとジョブの入口（各フェーズを順に呼ぶ `_run`）だけです。ジョブの状態・イベント配信・保存・停止は `services/chat_generation_job_base.py`、生成ループの各フェーズは `services/chat_generation_llm_stream.py`（LLM ストリームの読み取りと再試行）、`services/chat_generation_agent_loop.py`（ターン状態の構築と判断ループ）、`services/chat_generation_tools.py`・`services/chat_generation_web_search.py`（ツールの提示と実行）、`services/chat_generation_answer_stream.py`（回答の配信と継続生成）、`services/chat_generation_finalization.py`（仕上げと失敗の通知）にあり、`ChatGenerationJob` がこれらを継承して束ねます。フェーズが共有する純粋関数は `services/chat_tool_calls.py`（ツール呼び出しの解析・整形）と `services/chat_write_claim_guard.py`（書き込み完了の申告と承認カードの照合）に置きます。
 
-1. `blueprints/chat/messages.py` が入力、部屋の所有権、制限、参照コンテキストを検証してジョブを開始する。
+1. `blueprints/chat/messages.py` が入力と部屋の所有権を確認する。通常送信では独立した設定・要約の読み取りを並行し、記憶のまとめはプロフィールで利用可否が決まってから読む。通常送信と再生成では利用制限の確認後、貼り付け URL の取得と Skill 選択を並行し、両方の結果を組み立ててジョブを開始する。
 2. バックグラウンド実行器上のジョブが `services/llm.py` のプロバイダ抽象化を通じてストリームを読む。
 3. ジョブはイベントに連番を付け、接続中の SSE に通知し、必要に応じて Redis のリプレイ／協調機能を使う。
 4. フロントエンドは `/api/chat_generation_stream` などの SSE エンドポイントを購読し、切断時はステータス確認と再接続を行う。
