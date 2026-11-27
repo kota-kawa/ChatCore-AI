@@ -19,6 +19,7 @@ import type {
 } from "../../lib/chat_page/types";
 import {
   animateWebSearchSources,
+  bindAnswerTraceResize,
   bindWebSearchSourcesInteractions,
   syncWebSearchSourcesState,
 } from "../../lib/chat_page/web_search_sources_dom";
@@ -226,6 +227,10 @@ function AnswerTraceComponent({ trace, streaming = false, disclosure }: AnswerTr
       }
       animateWebSearchSources(details, false);
     }
+  }, [streaming]);
+
+  useIsomorphicLayoutEffect(() => {
+    if (streaming && detailsRef.current) return bindAnswerTraceResize(detailsRef.current);
   }, [streaming]);
 
   return (
