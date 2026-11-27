@@ -2,6 +2,7 @@
 // Renders the parts of an AI message in order (text, generated UI, choice buttons, approval cards, search images, ...); used by chat_message_list.tsx.
 import { memo } from "react";
 
+import { isAnswerTracePart } from "../../lib/chat_page/answer_trace";
 import type { ToolApprovalDecision } from "../../lib/chat_page/tool_approval_api";
 import type { ChatMessagePart } from "../../lib/chat_page/types";
 import { AnswerTracePart, answerTraceSharesTextPart, type AnswerTraceMessagePart } from "./answer_trace";
@@ -58,10 +59,13 @@ function BotMessagePartsComponent({
   );
 
   const leadingTrace = answerTraceSharesTextPart(renderParts) ? (renderParts[0] as AnswerTraceMessagePart) : null;
+  const standaloneLeadingTrace = !leadingTrace && isAnswerTracePart(renderParts[0]);
 
   // 本文の key は本文どうしの何番目かで決める。生成中に実行記録が先頭へ加わっても、描画中の本文を作り直さない。
   // A text part's key is its ordinal among text parts, so an execution record joining at the head mid-generation does not remount the prose being drawn.
-  let textOrdinal = 0;
+  // 先頭の記録と本文が別枠になっても、外側の開閉状態を保つため記録側に text-0 を残す。
+  // Keep text-0 with the leading record when it and the text need separate wrappers, so the record stays mounted.
+  let textOrdinal = standaloneLeadingTrace ? 1 : 0;
 
   return (
     <div className="bot-message-parts">
@@ -74,7 +78,7 @@ function BotMessagePartsComponent({
           const trace = ordinal === 0 ? leadingTrace : null;
           return part.text || trace ? (
             <div key={`text-${ordinal}`} className="bot-message-part bot-message-part--text">
-              {trace ? <AnswerTracePart key="answer-trace" part={trace} /> : null}
+              {trace ? <AnswerTracePart key="answer-trace" part={trace} streaming={streaming} /> : null}
               {part.text ? (
                 <BotMessageHtml key="text" text={part.text} streaming={streaming && index === lastTextPartIndex} />
               ) : null}
@@ -84,8 +88,8 @@ function BotMessagePartsComponent({
         if (part.type === "answer_trace" || part.type === "legacy_answer_trace") {
           if (!leadingTrace) {
             return (
-              <div key="answer-trace" className="bot-message-part bot-message-part--answer-trace">
-                <AnswerTracePart part={part} />
+              <div key={index === 0 ? "text-0" : "answer-trace"} className="bot-message-part bot-message-part--answer-trace">
+                <AnswerTracePart key="answer-trace" part={part} streaming={streaming} />
               </div>
             );
           }
@@ -94,7 +98,7 @@ function BotMessagePartsComponent({
           // wrapper the prose will join is created first.
           return renderParts.length === 1 ? (
             <div key="text-0" className="bot-message-part bot-message-part--text">
-              <AnswerTracePart key="answer-trace" part={part} />
+              <AnswerTracePart key="answer-trace" part={part} streaming={streaming} />
             </div>
           ) : null;
         }

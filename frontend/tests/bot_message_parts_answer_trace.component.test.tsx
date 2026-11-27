@@ -4,8 +4,8 @@
 // follows it, and that when the record or the prose joins later during generation, whichever was drawn first is
 // not remounted.
 
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render } from "@testing-library/react";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { BotMessageParts } from "../components/chat_page/bot_message_parts";
 import { SharedChatMessageParts } from "../components/shared_chat/shared_chat_message_parts";
@@ -24,6 +24,12 @@ const IMAGE_PART: ChatMessagePart = {
 };
 
 const TRACE_SELECTOR = "details.web-search-sources--trace";
+
+beforeAll(() => {
+  if (typeof Element.prototype.scrollIntoView !== "function") {
+    Element.prototype.scrollIntoView = () => {};
+  }
+});
 
 function wrappers(container: HTMLElement) {
   return Array.from(container.querySelectorAll<HTMLElement>(".bot-message-part"));
@@ -81,15 +87,39 @@ describe("BotMessageParts while an answer is generated", () => {
     expect(container.querySelector("p")!.parentElement).toBe(proseContainer);
   });
 
-  it("keeps the record, and what the user opened in it, when the prose arrives after it", () => {
+  it("expands the record until the streamed prose finishes", () => {
     const { container, rerender } = render(<BotMessageParts fallbackText="" parts={[TRACE_PART]} streaming />);
     const trace = container.querySelector<HTMLDetailsElement>(TRACE_SELECTOR)!;
-    trace.open = true;
+    expect(trace.open).toBe(true);
 
     rerender(<BotMessageParts fallbackText="" parts={[TRACE_PART, TEXT_PART]} streaming />);
 
     expect(container.querySelector(TRACE_SELECTOR)).toBe(trace);
     expect(trace.open).toBe(true);
     expect(trace.closest(".bot-message-part")).toBe(container.querySelector("p")!.closest(".bot-message-part"));
+
+    rerender(<BotMessageParts fallbackText="" parts={[TRACE_PART, TEXT_PART]} />);
+
+    expect(container.querySelector(TRACE_SELECTOR)).toBe(trace);
+    expect(trace.open).toBe(false);
+  });
+
+  it("honors manual toggles even when the record and the prose get separate wrappers", () => {
+    const { container, rerender } = render(<BotMessageParts fallbackText="" parts={[TRACE_PART]} streaming />);
+    const trace = container.querySelector<HTMLDetailsElement>(TRACE_SELECTOR)!;
+    const summary = trace.querySelector("summary")!;
+    fireEvent.click(summary);
+    expect(trace.open).toBe(false);
+
+    rerender(<BotMessageParts fallbackText="" parts={[TRACE_PART, IMAGE_PART, TEXT_PART]} streaming />);
+
+    expect(container.querySelector(TRACE_SELECTOR)).toBe(trace);
+    expect(trace.open).toBe(false);
+    fireEvent.click(summary);
+    expect(trace.open).toBe(true);
+
+    rerender(<BotMessageParts fallbackText="" parts={[TRACE_PART, IMAGE_PART, TEXT_PART]} />);
+
+    expect(trace.open).toBe(true);
   });
 });

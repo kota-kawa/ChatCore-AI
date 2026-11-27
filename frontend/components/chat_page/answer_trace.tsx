@@ -1,9 +1,9 @@
 // 回答までのステップ（回答の実行記録）を、構造化データから描く。
-// DOM は、旧形式の HTML を本文の描画（BotMessageHtml: サニタイズ込み）に通した結果と同じにしてある。
+// 保存済みの記録は、旧形式の HTML を本文の描画（BotMessageHtml: サニタイズ込み）に通した結果と同じ DOM を使う。
 // web_search_sources.css のクラスと、開閉・favicon 失敗時の処理（web_search_sources_dom.ts）をそのまま使うため。
 // 文言はサーバーが日本語固定で出していたものと同じで、今回は多言語化しない。
-// Renders the steps to the answer (the answer's execution record) from structured data. The DOM is the
-// same as what the legacy HTML produced once drawn through the prose renderer (BotMessageHtml, sanitizer
+// Renders the steps to the answer (the answer's execution record) from structured data. Saved records
+// use the same DOM as legacy HTML drawn through the prose renderer (BotMessageHtml, sanitizer
 // included), so the classes of web_search_sources.css and the open/favicon-failure handling in
 // web_search_sources_dom.ts work unchanged. The wording is what the server used to emit, fixed in Japanese;
 // it is not localized in this change.
@@ -18,6 +18,7 @@ import type {
   ChatMessagePart,
 } from "../../lib/chat_page/types";
 import {
+  animateWebSearchSources,
   bindWebSearchSourcesInteractions,
   syncWebSearchSourcesState,
 } from "../../lib/chat_page/web_search_sources_dom";
@@ -163,12 +164,15 @@ function Step({ step }: { step: AnswerTraceStep }) {
 
 type AnswerTraceProps = {
   trace: AnswerTraceV1;
+  streaming?: boolean;
 };
 
 // 回答までのステップ。更新（ステップの追加・状態の変化）では、ステップ ID を key にして既存の DOM を保つ。
 // The steps to the answer. Updates keep the existing DOM by keying steps on their id.
-function AnswerTraceComponent({ trace }: AnswerTraceProps) {
+function AnswerTraceComponent({ trace, streaming = false }: AnswerTraceProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  const userToggled = useRef(false);
 
   // 開閉と favicon 失敗のイベントはマウント時に一度だけ委譲する（BotMessageHtml と同じ。更新ごとの貼り替えは開閉アニメーションを打ち切る）。
   // Delegate the open and favicon-failure events once on mount, as BotMessageHtml does; re-attaching on each update would cut off the open animation.
@@ -184,9 +188,29 @@ function AnswerTraceComponent({ trace }: AnswerTraceProps) {
     if (containerRef.current) syncWebSearchSourcesState(containerRef.current);
   }, [trace]);
 
+  useIsomorphicLayoutEffect(() => {
+    const details = detailsRef.current;
+    if (!details || userToggled.current) return;
+
+    if (streaming) {
+      details.open = true;
+    } else if (details.open && !details.contains(details.ownerDocument.activeElement)) {
+      animateWebSearchSources(details, false);
+    }
+  }, [streaming]);
+
   return (
     <div ref={containerRef}>
-      <details className={`${ROOT} ${ROOT}--trace`}>
+      <details
+        ref={detailsRef}
+        className={`${ROOT} ${ROOT}--trace`}
+        data-streaming={streaming || undefined}
+        onClickCapture={(event) => {
+          if (event.target instanceof Element && event.target.closest("summary")) {
+            userToggled.current = true;
+          }
+        }}
+      >
         <summary className={`${ROOT}__summary`}>
           <span className={`${ROOT}__summary-main`}>
             <span className={`${ROOT}__summary-icon`}>
@@ -222,8 +246,10 @@ export type AnswerTraceMessagePart = Extract<ChatMessagePart, { type: "answer_tr
 // 実行記録のパーツを描く。構造化前に保存された回答の記録は表示用の HTML なので、本文と同じ描画（サニタイズ込み）に通す。
 // Renders an execution-record part. The record of an answer saved before structuring is display HTML,
 // so it goes through the same renderer as prose, sanitizer included.
-export function AnswerTracePart({ part }: { part: AnswerTraceMessagePart }) {
-  return part.type === "answer_trace" ? <AnswerTrace trace={part.trace} /> : <BotMessageHtml text={part.html} />;
+export function AnswerTracePart({ part, streaming }: { part: AnswerTraceMessagePart; streaming?: boolean }) {
+  return part.type === "answer_trace"
+    ? <AnswerTrace trace={part.trace} streaming={streaming} />
+    : <BotMessageHtml text={part.html} />;
 }
 
 // 実行記録を、直後の本文と同じ枠の中に描くかを返す。

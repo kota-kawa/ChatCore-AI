@@ -177,7 +177,7 @@ function scheduleWebSearchSourcesReveal(details: HTMLElement) {
 
 // WebソースリストのアコーディオンをWeb Animations APIでアニメーション付き開閉する
 // Open/close the web source list accordion with animation using the Web Animations API
-function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolean) {
+export function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolean) {
   const list = getWebSearchSourcesList(details);
   if (!list || typeof list.animate !== "function" || prefersReducedMotion()) {
     // アニメーション非対応またはモーション軽減設定の場合は即時切り替え
