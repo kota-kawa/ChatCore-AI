@@ -177,7 +177,7 @@ function scheduleWebSearchSourcesReveal(details: HTMLElement) {
 
 // WebソースリストのアコーディオンをWeb Animations APIでアニメーション付き開閉する
 // Open/close the web source list accordion with animation using the Web Animations API
-function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolean) {
+export function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolean) {
   const list = getWebSearchSourcesList(details);
   if (!list || typeof list.animate !== "function" || prefersReducedMotion()) {
     // アニメーション非対応またはモーション軽減設定の場合は即時切り替え
@@ -279,7 +279,7 @@ export function syncWebSearchSourcesState(container: HTMLElement) {
 // 出典UIのイベントをコンテナへ委譲し、解除関数を返す。マウント中は貼り替えない。
 // Delegate the source UI events to the container and return a cleanup function.
 // The listeners stay in place for the whole mounted lifetime.
-export function bindWebSearchSourcesInteractions(container: HTMLElement) {
+export function bindWebSearchSourcesInteractions(container: HTMLElement, onToggle?: (open: boolean) => void) {
   const handleClick = (event: MouseEvent) => {
     if (!(event.target instanceof Element)) return;
     const summary = event.target.closest<HTMLElement>(ROOT_SUMMARY_SELECTOR);
@@ -289,6 +289,7 @@ export function bindWebSearchSourcesInteractions(container: HTMLElement) {
 
     event.preventDefault();
     const shouldOpen = !details.open || details.dataset.webSearchSourcesState === "closing";
+    onToggle?.(shouldOpen);
     animateWebSearchSources(details, shouldOpen);
   };
 

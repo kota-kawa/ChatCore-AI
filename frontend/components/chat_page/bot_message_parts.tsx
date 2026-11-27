@@ -4,7 +4,7 @@ import { memo } from "react";
 
 import type { ToolApprovalDecision } from "../../lib/chat_page/tool_approval_api";
 import type { ChatMessagePart } from "../../lib/chat_page/types";
-import { AnswerTracePart, answerTraceSharesTextPart, type AnswerTraceMessagePart } from "./answer_trace";
+import { AnswerTracePart, answerTraceSharesTextPart, type AnswerTraceDisclosure, type AnswerTraceMessagePart } from "./answer_trace";
 import { BotMessageHtml } from "./bot_message_html";
 import { SandboxArtifactFrame } from "./sandbox_artifact_frame";
 import { InteractiveButtons } from "./interactive_buttons";
@@ -21,6 +21,7 @@ type BotMessagePartsProps = {
   // 生成中かどうか。末尾のテキストパートだけが単語フェードインの対象になる
   // Whether generation is in flight; only the last text part fades words in
   streaming?: boolean;
+  answerTraceDisclosure?: AnswerTraceDisclosure;
   // 選択ボタンや生成UIから質問・回答を入力欄へ反映する
   // Adds a question and answer from choice buttons or generated UI to the composer
   onCompose?: (text: string) => void;
@@ -41,6 +42,7 @@ function BotMessagePartsComponent({
   fallbackText,
   parts,
   streaming = false,
+  answerTraceDisclosure,
   onCompose,
   composeDisabled = false,
   getStructuredUiStateScope,
@@ -74,7 +76,7 @@ function BotMessagePartsComponent({
           const trace = ordinal === 0 ? leadingTrace : null;
           return part.text || trace ? (
             <div key={`text-${ordinal}`} className="bot-message-part bot-message-part--text">
-              {trace ? <AnswerTracePart key="answer-trace" part={trace} /> : null}
+              {trace ? <AnswerTracePart key="answer-trace" part={trace} streaming={streaming} disclosure={answerTraceDisclosure} /> : null}
               {part.text ? (
                 <BotMessageHtml key="text" text={part.text} streaming={streaming && index === lastTextPartIndex} />
               ) : null}
@@ -85,7 +87,7 @@ function BotMessagePartsComponent({
           if (!leadingTrace) {
             return (
               <div key="answer-trace" className="bot-message-part bot-message-part--answer-trace">
-                <AnswerTracePart part={part} />
+                <AnswerTracePart part={part} streaming={streaming} disclosure={answerTraceDisclosure} />
               </div>
             );
           }
@@ -94,7 +96,7 @@ function BotMessagePartsComponent({
           // wrapper the prose will join is created first.
           return renderParts.length === 1 ? (
             <div key="text-0" className="bot-message-part bot-message-part--text">
-              <AnswerTracePart key="answer-trace" part={part} />
+              <AnswerTracePart key="answer-trace" part={part} streaming={streaming} disclosure={answerTraceDisclosure} />
             </div>
           ) : null;
         }

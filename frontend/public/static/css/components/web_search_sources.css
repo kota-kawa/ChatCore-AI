@@ -506,6 +506,24 @@
   }
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources--trace[data-streaming] .web-search-sources__step {
+    animation: answer-trace-step-enter 180ms ease-out;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources--trace[data-streaming] .web-search-sources__step-marker {
+    transition:
+      background-color 180ms ease-out,
+      border-color 180ms ease-out,
+      color 180ms ease-out;
+  }
+}
+
+@keyframes answer-trace-step-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* ─── ステップの中身 ─── */
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-card,
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__step-summary {
