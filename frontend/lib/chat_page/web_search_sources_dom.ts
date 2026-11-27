@@ -27,6 +27,7 @@ const WEB_SEARCH_SOURCES_DURATION_PER_PX = 0.32;
 // Closing slightly faster than opening reads as a more responsive reaction.
 const WEB_SEARCH_SOURCES_CLOSE_DURATION_RATIO = 0.82;
 const WEB_SEARCH_SOURCES_ANIMATION_EASING = "cubic-bezier(0.4, 0, 0.2, 1)";
+const ANSWER_TRACE_RESIZE_DURATION_MS = 420;
 // 実行中のWebソースアニメーションを追跡するWeakMap（GCに優しい）
 // WeakMap to track active web source animations (GC-friendly)
 const activeWebSearchSourceAnimations = new WeakMap<HTMLDetailsElement, Animation>();
@@ -254,6 +255,46 @@ export function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen:
     // so the reveal no longer fights the height animation mid-flight.
     if (shouldOpen) scheduleWebSearchSourcesReveal(details);
   };
+}
+
+// ステップ列の自然な高さを観測し、外枠だけ伸ばす。検索結果が増えても本文を一度に押し下げない。
+// Measure the natural height of the steps and grow only their frame so results don't push the answer down all at once.
+export function bindAnswerTraceResize(details: HTMLDetailsElement) {
+  const list = getWebSearchSourcesList(details);
+  const steps = list?.firstElementChild;
+  if (!list || !steps || typeof ResizeObserver !== "function" || typeof list.animate !== "function") return;
+
+  let previousHeight = 0;
+  const observer = new ResizeObserver(([entry]) => {
+    const nextHeight = entry.contentRect.height;
+    const heightChange = nextHeight - previousHeight;
+    previousHeight = nextHeight;
+    if (
+      Math.abs(heightChange) < 1 ||
+      !details.open ||
+      details.dataset.webSearchSourcesState ||
+      prefersReducedMotion()
+    ) {
+      return;
+    }
+
+    const active = activeWebSearchSourceAnimations.get(details);
+    const currentHeight = list.getBoundingClientRect().height;
+    cancelWebSearchSourcesAnimation(details);
+    const targetHeight = active ? list.getBoundingClientRect().height : currentHeight;
+    const startHeight = active ? currentHeight : targetHeight - heightChange;
+    const animation = list.animate(
+      [
+        { maxHeight: `${Math.max(0, startHeight)}px`, overflow: "clip" },
+        { maxHeight: `${targetHeight}px`, overflow: "clip" },
+      ],
+      { duration: ANSWER_TRACE_RESIZE_DURATION_MS, easing: WEB_SEARCH_SOURCES_ANIMATION_EASING },
+    );
+    activeWebSearchSourceAnimations.set(details, animation);
+    animation.onfinish = () => activeWebSearchSourceAnimations.delete(details);
+  });
+  observer.observe(steps);
+  return () => observer.disconnect();
 }
 
 // faviconの読み込みが失敗している出典アイコンをフォールバック表示へ切り替える。

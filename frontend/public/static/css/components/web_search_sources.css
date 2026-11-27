@@ -507,8 +507,21 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources--trace[data-streaming] {
+    --answer-trace-rail-duration: 160ms;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources--trace[data-streaming] .web-search-sources__step::before {
+    transform-origin: top;
+    animation: answer-trace-rail-grow var(--answer-trace-rail-duration) ease-out;
+  }
+
   :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources--trace[data-streaming] .web-search-sources__step {
-    animation: answer-trace-step-enter 180ms ease-out;
+    animation: answer-trace-step-enter 230ms cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources--trace[data-streaming] .web-search-sources__step:not(:first-child) {
+    animation-delay: var(--answer-trace-rail-duration);
   }
 
   :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources--trace[data-streaming] .web-search-sources__step-marker {
@@ -519,9 +532,20 @@
   }
 }
 
+@keyframes answer-trace-rail-grow {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
 @keyframes answer-trace-step-enter {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ─── ステップの中身 ─── */
