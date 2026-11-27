@@ -2,10 +2,9 @@
 // Renders the parts of an AI message in order (text, generated UI, choice buttons, approval cards, search images, ...); used by chat_message_list.tsx.
 import { memo } from "react";
 
-import { isAnswerTracePart } from "../../lib/chat_page/answer_trace";
 import type { ToolApprovalDecision } from "../../lib/chat_page/tool_approval_api";
 import type { ChatMessagePart } from "../../lib/chat_page/types";
-import { AnswerTracePart, answerTraceSharesTextPart, type AnswerTraceMessagePart } from "./answer_trace";
+import { AnswerTracePart, answerTraceSharesTextPart, type AnswerTraceDisclosure, type AnswerTraceMessagePart } from "./answer_trace";
 import { BotMessageHtml } from "./bot_message_html";
 import { SandboxArtifactFrame } from "./sandbox_artifact_frame";
 import { InteractiveButtons } from "./interactive_buttons";
@@ -22,6 +21,7 @@ type BotMessagePartsProps = {
   // 生成中かどうか。末尾のテキストパートだけが単語フェードインの対象になる
   // Whether generation is in flight; only the last text part fades words in
   streaming?: boolean;
+  answerTraceDisclosure?: AnswerTraceDisclosure;
   // 選択ボタンや生成UIから質問・回答を入力欄へ反映する
   // Adds a question and answer from choice buttons or generated UI to the composer
   onCompose?: (text: string) => void;
@@ -42,6 +42,7 @@ function BotMessagePartsComponent({
   fallbackText,
   parts,
   streaming = false,
+  answerTraceDisclosure,
   onCompose,
   composeDisabled = false,
   getStructuredUiStateScope,
@@ -59,13 +60,10 @@ function BotMessagePartsComponent({
   );
 
   const leadingTrace = answerTraceSharesTextPart(renderParts) ? (renderParts[0] as AnswerTraceMessagePart) : null;
-  const standaloneLeadingTrace = !leadingTrace && isAnswerTracePart(renderParts[0]);
 
   // 本文の key は本文どうしの何番目かで決める。生成中に実行記録が先頭へ加わっても、描画中の本文を作り直さない。
   // A text part's key is its ordinal among text parts, so an execution record joining at the head mid-generation does not remount the prose being drawn.
-  // 先頭の記録と本文が別枠になっても、外側の開閉状態を保つため記録側に text-0 を残す。
-  // Keep text-0 with the leading record when it and the text need separate wrappers, so the record stays mounted.
-  let textOrdinal = standaloneLeadingTrace ? 1 : 0;
+  let textOrdinal = 0;
 
   return (
     <div className="bot-message-parts">
@@ -78,7 +76,7 @@ function BotMessagePartsComponent({
           const trace = ordinal === 0 ? leadingTrace : null;
           return part.text || trace ? (
             <div key={`text-${ordinal}`} className="bot-message-part bot-message-part--text">
-              {trace ? <AnswerTracePart key="answer-trace" part={trace} streaming={streaming} /> : null}
+              {trace ? <AnswerTracePart key="answer-trace" part={trace} streaming={streaming} disclosure={answerTraceDisclosure} /> : null}
               {part.text ? (
                 <BotMessageHtml key="text" text={part.text} streaming={streaming && index === lastTextPartIndex} />
               ) : null}
@@ -88,8 +86,8 @@ function BotMessagePartsComponent({
         if (part.type === "answer_trace" || part.type === "legacy_answer_trace") {
           if (!leadingTrace) {
             return (
-              <div key={index === 0 ? "text-0" : "answer-trace"} className="bot-message-part bot-message-part--answer-trace">
-                <AnswerTracePart key="answer-trace" part={part} streaming={streaming} />
+              <div key="answer-trace" className="bot-message-part bot-message-part--answer-trace">
+                <AnswerTracePart part={part} streaming={streaming} disclosure={answerTraceDisclosure} />
               </div>
             );
           }
@@ -98,7 +96,7 @@ function BotMessagePartsComponent({
           // wrapper the prose will join is created first.
           return renderParts.length === 1 ? (
             <div key="text-0" className="bot-message-part bot-message-part--text">
-              <AnswerTracePart key="answer-trace" part={part} streaming={streaming} />
+              <AnswerTracePart key="answer-trace" part={part} streaming={streaming} disclosure={answerTraceDisclosure} />
             </div>
           ) : null;
         }

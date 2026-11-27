@@ -200,6 +200,7 @@ type ChatMessageRowProps = {
   onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
   onSwitchBranch: (messageId: number) => void;
   taskLookup: Map<string, NormalizedTask>;
+  answerTraceChoices: Map<string, boolean>;
 };
 
 // react-window が行コンポーネントに渡す追加プロパティ（位置・サイズ・aria 属性）。
@@ -239,11 +240,15 @@ function ChatMessageRow({
   rows,
   style,
   taskLookup,
+  answerTraceChoices,
 }: ChatMessageRowComponentProps) {
   const { t } = useTranslation();
   const row = rows[index];
-  // 先頭・末尾・ロード行にそれぞれ専用クラスを付与してスタイリングを切り替える。
-  // Apply positional and kind-specific CSS modifier classes for styling.
+  const messageKey = row?.kind === "message" ? JSON.stringify([currentRoomId, row.message.id]) : "";
+  const answerTraceDisclosure = useMemo(
+    () => ({ messageKey, choices: answerTraceChoices }),
+    [messageKey, answerTraceChoices],
+  );
   const rowClassName = [
     "chat-message-row",
     index === 0 ? "chat-message-row--first" : "",
@@ -257,8 +262,6 @@ function ChatMessageRow({
     return <div {...ariaAttributes} className={rowClassName} style={style}></div>;
   }
 
-  // 過去メッセージが存在する場合に「もっと読む」ボタン行を表示する。
-  // Show a "load more" row when older chat history is available.
   if (row.kind === "load-more") {
     return (
       <div {...ariaAttributes} className={rowClassName} style={style}>
@@ -386,8 +389,6 @@ function ChatMessageRow({
     );
   }
 
-  // 直後にアクション対象のアシスタントメッセージが無い場合のみ操作ボタンを表示する。
-  // Show action buttons only on the last actionable assistant message in the list.
   const isLastAssistantMessage = isLastActionableAssistantMessage(rows, index);
   // ストリーミング中はアクションボタンを非表示にして誤操作を防ぐ。
   // Hide action buttons during active streaming to prevent accidental interactions.
@@ -406,10 +407,11 @@ function ChatMessageRow({
       >
         <div className={`bot-message ${isActivelyStreaming ? "bot-message--streaming" : ""}`.trim()}>
           <BotMessageParts
-            key={JSON.stringify([currentRoomId, message.id])}
+            key={messageKey}
             fallbackText={message.text}
             parts={message.parts}
             streaming={isActivelyStreaming}
+            answerTraceDisclosure={answerTraceDisclosure}
             onCompose={onCompose}
             composeDisabled={choicesDisabled}
             getStructuredUiStateScope={(blockId) =>
@@ -526,9 +528,10 @@ function ChatMessageListComponent({
   tasks,
 }: ChatMessageListProps) {
   const { t } = useTranslation();
-  // 同時に編集できるメッセージは 1 件のみ。null は非編集状態を表す。
-  // Only one message can be in edit mode at a time; null means no active edit.
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  // 仮想リストが画面外の行を外しても、生成中に行った手動開閉を覚えておく。
+  // Keep manual choices made during streaming across virtual row unmounts.
+  const [answerTraceChoices] = useState(() => new Map<string, boolean>());
 
   const handleEditStart = useCallback((messageId: string) => {
     setEditingMessageId(messageId);
@@ -558,9 +561,6 @@ function ChatMessageListComponent({
     key: currentRoomId || "no-room",
   });
   const listApiRef = useRef<ListImperativeAPI | null>(null);
-
-  // react-window の List API と DOM 要素を両方の ref に紐付けて外部から参照できるようにする。
-  // Bind both the virtual list API and its DOM element to refs for external scroll control.
   const setListRef = useCallback(
     (api: ListImperativeAPI | null) => {
       listApiRef.current = api;
@@ -609,8 +609,6 @@ function ChatMessageListComponent({
     return nextRows;
   }, [historyHasMore, historyNextBeforeId, isChatLaunching, launchingTaskId, launchingTaskName, messages, setupInfo, t]);
 
-  // rowProps をメモ化することで、rows や状態が変わらない限り各行の再レンダリングを防ぐ。
-  // Memoize rowProps to prevent unnecessary re-renders of individual rows.
   const rowProps = useMemo<ChatMessageRowProps>(
     () => ({
       rows,
@@ -631,6 +629,7 @@ function ChatMessageListComponent({
       onEditAndRegenerate,
       onSwitchBranch,
       taskLookup,
+      answerTraceChoices,
     }),
     [
       rows,
@@ -651,6 +650,7 @@ function ChatMessageListComponent({
       onEditAndRegenerate,
       onSwitchBranch,
       taskLookup,
+      answerTraceChoices,
     ],
   );
 

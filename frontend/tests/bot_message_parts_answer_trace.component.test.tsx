@@ -10,7 +10,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { BotMessageParts } from "../components/chat_page/bot_message_parts";
 import { SharedChatMessageParts } from "../components/shared_chat/shared_chat_message_parts";
 import type { ChatMessagePart } from "../lib/chat_page/types";
-import { makeStep, makeTrace } from "./answer_trace_test_data";
+import { makeSource, makeStep, makeTrace } from "./answer_trace_test_data";
 
 const TRACE_PART: ChatMessagePart = { type: "answer_trace", trace: makeTrace([makeStep({ title: "Web検索" })]) };
 const LEGACY_TRACE_PART: ChatMessagePart = {
@@ -97,29 +97,53 @@ describe("BotMessageParts while an answer is generated", () => {
     expect(container.querySelector(TRACE_SELECTOR)).toBe(trace);
     expect(trace.open).toBe(true);
     expect(trace.closest(".bot-message-part")).toBe(container.querySelector("p")!.closest(".bot-message-part"));
+    const summary = trace.querySelector("summary")!;
+    summary.focus();
 
     rerender(<BotMessageParts fallbackText="" parts={[TRACE_PART, TEXT_PART]} />);
 
     expect(container.querySelector(TRACE_SELECTOR)).toBe(trace);
     expect(trace.open).toBe(false);
+    expect(summary).toHaveFocus();
   });
 
-  it("honors manual toggles even when the record and the prose get separate wrappers", () => {
-    const { container, rerender } = render(<BotMessageParts fallbackText="" parts={[TRACE_PART]} streaming />);
+  it("honors manual toggles across virtual row unmounts and the end of streaming", () => {
+    const disclosure = { messageKey: "assistant-stream", choices: new Map<string, boolean>() };
+    const message = (parts: ChatMessagePart[], streaming: boolean) => (
+      <BotMessageParts fallbackText="" parts={parts} streaming={streaming} answerTraceDisclosure={disclosure} />
+    );
+    const first = render(message([TRACE_PART], true));
+    const firstTrace = first.container.querySelector<HTMLDetailsElement>(TRACE_SELECTOR)!;
+    fireEvent.click(firstTrace.querySelector("summary")!);
+    expect(firstTrace.open).toBe(false);
+    first.unmount();
+
+    const { container, rerender } = render(message([TRACE_PART, IMAGE_PART, TEXT_PART], true));
     const trace = container.querySelector<HTMLDetailsElement>(TRACE_SELECTOR)!;
-    const summary = trace.querySelector("summary")!;
-    fireEvent.click(summary);
     expect(trace.open).toBe(false);
-
-    rerender(<BotMessageParts fallbackText="" parts={[TRACE_PART, IMAGE_PART, TEXT_PART]} streaming />);
-
-    expect(container.querySelector(TRACE_SELECTOR)).toBe(trace);
-    expect(trace.open).toBe(false);
-    fireEvent.click(summary);
+    fireEvent.click(trace.querySelector("summary")!);
     expect(trace.open).toBe(true);
 
-    rerender(<BotMessageParts fallbackText="" parts={[TRACE_PART, IMAGE_PART, TEXT_PART]} />);
+    rerender(message([TRACE_PART, IMAGE_PART, TEXT_PART], false));
 
     expect(trace.open).toBe(true);
+  });
+
+  it("still folds the automatically opened panel after the reader opens a source list", () => {
+    const tracePart: ChatMessagePart = {
+      type: "answer_trace",
+      trace: makeTrace([makeStep({ sources: [makeSource()] })]),
+    };
+    const { container, rerender } = render(<BotMessageParts fallbackText="" parts={[tracePart]} streaming />);
+    const trace = container.querySelector<HTMLDetailsElement>(TRACE_SELECTOR)!;
+    const sourceSummary = trace.querySelector<HTMLElement>(".web-search-sources__step-summary")!;
+    sourceSummary.focus();
+    fireEvent.click(sourceSummary);
+    expect(sourceSummary.closest("details")!.open).toBe(true);
+
+    rerender(<BotMessageParts fallbackText="" parts={[tracePart, TEXT_PART]} />);
+
+    expect(trace.open).toBe(false);
+    expect(trace.querySelector("summary")).toHaveFocus();
   });
 });
