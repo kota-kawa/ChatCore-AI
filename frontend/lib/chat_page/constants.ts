@@ -25,8 +25,8 @@ export const CHAT_HISTORY_PAGE_SIZE = toPositiveInteger(chatHistoryPageSizeDefau
 export const STICKY_SCROLL_BOTTOM_THRESHOLD_PX = 72;
 export const THINKING_CONSTELLATION_BASE_WIDTH = 208;
 export const THINKING_CONSTELLATION_BASE_HEIGHT = 86;
-export const THINKING_CONSTELLATION_NODE_COUNT = 8;
-export const THINKING_CONSTELLATION_LINK_COUNT = 8;
+export const THINKING_CONSTELLATION_NODE_COUNT = 9;
+export const THINKING_CONSTELLATION_LINK_COUNT = 10;
 export const THINKING_CONSTELLATION_STEP_MS = 3200;
 
 export type ThinkingConstellationNode = {
@@ -41,204 +41,200 @@ export type ThinkingConstellationVariant = {
   links: Array<[number, number]>;
 };
 
-// すべてのバリアントを 8 ノード / 8 リンクに統一している。
-// 個数を揃えることで星座同士のモーフィングが常に 1 対 1 の対応になり、
-// 「中央から湧いて出る / 中央に吸い込まれる」不自然な動きが起きない。
-// Every variant uses exactly 8 nodes / 8 links so that morphing between
-// constellations is always a 1:1 mapping — no element ever pops in from or
-// collapses into the center.
+// 生成フェーズの星座：黄道十二星座。実際の星の並びを舞台の縦横比に合わせて置いている。
+// 星と線の数は星座ごとに違ってよく、上の NODE_COUNT / LINK_COUNT が上限になる。
+// 星は左から右の順に並べ、切り替え時に各星が近くの位置へ動くようにしている。
+// Constellations for the generating phase: the twelve zodiac signs, laid out from the real
+// star patterns to suit the stage's aspect ratio. Star and line counts may differ per
+// constellation, up to NODE_COUNT / LINK_COUNT above. Stars are ordered left to right so
+// each one moves to a nearby position when the shape changes.
 export const THINKING_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
   {
-    // 右へ流れてから先端で巻く、雄羊の角のひとつづきの弧
-    // A single sweeping arc that curls at the tip, like a ram's horn
+    // 頭の小さな鉤から背へ伸びるゆるい弧
+    // A gentle arc running from the small hook of the head toward the back
     name: "牡羊座",
     nodes: [
-      { x: 14, y: 62, size: 0.84 },
-      { x: 24, y: 44, size: 0.9 },
-      { x: 38, y: 31, size: 0.96 },
-      { x: 54, y: 26, size: 1.08 },
-      { x: 68, y: 30, size: 0.9 },
-      { x: 79, y: 40, size: 0.86 },
-      { x: 85, y: 54, size: 0.92 },
-      { x: 76, y: 64, size: 0.8 },
+      { x: 18.3, y: 42.4, size: 0.94 },
+      { x: 62.4, y: 37.1, size: 1.12 },
+      { x: 78.1, y: 50.1, size: 0.94 },
+      { x: 81.7, y: 62.9, size: 0.8 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 5]],
+    links: [[0, 1], [1, 2], [2, 3]],
   },
   {
-    // ヒアデス星団のV字の顔と、右へ大きく開いた二本の角
-    // The Hyades V-shaped face with two horns opening wide to the right
+    // ヒアデスのV字から二本の角が伸び、後ろへ胴が続く
+    // Two horns reaching out from the Hyades V, with the body trailing behind
     name: "牡牛座",
     nodes: [
-      { x: 20, y: 44, size: 0.84 },
-      { x: 30, y: 58, size: 0.9 },
-      { x: 40, y: 48, size: 1.06 },
-      { x: 32, y: 34, size: 0.82 },
-      { x: 54, y: 46, size: 0.9 },
-      { x: 66, y: 58, size: 0.86 },
-      { x: 84, y: 66, size: 0.94 },
-      { x: 74, y: 26, size: 0.98 },
+      { x: 12.5, y: 27.8, size: 1.12 },
+      { x: 12.5, y: 71.4, size: 0.94 },
+      { x: 47.3, y: 67.5, size: 1.12 },
+      { x: 48.7, y: 49.4, size: 0.94 },
+      { x: 56.2, y: 64.9, size: 0.94 },
+      { x: 68.3, y: 72.2, size: 0.94 },
+      { x: 87.5, y: 71.6, size: 0.8 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [3, 0], [2, 4], [4, 5], [5, 6], [4, 7]],
+    links: [[1, 2], [0, 3], [2, 4], [3, 4], [4, 5], [5, 6]],
   },
   {
-    // 手をつないだ双子。緩やかに膨らむ二本の柱と二本の横木の左右対称なはしご
-    // Twins holding hands: a symmetric ladder of two gently bowed posts and two rungs
+    // 頭の二つ星を結び、足もとへ並んで伸びる二本の体
+    // Two bodies running side by side from the joined pair of head stars
     name: "双子座",
     nodes: [
-      { x: 30, y: 26, size: 0.94 },
-      { x: 26, y: 47, size: 0.84 },
-      { x: 30, y: 68, size: 0.94 },
-      { x: 70, y: 26, size: 0.94 },
-      { x: 74, y: 47, size: 0.84 },
-      { x: 70, y: 68, size: 0.94 },
-      { x: 50, y: 31, size: 0.9 },
-      { x: 50, y: 63, size: 0.9 },
+      { x: 21.3, y: 64.2, size: 1.12 },
+      { x: 21.3, y: 30.9, size: 1.12 },
+      { x: 37.5, y: 20.9, size: 0.8 },
+      { x: 45.3, y: 79.1, size: 0.94 },
+      { x: 56.9, y: 73.5, size: 0.8 },
+      { x: 61.5, y: 28.2, size: 0.94 },
+      { x: 77.7, y: 25.8, size: 0.94 },
+      { x: 78.7, y: 76.3, size: 1.12 },
     ],
-    links: [[0, 1], [1, 2], [3, 4], [4, 5], [0, 6], [6, 3], [2, 7], [7, 5]],
+    links: [[0, 1], [1, 2], [0, 3], [2, 5], [3, 4], [4, 7], [5, 6]],
   },
   {
-    // 中央の菱形の甲羅から左右へ鋏を伸ばす蟹。完全な左右対称
-    // A crab: diamond shell with claws reaching out to both sides, fully symmetric
+    // 中央の星から三方へ伸びるY字
+    // A Y branching three ways from the central star
     name: "蟹座",
     nodes: [
-      { x: 43, y: 45, size: 0.96 },
-      { x: 57, y: 45, size: 0.96 },
-      { x: 50, y: 60, size: 0.86 },
-      { x: 50, y: 30, size: 0.9 },
-      { x: 28, y: 31, size: 0.84 },
-      { x: 15, y: 44, size: 0.9 },
-      { x: 72, y: 31, size: 0.84 },
-      { x: 85, y: 44, size: 0.9 },
+      { x: 21.7, y: 20.9, size: 0.94 },
+      { x: 40.9, y: 33.7, size: 0.8 },
+      { x: 49, y: 43.6, size: 0.94 },
+      { x: 61.5, y: 79.1, size: 0.94 },
+      { x: 78.3, y: 25.7, size: 1.12 },
     ],
-    links: [[3, 0], [3, 1], [0, 2], [1, 2], [0, 4], [4, 5], [1, 6], [6, 7]],
+    links: [[0, 1], [1, 2], [2, 3], [2, 4]],
   },
   {
-    // レグルスから立ち上がる「ししの大鎌」のたてがみの環と、デネボラへ流れる尾
-    // The Sickle: a mane loop rising from Regulus, with the tail flowing to Denebola
+    // 頭の「獅子の大鎌」と、尾のデネボラへ伸びる胴
+    // The Sickle for the head and a body stretching to Denebola at the tail
     name: "獅子座",
     nodes: [
-      { x: 26, y: 63, size: 1.06 },
-      { x: 20, y: 45, size: 0.86 },
-      { x: 28, y: 31, size: 0.9 },
-      { x: 42, y: 26, size: 0.94 },
-      { x: 52, y: 35, size: 0.88 },
-      { x: 47, y: 51, size: 0.82 },
-      { x: 69, y: 57, size: 0.86 },
-      { x: 87, y: 45, size: 0.96 },
+      { x: 21.2, y: 68.3, size: 1.12 },
+      { x: 37.4, y: 65, size: 0.94 },
+      { x: 37.4, y: 43.8, size: 0.94 },
+      { x: 62.9, y: 46.7, size: 1.12 },
+      { x: 64.3, y: 31.7, size: 0.94 },
+      { x: 68.2, y: 79.1, size: 1.12 },
+      { x: 68.7, y: 59.1, size: 0.8 },
+      { x: 75.5, y: 20.9, size: 0.8 },
+      { x: 78.8, y: 30.1, size: 0.94 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [4, 6], [6, 7]],
+    links: [[0, 1], [0, 2], [2, 3], [1, 5], [3, 4], [3, 6], [5, 6], [4, 7], [7, 8]],
   },
   {
-    // なだらかなサインカーブの波と、スピカから下がる菱形の裾
-    // A gentle sine wave with a diamond hem hanging below Spica
+    // 菱形の胴から腕と裾が広がり、スピカが輝く
+    // Arms and skirt fanning out from a diamond body, with Spica shining
     name: "乙女座",
     nodes: [
-      { x: 13, y: 35, size: 0.8 },
-      { x: 26, y: 55, size: 0.9 },
-      { x: 39, y: 35, size: 0.84 },
-      { x: 52, y: 55, size: 1.04 },
-      { x: 65, y: 35, size: 0.84 },
-      { x: 78, y: 55, size: 0.9 },
-      { x: 89, y: 38, size: 0.8 },
-      { x: 40, y: 71, size: 0.86 },
+      { x: 24.3, y: 65.5, size: 0.8 },
+      { x: 38.9, y: 51.3, size: 0.94 },
+      { x: 42.3, y: 79.1, size: 1.12 },
+      { x: 47.6, y: 64.1, size: 0.8 },
+      { x: 50.3, y: 20.9, size: 0.94 },
+      { x: 52.6, y: 40.8, size: 0.94 },
+      { x: 57.7, y: 53.4, size: 0.94 },
+      { x: 65.3, y: 51.6, size: 0.8 },
+      { x: 75.7, y: 45, size: 0.94 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [1, 7], [7, 3]],
+    links: [[0, 1], [1, 3], [2, 3], [1, 5], [4, 5], [3, 6], [5, 6], [6, 7], [7, 8]],
   },
   {
-    // 頂点から左右へ均等に吊られた天秤。梁の両端に皿を下げる
-    // Scales hung evenly from an apex, with a dish at each end of the beam
+    // 三角の竿から二つの皿が下がる天秤
+    // A balance: two pans hanging from a triangular beam
     name: "天秤座",
     nodes: [
-      { x: 50, y: 24, size: 1.02 },
-      { x: 28, y: 38, size: 0.9 },
-      { x: 72, y: 38, size: 0.9 },
-      { x: 50, y: 38, size: 0.8 },
-      { x: 20, y: 60, size: 0.82 },
-      { x: 34, y: 64, size: 0.82 },
-      { x: 66, y: 64, size: 0.82 },
-      { x: 80, y: 60, size: 0.82 },
+      { x: 29.4, y: 79.1, size: 0.94 },
+      { x: 31, y: 44.2, size: 0.94 },
+      { x: 47.6, y: 20.9, size: 1.12 },
+      { x: 58.8, y: 76.9, size: 0.94 },
+      { x: 70.6, y: 49.4, size: 1.12 },
     ],
-    links: [[0, 1], [0, 2], [1, 3], [3, 2], [1, 4], [4, 5], [2, 7], [6, 7]],
+    links: [[0, 1], [1, 2], [1, 4], [2, 4], [3, 4]],
   },
   {
-    // 左端の鋏から尾の毒針まで、緩やかに反り上がるJ字のカーブ
-    // From the pincers to the stinger: a smooth J-curve rising at the tail
+    // 三つ星の頭からアンタレスを通り、尾の先で巻き上がるS字
+    // An S-curve from the three-star head through Antares to the curled stinger
     name: "蠍座",
     nodes: [
-      { x: 16, y: 26, size: 0.84 },
-      { x: 13, y: 48, size: 0.84 },
-      { x: 26, y: 40, size: 0.92 },
-      { x: 40, y: 50, size: 0.86 },
-      { x: 54, y: 58, size: 0.9 },
-      { x: 68, y: 56, size: 0.86 },
-      { x: 80, y: 45, size: 0.9 },
-      { x: 87, y: 28, size: 1.02 },
+      { x: 16.8, y: 50, size: 0.94 },
+      { x: 25.6, y: 69.2, size: 0.8 },
+      { x: 26.6, y: 28.1, size: 1.12 },
+      { x: 33.2, y: 79.1, size: 0.8 },
+      { x: 46.2, y: 48.1, size: 0.94 },
+      { x: 65.1, y: 30.7, size: 1.12 },
+      { x: 76.5, y: 51.9, size: 0.94 },
+      { x: 80.9, y: 36, size: 0.94 },
+      { x: 83.2, y: 20.9, size: 0.94 },
     ],
-    links: [[0, 1], [0, 2], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7]],
+    links: [[0, 1], [0, 2], [1, 3], [3, 4], [4, 5], [5, 7], [6, 7], [7, 8]],
   },
   {
-    // 南斗六星の「ティーポット」。胴体・蓋・注ぎ口・取っ手
-    // The Teapot asterism: body, lid, spout and handle
+    // 注ぎ口・ふた・取っ手がそろった「ティーポット」
+    // The Teapot, with its spout, lid, and handle
     name: "射手座",
     nodes: [
-      { x: 32, y: 38, size: 0.94 },
-      { x: 60, y: 38, size: 0.94 },
-      { x: 26, y: 62, size: 0.9 },
-      { x: 66, y: 62, size: 0.9 },
-      { x: 46, y: 26, size: 1.02 },
-      { x: 14, y: 30, size: 0.86 },
-      { x: 84, y: 40, size: 0.8 },
-      { x: 80, y: 58, size: 0.8 },
+      { x: 24.8, y: 59.7, size: 0.8 },
+      { x: 31.5, y: 71.6, size: 0.94 },
+      { x: 31.9, y: 43.1, size: 1.12 },
+      { x: 40.3, y: 42.1, size: 0.8 },
+      { x: 51.3, y: 20.9, size: 0.94 },
+      { x: 62.9, y: 46.3, size: 0.94 },
+      { x: 67.1, y: 79.1, size: 1.12 },
+      { x: 75.2, y: 41.4, size: 0.94 },
     ],
-    links: [[0, 2], [1, 3], [2, 3], [0, 4], [4, 1], [0, 5], [1, 6], [6, 7]],
+    links: [[0, 1], [0, 2], [1, 3], [2, 3], [3, 4], [1, 6], [4, 5], [5, 6], [5, 7], [6, 7]],
   },
   {
-    // 両端が持ち上がった三角帽子のような、閉じた舟形のシルエット
-    // A closed boat silhouette with both tips lifted, like a tricorn hat
+    // 二つの角から尾までをつなぐ、逆三角の舟形
+    // A boat-like inverted triangle joining the two horns to the tail
     name: "山羊座",
     nodes: [
-      { x: 14, y: 34, size: 0.92 },
-      { x: 25, y: 52, size: 0.84 },
-      { x: 39, y: 62, size: 0.88 },
-      { x: 55, y: 64, size: 0.96 },
-      { x: 70, y: 58, size: 0.84 },
-      { x: 82, y: 46, size: 0.88 },
-      { x: 88, y: 30, size: 0.94 },
-      { x: 50, y: 34, size: 0.8 },
+      { x: 27.2, y: 35.5, size: 1.12 },
+      { x: 30.6, y: 37.9, size: 0.94 },
+      { x: 37.7, y: 60.9, size: 0.94 },
+      { x: 39.8, y: 38.3, size: 0.8 },
+      { x: 48.2, y: 39.9, size: 0.8 },
+      { x: 55.5, y: 79.1, size: 0.8 },
+      { x: 58.3, y: 72.6, size: 0.8 },
+      { x: 71.3, y: 30.2, size: 1.12 },
+      { x: 72.8, y: 20.9, size: 0.94 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 0]],
+    links: [[0, 1], [0, 2], [1, 3], [3, 4], [2, 5], [5, 6], [4, 7], [6, 7], [7, 8]],
   },
   {
-    // 水瓶から流れ落ちる二段の波。上下の波を水流がつなぐ
-    // Two tiers of waves pouring from the urn, joined by falling streams
+    // 肩の星の並びに小さなY字の水瓶があり、水が流れ落ちる
+    // A small Y-shaped jar on the line of shoulder stars, pouring a stream of water
     name: "水瓶座",
     nodes: [
-      { x: 16, y: 36, size: 0.82 },
-      { x: 32, y: 25, size: 0.9 },
-      { x: 48, y: 36, size: 0.84 },
-      { x: 64, y: 25, size: 0.9 },
-      { x: 80, y: 36, size: 0.82 },
-      { x: 28, y: 58, size: 0.84 },
-      { x: 44, y: 68, size: 0.9 },
-      { x: 60, y: 58, size: 0.84 },
+      { x: 27.1, y: 79.1, size: 0.94 },
+      { x: 27.3, y: 37.1, size: 0.8 },
+      { x: 27.7, y: 56.1, size: 0.94 },
+      { x: 34.9, y: 32.7, size: 0.94 },
+      { x: 35.9, y: 20.9, size: 0.8 },
+      { x: 41.1, y: 41.1, size: 0.94 },
+      { x: 44.6, y: 35.7, size: 1.12 },
+      { x: 56.9, y: 50.6, size: 1.12 },
+      { x: 72.9, y: 61.5, size: 0.8 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [3, 4], [5, 6], [6, 7], [1, 5], [3, 7]],
+    links: [[0, 2], [1, 2], [1, 3], [3, 4], [3, 5], [5, 6], [6, 7], [7, 8]],
   },
   {
-    // 菱形の魚と、結び目から伸びる二本の紐
-    // A diamond-shaped fish with two cords stretching from the knot
+    // 小さな輪の魚から長いリボンが伸び、結び目で折り返す
+    // A long ribbon running from the small ring of one fish and turning back at the knot
     name: "魚座",
     nodes: [
-      { x: 86, y: 62, size: 1 },
-      { x: 66, y: 47, size: 0.84 },
-      { x: 48, y: 33, size: 0.86 },
-      { x: 33, y: 24, size: 0.82 },
-      { x: 19, y: 29, size: 0.9 },
-      { x: 28, y: 40, size: 0.82 },
-      { x: 58, y: 68, size: 0.84 },
-      { x: 34, y: 73, size: 0.9 },
+      { x: 16.4, y: 67.8, size: 1.12 },
+      { x: 22.6, y: 43.8, size: 0.8 },
+      { x: 28.2, y: 20.9, size: 1.12 },
+      { x: 39, y: 48.7, size: 0.94 },
+      { x: 57.5, y: 50.9, size: 0.94 },
+      { x: 66.5, y: 79.1, size: 0.8 },
+      { x: 67.7, y: 53.6, size: 0.8 },
+      { x: 76, y: 47.9, size: 0.8 },
+      { x: 83.6, y: 68.9, size: 0.94 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 2], [0, 6], [6, 7]],
+    links: [[0, 1], [1, 2], [0, 3], [3, 4], [4, 6], [5, 6], [6, 7], [5, 8], [7, 8]],
   },
 ];
 

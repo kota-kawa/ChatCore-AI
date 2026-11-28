@@ -40,111 +40,135 @@ const CONSTELLATION_PHASE_TIMING: Record<ChatGenerationPhase, ConstellationPhase
   },
 };
 
-// Web検索フェーズ専用の星座バリアント定義。
-// いずれも 8 ノード / 8 リンクで、正多角形・等間隔リングなど整った幾何学配置にしている。
-// Constellation variant definitions for the web search phase.
-// Each uses 8 nodes / 8 links laid out on clean geometry (regular polygons, even rings).
+// Web検索フェーズの星座：探しものにちなんだ虫眼鏡と、狩人・渡り鳥・天馬の星座。
+// Constellations for the web search phase: a magnifier plus the hunter, the migrating swan, and the winged horse.
 const WEB_SEARCH_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
   {
     // 正六角形のレンズと斜めに伸びる柄の虫眼鏡
     // A magnifier: regular-hexagon lens with a diagonal handle
     name: "検索レンズ",
     nodes: [
-      { x: 58, y: 42, size: 0.88 },
-      { x: 50, y: 25, size: 0.9 },
-      { x: 34, y: 25, size: 0.9 },
-      { x: 26, y: 42, size: 0.88 },
-      { x: 34, y: 59, size: 0.9 },
-      { x: 50, y: 59, size: 0.96 },
-      { x: 66, y: 68, size: 0.86 },
-      { x: 80, y: 76, size: 0.82 },
+      { x: 37.5, y: 44.9, size: 0.94 },
+      { x: 39.7, y: 25.1, size: 0.94 },
+      { x: 43.5, y: 59.4, size: 0.94 },
+      { x: 47.9, y: 19.8, size: 0.94 },
+      { x: 51.7, y: 54.1, size: 1.12 },
+      { x: 53.9, y: 34.3, size: 0.94 },
+      { x: 57.1, y: 67.2, size: 0.8 },
+      { x: 62.5, y: 80.2, size: 0.94 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [5, 6], [6, 7]],
+    links: [[0, 1], [0, 2], [1, 3], [2, 4], [3, 5], [4, 5], [4, 6], [6, 7]],
   },
   {
-    // 中心星のまわりを等間隔の7つの星が周回する軌道
-    // An orbit: seven evenly spaced stars circling a central one
-    name: "検索オービット",
+    // 三つ星の帯を挟んで肩と足が向かい合う、横たわる狩人
+    // The hunter lying on his side: shoulders and feet facing across the three-star belt
+    name: "オリオン座",
     nodes: [
-      { x: 50, y: 50, size: 1.06 },
-      { x: 80, y: 50, size: 0.84 },
-      { x: 69, y: 30, size: 0.88 },
-      { x: 43, y: 25, size: 0.84 },
-      { x: 23, y: 39, size: 0.88 },
-      { x: 23, y: 61, size: 0.84 },
-      { x: 43, y: 75, size: 0.88 },
-      { x: 69, y: 70, size: 0.84 },
+      { x: 28.2, y: 28, size: 0.8 },
+      { x: 30.1, y: 59.1, size: 1.12 },
+      { x: 37.8, y: 20.9, size: 0.94 },
+      { x: 50.1, y: 33.3, size: 0.94 },
+      { x: 52.5, y: 48.4, size: 0.94 },
+      { x: 54.9, y: 63.5, size: 0.94 },
+      { x: 69.1, y: 79.1, size: 0.94 },
+      { x: 71.8, y: 31.7, size: 1.12 },
     ],
-    links: [[1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 1], [0, 1]],
+    links: [[0, 1], [0, 2], [1, 5], [2, 3], [3, 4], [4, 5], [3, 7], [5, 6]],
   },
   {
-    // 正六角形の環と中央を貫く芯のハニカム
-    // A honeycomb: regular hexagonal ring with a core bar through the center
-    name: "検索ハニカム",
+    // 翼を広げて天の川を渡る北十字
+    // The Northern Cross, wings spread, flying along the Milky Way
+    name: "白鳥座",
     nodes: [
-      { x: 82, y: 50, size: 0.86 },
-      { x: 66, y: 29, size: 0.9 },
-      { x: 34, y: 29, size: 0.9 },
-      { x: 18, y: 50, size: 0.86 },
-      { x: 34, y: 71, size: 0.9 },
-      { x: 66, y: 71, size: 0.9 },
-      { x: 42, y: 50, size: 1.0 },
-      { x: 58, y: 50, size: 1.04 },
+      { x: 32.3, y: 36.9, size: 0.8 },
+      { x: 39.3, y: 40, size: 0.94 },
+      { x: 45.7, y: 79.1, size: 0.94 },
+      { x: 47.5, y: 56.4, size: 0.8 },
+      { x: 47.8, y: 37.2, size: 0.94 },
+      { x: 48.9, y: 20.9, size: 1.12 },
+      { x: 57.1, y: 42.2, size: 0.94 },
+      { x: 67.7, y: 37.2, size: 0.8 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [6, 7], [7, 0]],
+    links: [[0, 1], [1, 4], [2, 3], [3, 4], [4, 5], [4, 6], [6, 7]],
+  },
+  {
+    // 秋の大四辺形から首と前脚を伸ばして駆ける天馬
+    // The winged horse galloping, neck and forelegs reaching out from the Great Square
+    name: "ペガスス座",
+    nodes: [
+      { x: 29.7, y: 59.7, size: 0.94 },
+      { x: 31, y: 29.8, size: 1.12 },
+      { x: 48.4, y: 59.7, size: 0.94 },
+      { x: 48.7, y: 31.9, size: 1.12 },
+      { x: 54.2, y: 27.4, size: 0.94 },
+      { x: 54.7, y: 69.2, size: 0.8 },
+      { x: 63.2, y: 79.1, size: 0.8 },
+      { x: 63.2, y: 20.9, size: 0.8 },
+      { x: 70.3, y: 71.1, size: 1.12 },
+    ],
+    links: [[0, 1], [0, 2], [1, 3], [2, 3], [3, 4], [2, 5], [4, 7], [5, 6], [6, 8]],
   },
 ];
 
-// 準備フェーズ専用の星座バリアント定義。こちらも 8 ノード / 8 リンクで統一。
-// Constellation variant definitions for the preparing phase, also 8 nodes / 8 links each.
+// 準備フェーズの星座：方角を確かめる目印になる北天の星の並び。
+// Constellations for the preparing phase: northern star patterns used to find one's bearings.
 const PREPARING_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
   {
-    // 中心から等角度で花びらのように広がる6本のスポークと右のアクセント
-    // A core: six spokes fanning out at even angles like petals, with a right accent
-    name: "準備コア",
+    // 北を指す道しるべ、ひしゃくの桝と柄
+    // The signpost to north: the bowl and handle of the Dipper
+    name: "北斗七星",
     nodes: [
-      { x: 50, y: 50, size: 1.08 },
-      { x: 50, y: 29, size: 0.84 },
-      { x: 73, y: 40, size: 0.9 },
-      { x: 73, y: 61, size: 0.84 },
-      { x: 50, y: 71, size: 0.9 },
-      { x: 27, y: 61, size: 0.84 },
-      { x: 27, y: 40, size: 0.9 },
-      { x: 88, y: 50, size: 0.8 },
+      { x: 12.5, y: 56.1, size: 1.12 },
+      { x: 27.3, y: 28.7, size: 0.94 },
+      { x: 39.7, y: 32.9, size: 1.12 },
+      { x: 55.3, y: 40.3, size: 0.8 },
+      { x: 59.9, y: 69.5, size: 0.94 },
+      { x: 82.4, y: 71.3, size: 0.94 },
+      { x: 87.5, y: 36.2, size: 1.12 },
     ],
-    links: [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [2, 7], [3, 7]],
+    links: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [3, 6], [5, 6]],
   },
   {
-    // 幹からふた手に分かれ、先端でまた結ばれる木の葉形の分岐
-    // A branching leaf: the trunk forks in two and rejoins at the tip
-    name: "準備分岐",
+    // 北の空に浮かぶ五つ星のW
+    // The five-star W of the northern sky
+    name: "カシオペヤ座",
     nodes: [
-      { x: 14, y: 50, size: 0.86 },
-      { x: 32, y: 50, size: 0.92 },
-      { x: 48, y: 50, size: 1.08 },
-      { x: 64, y: 33, size: 0.88 },
-      { x: 80, y: 27, size: 0.82 },
-      { x: 64, y: 67, size: 0.88 },
-      { x: 80, y: 73, size: 0.82 },
-      { x: 90, y: 50, size: 0.92 },
+      { x: 14.8, y: 20.9, size: 0.8 },
+      { x: 36.8, y: 51.9, size: 0.94 },
+      { x: 54, y: 35.2, size: 1.12 },
+      { x: 69.1, y: 79.1, size: 1.12 },
+      { x: 85.2, y: 35.9, size: 0.94 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [3, 4], [2, 5], [5, 6], [4, 7], [6, 7]],
+    links: [[0, 1], [1, 2], [2, 3], [3, 4]],
   },
   {
-    // 交差する二本の波と中央の横木が描く二重らせん
-    // A double helix: two crossing waves tied by central rungs
-    name: "準備ヘリックス",
+    // 七つの星が半円に並ぶ冠
+    // A crown of seven stars set in a half circle
+    name: "かんむり座",
     nodes: [
-      { x: 18, y: 30, size: 0.86 },
-      { x: 38, y: 62, size: 0.9 },
-      { x: 58, y: 30, size: 0.9 },
-      { x: 78, y: 62, size: 0.86 },
-      { x: 18, y: 62, size: 0.86 },
-      { x: 38, y: 30, size: 0.9 },
-      { x: 58, y: 62, size: 0.9 },
-      { x: 78, y: 30, size: 0.86 },
+      { x: 26.2, y: 29.1, size: 0.8 },
+      { x: 28.7, y: 66.2, size: 0.94 },
+      { x: 39.2, y: 78.8, size: 0.8 },
+      { x: 49.7, y: 79.1, size: 0.94 },
+      { x: 61.2, y: 77.2, size: 1.12 },
+      { x: 68.1, y: 20.9, size: 0.8 },
+      { x: 73.8, y: 50.8, size: 0.94 },
     ],
-    links: [[0, 1], [1, 2], [2, 3], [4, 5], [5, 6], [6, 7], [1, 5], [2, 6]],
+    links: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 6], [5, 6]],
+  },
+  {
+    // ベガの三角と、弦を張る平行四辺形の竪琴
+    // A lyre: Vega's triangle above a parallelogram of strings
+    name: "こと座",
+    nodes: [
+      { x: 21.2, y: 55.9, size: 0.94 },
+      { x: 33.6, y: 76.1, size: 0.94 },
+      { x: 51.4, y: 23.9, size: 0.8 },
+      { x: 64.3, y: 45.9, size: 0.94 },
+      { x: 77.5, y: 26.4, size: 0.8 },
+      { x: 78.8, y: 57, size: 1.12 },
+    ],
+    links: [[0, 1], [0, 2], [1, 3], [2, 3], [3, 4], [3, 5], [4, 5]],
   },
 ];
 
@@ -223,37 +247,25 @@ export function ThinkingConstellation({ phase = "preparing" }: { phase?: ChatGen
 
   const baseNodeSize = Math.max(4, THINKING_CONSTELLATION_BASE_WIDTH * 0.03);
 
-  // リンクとノードは常に定数で決めた個数だけ描画し、現在の星座で使わない分は不可視にする。要素の増減がないので、星座が切り替わるとき CSS の遷移で形が変わる
-  // Links and nodes are always rendered up to a fixed count, hiding the ones the current constellation does not use; elements are never added or removed, so CSS transitions morph one shape into the next
-  const links = Array.from({ length: THINKING_CONSTELLATION_LINK_COUNT }).map((_, index) => {
-    const link = currentConstellation.links[index];
-    const fromNode = link ? currentConstellation.nodes[link[0]] : undefined;
-    const toNode = link ? currentConstellation.nodes[link[1]] : undefined;
+  // リンクとノードは常に定数で決めた個数だけ描画し、現在の星座で使わない分は、使っている星や線に重ねて不可視にする。要素の増減がなく、余った分は星から分かれ出て星へ戻るので、星座が切り替わるとき CSS の遷移で形が変わる
+  // Links and nodes are always rendered up to a fixed count; the ones the current constellation does not use are hidden on top of a star or line that is in use. Elements are never added or removed, and spare ones split off from and return to a star, so CSS transitions morph one shape into the next
+  const visibleLinkCount = currentConstellation.links.length;
+  const visibleNodeCount = currentConstellation.nodes.length;
 
-    if (!link || !fromNode || !toNode) {
-      return (
-        <span
-          key={`thinking-link-${index}`}
-          className="constellation-loader__link"
-          style={{
-            left: "50%",
-            top: "50%",
-            width: "0px",
-            opacity: 0,
-            transform: "translateY(-50%) rotate(0deg)",
-            ["--link-delay" as string]: `${(index * -phaseTiming.linkDelayMs) / 1000}s`,
-            ["--morph-delay" as string]: `${(index * MORPH_STAGGER_MS) / 1000}s`,
-          }}
-        ></span>
-      );
-    }
+  const links = Array.from({ length: THINKING_CONSTELLATION_LINK_COUNT }).map((_, index) => {
+    const isVisible = index < visibleLinkCount;
+    const [fromIndex, toIndex] = currentConstellation.links[index % visibleLinkCount];
+    const fromNode = currentConstellation.nodes[fromIndex];
+    const toNode = currentConstellation.nodes[toIndex];
 
     const dx = ((toNode.x - fromNode.x) / 100) * THINKING_CONSTELLATION_BASE_WIDTH;
     const dy = ((toNode.y - fromNode.y) / 100) * THINKING_CONSTELLATION_BASE_HEIGHT;
     const rawAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
     const angle = toNearestAngle(rawAngle, previousLinkAnglesRef.current[index]);
     previousLinkAnglesRef.current[index] = angle;
-    const length = Math.hypot(dx, dy);
+    // 長さは舞台の幅に対する割合で持ち、スマホ幅で舞台が縮んでも星どうしをちょうど結ぶ
+    // Length is a share of the stage width, so links still meet their stars when the stage shrinks on phones
+    const lengthPercent = isVisible ? (Math.hypot(dx, dy) / THINKING_CONSTELLATION_BASE_WIDTH) * 100 : 0;
 
     return (
       <span
@@ -262,8 +274,8 @@ export function ThinkingConstellation({ phase = "preparing" }: { phase?: ChatGen
         style={{
           left: `${fromNode.x}%`,
           top: `${fromNode.y}%`,
-          width: `${length}px`,
-          opacity: 1,
+          width: `${lengthPercent}%`,
+          opacity: isVisible ? 1 : 0,
           transform: `translateY(-50%) rotate(${angle}deg)`,
           ["--link-delay" as string]: `${(index * -phaseTiming.linkDelayMs) / 1000}s`,
           ["--morph-delay" as string]: `${(index * MORPH_STAGGER_MS) / 1000}s`,
@@ -273,25 +285,9 @@ export function ThinkingConstellation({ phase = "preparing" }: { phase?: ChatGen
   });
 
   const nodes = Array.from({ length: THINKING_CONSTELLATION_NODE_COUNT }).map((_, index) => {
-    const node = currentConstellation.nodes[index];
-    if (!node) {
-      return (
-        <span
-          key={`thinking-node-${index}`}
-          className="constellation-loader__node"
-          style={{
-            left: "50%",
-            top: "50%",
-            width: "0px",
-            height: "0px",
-            opacity: 0,
-            transform: "translate(-50%, -50%) scale(0.32)",
-            ["--node-delay" as string]: `${(index * -phaseTiming.nodeDelayMs) / 1000}s`,
-            ["--morph-delay" as string]: `${(index * MORPH_STAGGER_MS) / 1000}s`,
-          }}
-        ></span>
-      );
-    }
+    const isVisible = index < visibleNodeCount;
+    const node = currentConstellation.nodes[index % visibleNodeCount];
+    const nodeSize = isVisible ? baseNodeSize * (node.size ?? 1) : 0;
 
     return (
       <span
@@ -300,10 +296,10 @@ export function ThinkingConstellation({ phase = "preparing" }: { phase?: ChatGen
         style={{
           left: `${node.x}%`,
           top: `${node.y}%`,
-          width: `${baseNodeSize * (node.size ?? 1)}px`,
-          height: `${baseNodeSize * (node.size ?? 1)}px`,
-          opacity: 1,
-          transform: "translate(-50%, -50%) scale(1)",
+          width: `${nodeSize}px`,
+          height: `${nodeSize}px`,
+          opacity: isVisible ? 1 : 0,
+          transform: `translate(-50%, -50%) scale(${isVisible ? 1 : 0.32})`,
           ["--node-delay" as string]: `${(index * -phaseTiming.nodeDelayMs) / 1000}s`,
           ["--morph-delay" as string]: `${(index * MORPH_STAGGER_MS) / 1000}s`,
         }}
