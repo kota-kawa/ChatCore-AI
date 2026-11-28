@@ -288,6 +288,25 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("try one materially different query before giving up", BASE_SYSTEM_PROMPT)
         self.assertIn("do not repeat equivalent searches", BASE_SYSTEM_PROMPT)
 
+    # 日本語: 「最近」を現在日付で解釈し、検索語の年を記憶ではなく現在日付から決める規則が、日付と同じ文脈にあることを検証します。
+    # English: Verify that the rule anchoring "recent" and query years to the current date sits beside that date.
+    def test_runtime_context_anchors_recency_and_query_years_to_current_date(self):
+        fixed_time = datetime(2026, 11, 28, 9, 0, tzinfo=UTC)
+        runtime = build_runtime_context_message(fixed_time)["content"]
+        time_rules = runtime.split("<time_rules>", 1)[1].split("</time_rules>", 1)[0]
+
+        self.assertIn("<current_date>2026-11-28</current_date>", runtime)
+        self.assertIn('"Recent", "latest", "lately", and "this year" are also relative to current_date', time_rules)
+        self.assertIn("not the latest year you remember", time_rules)
+        self.assertIn("When a web search query carries a year for such a request, derive it from current_date", time_rules)
+        # ユーザーが指定した年は書き換えず、時期に依存しない検索語へ年を足さない。
+        # A year the user names stays as stated, and timeless queries get no year appended.
+        self.assertIn("Keep a year or period the user names as stated", time_rules)
+        self.assertIn("do not add a year to a query that is not time-dependent", time_rules)
+        # 年そのものは文言へ固定しない（日付の欄から読ませる）。
+        # The rule text itself hard-codes no year; the model reads it from the date fields.
+        self.assertNotRegex(time_rules, r"20\d\d")
+
     # 日本語: 実行時コンテキストが検索機能固有の制約だけを補足し、判断規則を重複させないことを検証します。
     # English: Verify that runtime context adds only capability constraints without duplicating judgment rules.
     def test_runtime_context_keeps_web_search_capability_rules_compact(self):

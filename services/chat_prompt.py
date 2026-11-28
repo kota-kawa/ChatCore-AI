@@ -178,6 +178,13 @@ def build_runtime_context_message(current_time: datetime | None = None) -> dict[
             "- Interpret relative expressions such as \"today\", \"tomorrow\", \"yesterday\", and \"this week\" "
             "relative to current_datetime.",
             "- For time-dependent questions, include the absolute date as well when it helps.",
+            # 学習時点の年を「今」とみなして検索語へ書くと、鮮度の絞り込みと食い違って空振りが続く。
+            # A query that names the training-era years as "now" contradicts the freshness filter and keeps missing.
+            "- \"Recent\", \"latest\", \"lately\", and \"this year\" are also relative to current_date; "
+            "the present year is the year of current_date, not the latest year you remember.",
+            "- When a web search query carries a year for such a request, derive it from current_date "
+            "(add the previous year only when the period reaches back into it). "
+            "Keep a year or period the user names as stated, and do not add a year to a query that is not time-dependent.",
             "</time_rules>",
             "</runtime_context>",
         ]
