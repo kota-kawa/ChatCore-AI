@@ -105,6 +105,36 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("evidence to evaluate, not a ready-made answer", BASE_SYSTEM_PROMPT)
         self.assertIn("synthesize in your own words", BASE_SYSTEM_PROMPT)
 
+    # 日本語: 聞かれたことだけで止めず同じ主題の周辺情報を添える規則が、分量の上限・水増し禁止・例外とともにあることを検証します。
+    # English: Verify the rule that adds adjacent context beyond the literal question, with its size bound, no-padding rule and exceptions.
+    def test_base_system_prompt_adds_bounded_context_beyond_the_literal_question(self):
+        rules = BASE_SYSTEM_PROMPT.split("## Beyond the literal question\n", 1)[1].split("\n## ", 1)[0]
+
+        self.assertIn("A reply that states only the asked fact is incomplete", rules)
+        self.assertIn("(1) the direct answer, first", rules)
+        self.assertIn("(2) one to three short points of closely related information", rules)
+        # 理解の確認・短答や形式の指定・コピー用の文面・余裕のない相手には周辺情報を足さない。
+        # Understanding checks, short-answer or format requests, copy-ready text and overwhelmed users get the answer alone.
+        self.assertIn("Exceptions, which get part (1) alone", rules)
+        self.assertIn("checks their understanding of an earlier reply", rules)
+        self.assertIn("asks for a short answer or a specific format or count", rules)
+        self.assertIn("asks for copy-ready text, or is overwhelmed", rules)
+        # 読みやすさを保つ: 水増しをせず、1点1文で回答の後ろに置き、既出の内容を繰り返さない。
+        # Readability: no padding, one short sentence per point after the answer, nothing repeated.
+        self.assertIn("never pad with restatements", rules)
+        self.assertIn("only modestly longer", rules)
+        self.assertIn("repeating nothing said earlier in the conversation", rules)
+        self.assertIn("not advice for another goal", rules)
+        # 足した点にも根拠の規則が及ぶ（確信のない数値や期限を足さない）。
+        # The added points are bound by the evidence rules: no figure or deadline without confidence or evidence.
+        self.assertIn("add a figure or deadline only when you are confident of it or the evidence supports it", rules)
+        # 回答の書き方の節に続け、フェンス契約の節（コピー用の成果物）より前に置く。
+        # The section follows the answer-quality rules and comes before the fence contract of copy-ready deliverables.
+        self.assertLess(
+            BASE_SYSTEM_PROMPT.index("## Beyond the literal question"),
+            BASE_SYSTEM_PROMPT.index("## Copy-ready deliverables"),
+        )
+
     def test_base_system_prompt_matches_answer_depth_and_warmth_to_the_users_goal(self):
         rules = BASE_SYSTEM_PROMPT.split("## Natural conversation and answer quality\n", 1)[1].split("\n## ", 1)[0]
 
