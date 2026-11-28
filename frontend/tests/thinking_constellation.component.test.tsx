@@ -9,14 +9,15 @@ import {
   THINKING_CONSTELLATION_LINK_COUNT,
   THINKING_CONSTELLATION_NODE_COUNT,
   THINKING_CONSTELLATION_STEP_MS,
+  THINKING_CONSTELLATION_VARIANTS,
 } from "../lib/chat_page/constants";
 import type { ChatGenerationPhase } from "../lib/chat_page/types";
 
 const PHASES: ChatGenerationPhase[] = ["preparing", "web-search", "generating"];
-// どのフェーズの切り替え間隔よりも細かく刻み、最長のフェーズ（12 種）が一巡するまで調べる
-// Sample more finely than any phase cadence, long enough for the longest phase (12 variants) to cycle through
+// どのフェーズの切り替え間隔よりも細かく刻み、種類が最も多い生成フェーズが一巡するまで調べる
+// Sample more finely than any phase cadence, long enough for the generating phase (the one with the most variants) to cycle through
 const ADVANCE_MS = THINKING_CONSTELLATION_STEP_MS / 4;
-const STEPS = 12 * 4;
+const STEPS = THINKING_CONSTELLATION_VARIANTS.length * 4;
 
 function renderedShapes(phase: ChatGenerationPhase) {
   const shapes: Array<{ name: string; nodes: HTMLElement[]; links: HTMLElement[] }> = [];
@@ -76,11 +77,27 @@ describe("ThinkingConstellation", () => {
     }
   });
 
+  it("keeps rendering when the phase changes while a later constellation is showing", () => {
+    // 生成フェーズの最後の星座を表示中に、種類の少ないフェーズへ切り替える
+    // Switch to a phase with fewer variants while the last generating constellation is showing
+    vi.setSystemTime((THINKING_CONSTELLATION_VARIANTS.length - 1) * THINKING_CONSTELLATION_STEP_MS);
+    const { container, rerender } = render(<ThinkingConstellation phase="generating" />);
+    const lastGeneratingName = THINKING_CONSTELLATION_VARIANTS[THINKING_CONSTELLATION_VARIANTS.length - 1].name;
+    expect(container.querySelector<HTMLElement>(".constellation-loader")?.dataset.constellationName).toBe(lastGeneratingName);
+
+    rerender(<ThinkingConstellation phase="web-search" />);
+
+    const loader = container.querySelector<HTMLElement>(".constellation-loader");
+    expect(loader?.dataset.generationPhase).toBe("web-search");
+    expect(THINKING_CONSTELLATION_VARIANTS.map((variant) => variant.name)).not.toContain(loader?.dataset.constellationName);
+    expect(container.querySelectorAll(".constellation-loader__node")).toHaveLength(THINKING_CONSTELLATION_NODE_COUNT);
+  });
+
   it("shows different constellations per phase", () => {
     const names = PHASES.map((phase) => new Set(renderedShapes(phase).map((shape) => shape.name)));
     expect(names[0].size).toBeGreaterThan(1);
     expect(names[1].size).toBeGreaterThan(1);
-    expect(names[2].size).toBe(12);
+    expect(names[2].size).toBe(THINKING_CONSTELLATION_VARIANTS.length);
     for (const name of names[0]) {
       expect(names[1].has(name) || names[2].has(name)).toBe(false);
     }
