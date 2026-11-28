@@ -5,7 +5,7 @@ description: git worktree で作業ツリーを分けるときの作成から削
 
 # worktree での作業
 
-使うかどうかの判断基準は `AGENTS.md` の「エージェントの作業ルール」、運用手順の正本は `docs/knowledge/parallel_work.md` です。最初に読み、この手順と食い違ったら文書に従ってください。
+使うかどうかの判断基準と運用手順の正本は `docs/knowledge/parallel_work.md` です。最初に読み、この手順と食い違ったら文書に従ってください。
 
 ## 作る
 1. 担当ファイルが、同時に走っているほかの作業と重ならないことを確認する。重なる場合は worktree を増やさず、片方を待たせる。
